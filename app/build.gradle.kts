@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    // 用于处理 Room 注解的 Kotlin Kapt 插件
+    id("kotlin-kapt")
 }
 
 android {
@@ -81,4 +83,12 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.4.3")
     debugImplementation("androidx.compose.ui:ui-tooling:1.4.3")
+
+    // Room 相关依赖
+    // Room 运行时库
+    implementation ("androidx.room:room-runtime:2.5.1")
+    // Room Kotlin 扩展
+    implementation ("androidx.room:room-ktx:2.5.1")
+    // Room 注解处理器，使用 kapt 进行注解处理
+    kapt("androidx.room:room-compiler:2.6.0")
 }
