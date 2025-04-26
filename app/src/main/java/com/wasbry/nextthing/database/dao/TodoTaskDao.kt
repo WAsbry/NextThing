@@ -8,13 +8,14 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.wasbry.nextthing.database.model.TodoTask
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TodoTaskDao {
 
     // 查询所有待办事项，按照截止日期升序排列
     @Query("SELECT * FROM todoTask ORDER BY dueDate ASC")
-    fun getAllTodoTasks(): LiveData<List<TodoTask>>
+    fun getAllTodoTasks(): Flow<List<TodoTask>>
 
     // 根据任务ID 查询单个Task
     @Query("SELECT * FROM todoTask WHERE id = :taskId") // 这个语法，要想一下
