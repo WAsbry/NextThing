@@ -1,3 +1,5 @@
+package com.wasbry.nextthing.screen
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,19 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wasbry.nextthing.database.model.TodoTask
 import com.wasbry.nextthing.viewmodel.TodoTaskViewModel
-import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 @Composable
-fun TaskListScreen() {
-    val viewModel: TodoTaskViewModel = viewModel()
-//    val tasks by viewModel.allTodoTasks.collectAsStateWithLifecycle(initialValue = emptyList())
+fun TaskListScreen(viewModel: TodoTaskViewModel) {
+    val tasks by viewModel.allTodoTasks.collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -73,7 +71,6 @@ fun TaskItem(
             Text(
                 text = task.title,
                 style = MaterialTheme.typography.titleMedium,
-//                fontWeight = if (task.isCompleted) MaterialTheme.typography.titleMedium.fontWeight.copy(alpha = 0.5f) else null,
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1
             )
