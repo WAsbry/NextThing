@@ -1,4 +1,4 @@
-﻿package com.wasbry.nextthing.ui.AddTask
+﻿package com.wasbry.nextthing.ui.screen.AddTask
 
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement

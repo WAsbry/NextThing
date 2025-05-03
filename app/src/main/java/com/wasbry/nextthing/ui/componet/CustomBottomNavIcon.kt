@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 // 导入用于添加间隔的组件
 import androidx.compose.foundation.layout.Spacer
-// 导入用于填充宽度的修饰符
 import androidx.compose.foundation.layout.fillMaxWidth
 // 导入用于设置高度的修饰符
 import androidx.compose.foundation.layout.height
@@ -84,8 +83,7 @@ fun CustomBottomNavIcon(
     // 创建一个卡片组件，作为整个图标的容器
     Card(
         // 设置卡片的修饰符，填充宽度、设置高度、添加内边距和点击事件
-        modifier = Modifier
-            .width(73.dp) // 设置 Card 宽度为屏幕宽度的五分之一
+        modifier = modifier
             .height(66.dp)
             .padding(4.dp)
             .clickable { onClick() },
