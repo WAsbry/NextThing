@@ -107,4 +107,6 @@ dependencies {
     // 添加 androidx.lifecycle:lifecycle-runtime-compose-android 依赖
 //    implementation("androidx.lifecycle:lifecycle-runtime-compose-android:2.5.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.6.2")
+
+//    implementation("androidx.compose.ui:ui-resources:1.4.3") // 引入导入字符串的依赖噻
 }

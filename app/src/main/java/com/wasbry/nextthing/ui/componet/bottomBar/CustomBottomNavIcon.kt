@@ -5,13 +5,11 @@ import androidx.compose.foundation.BorderStroke
 // 导入用于显示图片的组件
 import androidx.compose.foundation.Image
 // 导入用于设置背景的修饰符
-import androidx.compose.foundation.background
 // 导入用于添加点击事件的修饰符
 import androidx.compose.foundation.clickable
 // 导入用于垂直和水平排列子元素的布局组件
 import androidx.compose.foundation.layout.Arrangement
 // 导入用于创建容器的组件
-import androidx.compose.foundation.layout.Box
 // 导入用于垂直排列子元素的布局组件
 import androidx.compose.foundation.layout.Column
 // 导入用于添加间隔的组件
@@ -23,7 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 // 导入用于设置大小的修饰符
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 // 导入用于创建圆角形状的类
 import androidx.compose.foundation.shape.RoundedCornerShape
 // 导入 Material Design 3 的卡片组件
@@ -38,7 +35,6 @@ import androidx.compose.ui.Alignment
 // 导入用于设置修饰符的类
 import androidx.compose.ui.Modifier
 // 导入用于添加阴影的修饰符
-import androidx.compose.ui.draw.shadow
 // 导入用于表示颜色的类
 import androidx.compose.ui.graphics.Color
 // 导入用于绘制图像的类
@@ -52,7 +48,6 @@ import androidx.compose.ui.text.TextStyle
 // 导入用于设置字体粗细的枚举类
 import androidx.compose.ui.text.font.FontWeight
 // 导入用于表示尺寸的单位类
-import androidx.compose.ui.unit.Dp
 // 导入用于表示尺寸的单位类（dp 单位）
 import androidx.compose.ui.unit.dp
 // 导入用于表示字体大小的单位类（sp 单位）
