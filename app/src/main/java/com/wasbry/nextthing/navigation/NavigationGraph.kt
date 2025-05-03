@@ -16,8 +16,8 @@ import com.wasbry.nextthing.database.TodoDatabase
 import com.wasbry.nextthing.database.repository.TodoTaskRepository
 import com.wasbry.nextthing.viewmodel.TodoTaskViewModel
 import com.wasbry.nextthing.viewmodel.TodoTaskViewModelFactory
-import com.wasbry.nextthing.ui.componet.bottombar.BottomBar
-import com.wasbry.nextthing.ui.AddTask.AddTaskDialog
+import com.wasbry.nextthing.ui.bottombar.BottomBar
+import com.wasbry.nextthing.ui.screen.AddTask.AddTaskDialog
 import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.padding
