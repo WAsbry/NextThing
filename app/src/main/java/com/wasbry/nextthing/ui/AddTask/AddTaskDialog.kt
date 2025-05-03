@@ -105,9 +105,7 @@ fun AddTaskDialog(
                                     isCompleted = false,
                                     categoryId = categoryId
                                 )
-                                Log.d("addTask","点击监听1")
                                 onTaskAdded(newTask)
-                                Log.d("addTask","点击监听2")
                                 onDismiss()
                             } catch (e: Exception) {
                                 // 处理日期格式错误或分类 ID 转换错误，可添加提示信息

@@ -106,4 +106,5 @@ dependencies {
 
     // 添加 androidx.lifecycle:lifecycle-runtime-compose-android 依赖
 //    implementation("androidx.lifecycle:lifecycle-runtime-compose-android:2.5.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.6.2")
 }
