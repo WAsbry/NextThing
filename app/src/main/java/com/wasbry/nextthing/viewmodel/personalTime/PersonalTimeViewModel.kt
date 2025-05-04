@@ -13,7 +13,7 @@ class PersonalTimeViewModel(private val repository: PersonalTimeRepository) : Vi
     private val _personalTimes = MutableStateFlow(emptyList<PersonalTime>())
     val personalTimes: StateFlow<List<PersonalTime>> = _personalTimes
 
-    private val _isExpanded = MutableStateFlow(false)
+    private val _isExpanded = MutableStateFlow(true)
     val isExpanded: StateFlow<Boolean> = _isExpanded
 
     init {
@@ -48,6 +48,28 @@ class PersonalTimeViewModel(private val repository: PersonalTimeRepository) : Vi
     fun toggleExpansion() {
         viewModelScope.launch {
             _isExpanded.value = !_isExpanded.value
+        }
+    }
+
+    fun updatePersonalTime(personalTime: PersonalTime) {
+        viewModelScope.launch {
+            try {
+                repository.updatePersonalTime(personalTime)
+                loadPersonalTimes() // 更新后重新加载数据，这个就是写在ViewModel 里面的噻
+            }catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun deletePersonalTime(personalTime: PersonalTime) {
+        viewModelScope.launch {
+            try {
+                repository.deletePersonalTime(personalTime)
+                loadPersonalTimes()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }

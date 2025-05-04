@@ -35,14 +35,4 @@ class PersonalTimeRepository(private val personalTimeDao: PersonalTimeDao) {
     }
 
     val allPersonalTime: Flow<List<PersonalTime>> = personalTimeDao.getAllPersonalTime()
-
-//    suspend fun getAllPersonalTime(): Flow<List<PersonalTime>> {
-//        withContext(Dispatchers.IO) {
-//            return personalTimeDao.getAllPersonalTime()
-//        }
-//    }
-//
-//    fun getPersonalTimeById(id: Long): PersonalTime {
-//        return personalTimeDao.getPersonalTimeById(id)
-//    }
 }
