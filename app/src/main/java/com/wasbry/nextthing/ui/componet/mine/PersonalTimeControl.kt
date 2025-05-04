@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -22,6 +23,7 @@ import androidx.compose.material3.IconButton
 import com.wasbry.nextthing.database.model.PersonalTime
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,7 +72,7 @@ fun PersonalTimeControl(viewModel: PersonalTimeViewModel = viewModel()) {
                     viewModel.toggleExpansion()
                 }) {
                     Icon(
-                        imageVector = if (viewModel.isExpanded.value) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        imageVector = if (viewModel.isExpanded.value) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
                         contentDescription = if (viewModel.isExpanded.value) "折叠" else "展开"
                     )
                 }
@@ -107,9 +109,10 @@ fun PersonalTimeControl(viewModel: PersonalTimeViewModel = viewModel()) {
             )
         }
 
-        val isExpanded by viewModel.isExpanded
+        val isExpanded by  viewModel.isExpanded.collectAsState() // 将其转为可组合的状态，这样就会变成Boolean 类型哦
+
         if (isExpanded) {
-            val personalTimes by viewModel.personalTimes
+            val personalTimes by viewModel.personalTimes.collectAsState(initial = emptyList())
             LazyColumn(
                 modifier = Modifier.fillMaxWidth()
             ) {
