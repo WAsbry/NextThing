@@ -1,14 +1,11 @@
-package com.wasbry.nextthing.ui.componet.mine
+package com.wasbry.nextthing.ui.componet.personaltime.add
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -20,13 +17,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.wasbry.nextthing.database.model.PersonalTime
-import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
-import java.util.Locale
+import com.wasbry.nextthing.ui.componet.mine.TimePicker
+import com.wasbry.nextthing.ui.componet.personaltime.IconSelector
 
 @Composable
 fun AddPersonalTimeDialog(
@@ -47,7 +41,6 @@ fun AddPersonalTimeDialog(
 ) {
     var showSelfControlDegreeDropdown by remember { mutableStateOf(false) }
     var showTimeValueDropdown by remember { mutableStateOf(false) }
-    var showIconPathDropdown by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -143,39 +136,12 @@ fun AddPersonalTimeDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                Box {
-                    OutlinedTextField(
-                        value = iconPath,
-                        onValueChange = onIconPathChange,
-                        label = { Text("Icon 路径") },
-                        modifier = Modifier.fillMaxWidth(),
-                        readOnly = true,
-                        trailingIcon = {
-                            androidx.compose.material3.IconButton(onClick = { showIconPathDropdown = true }) {
-                                androidx.compose.material3.Icon(
-                                    androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
-                                    contentDescription = null
-                                )
-                            }
-                        }
-                    )
-                    DropdownMenu(
-                        expanded = showIconPathDropdown,
-                        onDismissRequest = { showIconPathDropdown = false }
-                    ) {
-                        // 这里需要替换为实际的 Icon 路径列表
-                        val iconPaths = listOf("icon1", "icon2", "icon3")
-                        iconPaths.forEach { path ->
-                            DropdownMenuItem(
-                                text = { Text(path) },
-                                onClick = {
-                                    onIconPathChange(path)
-                                    showIconPathDropdown = false
-                                }
-                            )
-                        }
-                    }
-                }
+                // 修正 onIconPathChange 参数传递
+                IconSelector(
+                    iconPath = iconPath,
+                    onIconPathChange = onIconPathChange,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {

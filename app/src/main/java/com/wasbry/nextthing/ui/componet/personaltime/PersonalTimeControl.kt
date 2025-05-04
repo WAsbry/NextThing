@@ -1,4 +1,4 @@
-package com.wasbry.nextthing.ui.componet.mine
+package com.wasbry.nextthing.ui.componet.personaltime
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Arrangement
@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.wasbry.nextthing.ui.componet.mine.PersonalTimeItem
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.wasbry.nextthing.ui.componet.personaltime.add.AddPersonalTimeDialog
 
 /**
  * 个人时间管理控件
