@@ -66,13 +66,17 @@ fun AddPersonalTimeDialog(
                 Text(text = "开始时间")
                 TimePicker(
                     selectedTime = startTime,
-                    onTimeSelected = onStartTimeChange
+                    onTimeSelected = onStartTimeChange,
+                    isStartTimePicker = true,
+                    startSelectedTime = startTime
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "结束时间")
                 TimePicker(
                     selectedTime = endTime,
-                    onTimeSelected = onEndTimeChange
+                    onTimeSelected = onEndTimeChange,
+                    isStartTimePicker = false,
+                    startSelectedTime = startTime
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Box {
