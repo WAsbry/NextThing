@@ -37,7 +37,7 @@ class PersonalTimeViewModel(private val repository: PersonalTimeRepository) : Vi
         viewModelScope.launch {
             try {
                 repository.insertPersonalTime(personalTime)
-                loadPersonalTimes()
+                loadPersonalTimes() // 插入后重新加载数据
             } catch (e: Exception) {
                 // 处理异常，例如打印日志
                 e.printStackTrace()
