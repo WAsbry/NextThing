@@ -1,4 +1,5 @@
 # NextThing
+<<<<<<< HEAD
 
 #### 介绍
 明日复明日明日何其多
@@ -35,3 +36,6 @@
 4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
 5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
 6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+=======
+最好的开源待办软件
+>>>>>>> 0529dd6d1319187ab5569521d904312ef0764871
