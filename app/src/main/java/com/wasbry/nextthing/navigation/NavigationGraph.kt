@@ -37,6 +37,7 @@ fun NavigationGraph(context: Context) {
 
     val database = TodoDatabase.getDatabase(context)
     val repositoryTodoTask = TodoTaskRepository(database.todoTaskDao())
+    val personalTimeRepository = PersonalTimeRepository(database.personalTimeDao())
     val viewModelTodoTask: TodoTaskViewModel = viewModel(
         factory = TodoTaskViewModelFactory(repositoryTodoTask)
     )
@@ -91,6 +92,7 @@ fun NavigationGraph(context: Context) {
                 viewModelTodoTask.insertTodoTask(task)
                 showAddTaskDialog = false
             }
+            ,personalTimeRepository = personalTimeRepository
         )
     }
 }

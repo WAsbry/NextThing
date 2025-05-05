@@ -53,23 +53,23 @@ fun TaskItem(
     context: android.content.Context
 ) {
     val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-    val dueDateFormatted = dateFormat.format(task.dueDate)
+    val dueDateFormatted = dateFormat.format(task.madeDate)
 
     Card(
         modifier = Modifier.fillMaxSize(),
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.cardElevation(4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (task.isCompleted) {
-                MaterialTheme.colorScheme.tertiaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
+//            containerColor = if (task.status == ) {
+//                MaterialTheme.colorScheme.tertiaryContainer
+//            } else {
+//                MaterialTheme.colorScheme.surface
+//            }
         )
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = task.title,
+                text = task.description,
                 style = MaterialTheme.typography.titleMedium,
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1
@@ -86,14 +86,9 @@ fun TaskItem(
 
             Column(modifier = Modifier.padding(top = 16.dp)) {
                 Text(
-                    text = "截止时间：$dueDateFormatted",
+                    text = "创建日期：$dueDateFormatted",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "分类 ID：${task.categoryId}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

@@ -5,10 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import com.wasbry.nextthing.database.dao.CategoryDao
 import com.wasbry.nextthing.database.dao.PersonalTimeDao
 import com.wasbry.nextthing.database.dao.TodoTaskDao
-import com.wasbry.nextthing.database.model.Category
 import com.wasbry.nextthing.database.model.PersonalTime
 import com.wasbry.nextthing.database.model.TodoTask
 import com.wasbry.nextthing.database.utils.DateConverter
@@ -20,15 +18,12 @@ import kotlinx.coroutines.launch
 // entities 参数指定数据库包含的实体类，这里包含 TodoTask 和 Category
 // version 参数指定数据库的版本号，当数据库结构发生变化时需要更新版本号
 // exportSchema 参数指定是否导出数据库架构，这里设置为 false 不导出
-@Database(entities = [TodoTask::class, Category::class,PersonalTime::class], version = 1, exportSchema = false)
+@Database(entities = [TodoTask::class,PersonalTime::class], version = 1, exportSchema = false)
 @TypeConverters(DateConverter::class)
 abstract class TodoDatabase : RoomDatabase() {
 
     // 抽象方法，用于获取 TodoTaskDao 实例，通过该实例可以进行 TodoTask 表的数据库操作
     abstract fun todoTaskDao(): TodoTaskDao
-
-    // 抽象方法，用于获取 CategoryDao 实例，通过该实例可以进行 Category 表的数据库操作
-    abstract fun categoryDao(): CategoryDao
 
     abstract fun personalTimeDao(): PersonalTimeDao
 
@@ -53,17 +48,6 @@ abstract class TodoDatabase : RoomDatabase() {
                 ).build()
                 // 将新创建的实例赋值给 INSTANCE
                 INSTANCE = instance
-
-                // 在 IO 线程中初始化默认分类
-                CoroutineScope(Dispatchers.IO).launch {
-                    // 获取 CategoryDao 实例
-                    val categoryDao = instance.categoryDao()
-                    // 检查默认分类是否已经存在
-                    if (categoryDao.getCategoryById(1L) == null) {
-                        // 如果默认分类不存在，则插入默认分类
-                        categoryDao.insertCategory(Category(id = 1L, name = "默认分类"))
-                    }
-                }
 
                 // 返回数据库实例
                 instance

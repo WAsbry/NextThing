@@ -1,5 +1,6 @@
 package com.wasbry.nextthing.ui.componet.personaltime
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Resources
 import android.util.Log
@@ -32,10 +33,20 @@ import com.wasbry.nextthing.viewmodel.TodoTaskViewModel
 import com.wasbry.nextthing.viewmodel.TodoTaskViewModelFactory
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModelFactory
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.rememberSwipeableState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.delay
 
+import androidx.compose.ui.input.pointer.PointerEventType
+
+@SuppressLint("MultipleAwaitPointerEventScopes")
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun PersonalTimeItem(time: PersonalTime) {
     var isEditDialogOpen by remember { mutableStateOf(false) }
+    var isLongPressed by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
 
@@ -43,6 +54,15 @@ fun PersonalTimeItem(time: PersonalTime) {
     val repositoryPersonalTime = PersonalTimeRepository(database.personalTimeDao())
     val viewModelPersonalTime: PersonalTimeViewModel = viewModel(
         factory = PersonalTimeViewModelFactory(repositoryPersonalTime)
+    )
+
+    // 侧滑状态
+    val swipeableState = rememberSwipeableState(initialValue = 0)
+    val width = 120.dp
+    val widthPx = with(LocalDensity.current) { width.toPx() }
+    val anchors = mapOf(
+        0f to 0,
+        -widthPx to 1
     )
 
     Card(

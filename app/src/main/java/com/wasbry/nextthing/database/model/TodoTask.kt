@@ -14,36 +14,31 @@ enum class TaskImportance {
     IMPORTANT_AND_URGENT    // 重要且紧急
 }
 
+// 定义任务状态的枚举类
+enum class TaskStatus {
+    // 未完成状态
+    INCOMPLETE,
+    // 已完成状态
+    COMPLETED,
+    // 放弃状态
+    ABANDONED,
+    // 延期状态
+    POSTPONED
+}
+
 // 使用 @Entity 注解将该类标记为 Room 数据库的实体类
 // tableName 参数指定表名为 "todoTask"
 // foreignKeys 参数指定外键关联，这里表示 TodoTask 表的 categoryId 列关联到 Category 表的 id 列
 // indices 参数指定需要创建的索引，这里为 categoryId 列创建索引
-@Entity(
-    tableName = "todoTask",
-    foreignKeys = [
-        ForeignKey(
-            entity = Category::class,
-            parentColumns = ["id"],
-            childColumns = ["categoryId"],
-            onDelete = ForeignKey.SET_NULL,
-            onUpdate = ForeignKey.CASCADE
-        )
-    ],
-    indices = [Index(value = ["categoryId"])]
-)
+@Entity(tableName = "TodoTaskTable")
 data class TodoTask(
-    // 使用 @PrimaryKey 注解将 id 列标记为主键
-    // autoGenerate = true 表示 id 列的值将自动生成
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val title: String, // 待办任务的标题
-    val description: String, // 待办任务的详细描述
-    val madeDate: Date, // 任务的制定日期,以年月日进行存储
-    val dueDate: Long,
-    // 待办任务是否已完成的标志
-    val isCompleted: Boolean,
-    // 待办任务所属分类的 ID，外键关联到 Category 表的 id 列，设为可空类型
-    val categoryId: Long? = null,
-    // 新增任务重要程度属性
-    val importance: TaskImportance
+    // 新增关联 PersonalTime 的外键
+    val personalTimeId: Long? = null, // 任务的分类噻
+    val description: String, // 任务的描述噻
+    val duration: Int, // 任务的持续时间，min
+    val importance: TaskImportance, // 任务的重要程度
+    val madeDate: Date, // 任务的制定日期
+    val status: TaskStatus // 任务的状态
 )
