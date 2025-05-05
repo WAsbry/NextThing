@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -23,13 +26,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.wasbry.nextthing.database.model.PersonalTime
 import com.wasbry.nextthing.database.model.TaskImportance
+import com.wasbry.nextthing.database.model.TaskStatus
 import com.wasbry.nextthing.database.model.TodoTask
-import java.text.SimpleDateFormat
+import com.wasbry.nextthing.database.repository.PersonalTimeRepository
 import java.util.Calendar
-import java.util.Locale
 
-// 定义默认分类 ID
+
 private const val DEFAULT_CATEGORY_ID = 1L
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,79 +41,137 @@ private const val DEFAULT_CATEGORY_ID = 1L
 fun AddTaskDialog(
     isOpen: Boolean,
     onDismiss: () -> Unit,
-    onTaskAdded: (TodoTask) -> Unit
+    onTaskAdded: (TodoTask) -> Unit,
+    personalTimeRepository: PersonalTimeRepository
 ) {
     if (isOpen) {
-        var title by remember { mutableStateOf("") }
+        // 新增：个人时间段下拉菜单独立状态
+        var personalTimeExpanded by remember { mutableStateOf(false) }
+        // 任务重要程度选择框（独立状态 + 动态图标）
+        var importanceExpanded by remember { mutableStateOf(false) } // 新增独立状态
+
+
+        var selectedPersonalTime by remember { mutableStateOf<PersonalTime?>(null) }
+        var personalTimeText by remember { mutableStateOf("请选择个人时间段") } // 初始提示
+        var selectedPersonalTimeId by remember { mutableStateOf<Long?>(null) }
+
         var description by remember { mutableStateOf("") }
-        var dueDateStr by remember { mutableStateOf("") }
-        var categoryIdStr by remember { mutableStateOf("") }
+        var duration by remember { mutableStateOf(1) }
+        var inputTextDirection by remember { mutableStateOf(duration.toString()) }
         var importance by remember { mutableStateOf(TaskImportance.UNIMPORTANT_NOT_URGENT) }
-        var expanded by remember { mutableStateOf(false) }
+
+        val personalTimeList = remember { mutableStateOf<List<PersonalTime>>(emptyList()) }
+
+        // 数据获取和日志（保持不变）
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            personalTimeRepository.allPersonalTime.collect { times ->
+                personalTimeList.value = times
+                Log.d("allPersonalTime", "获取到 ${times.size} 条个人时间段数据")
+            }
+        }
 
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = {
-                Text(text = "添加任务")
-            },
+            title = { Text("添加任务") },
             text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // ------------------- 个人时间段选择框 -------------------
+                    // 个人时间段输入框及下拉菜单
                     OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("任务标题") },
-                        modifier = Modifier.fillMaxWidth()
+                        value = personalTimeText,
+                        onValueChange = { },
+                        label = { Text("个人时间段") },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true,
+                        trailingIcon = {
+                            androidx.compose.material3.IconButton(onClick = { personalTimeExpanded = !personalTimeExpanded }) {
+                                val icon = if (personalTimeExpanded) {
+                                    androidx.compose.material.icons.Icons.Default.KeyboardArrowUp
+                                } else {
+                                    androidx.compose.material.icons.Icons.Default.ArrowDropDown
+                                }
+                                androidx.compose.material3.Icon(
+                                    imageVector = icon,
+                                    contentDescription = if (personalTimeExpanded) "收起" else "展开"
+                                )
+                            }
+                        }
                     )
+
+                    DropdownMenu(
+                        expanded = personalTimeExpanded,
+                        onDismissRequest = { personalTimeExpanded = false },
+                        modifier = Modifier.offset(y = 8.dp) // 关键：调整下拉菜单位置
+                    ) {
+                        personalTimeList.value.forEach { personalTimeItem ->
+                            DropdownMenuItem(
+                                text = { Text(personalTimeItem.timeDescription) },
+                                onClick = {
+                                    selectedPersonalTime = personalTimeItem
+                                    selectedPersonalTimeId = personalTimeItem.id
+                                    personalTimeText = personalTimeItem.timeDescription
+                                    personalTimeExpanded = false
+                                }
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    // ------------------- 任务描述输入框 -------------------
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
                         label = { Text("任务描述") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // ------------------- 持续时间输入框 -------------------
                     OutlinedTextField(
-                        value = dueDateStr,
-                        onValueChange = { dueDateStr = it },
-                        label = { Text("截止时间 (yyyy-MM-dd)") },
+                        value = inputTextDirection,
+                        onValueChange = { newInputText ->
+                            inputTextDirection = newInputText
+                            duration = try { newInputText.toInt() } catch (_: Exception) { 1 }
+                        },
+                        label = { Text("任务持续时间(min)") },
                         modifier = Modifier.fillMaxWidth()
                     )
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = categoryIdStr,
-                        onValueChange = { categoryIdStr = it },
-                        label = { Text("任务分类 ID") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    // 任务重要程度选择
+
+                    // ------------------- 重要程度选择框（独立状态） -------------------
                     OutlinedTextField(
                         value = importance.name,
-                        onValueChange = {},
+                        onValueChange = { },
                         label = { Text("任务重要程度") },
                         modifier = Modifier.fillMaxWidth(),
                         readOnly = true,
                         trailingIcon = {
-                            androidx.compose.material3.IconButton(onClick = { expanded = true }) {
+                            androidx.compose.material3.IconButton(onClick = { importanceExpanded = !importanceExpanded }) {
+                                // 根据状态动态切换箭头方向
+                                val icon = if (importanceExpanded) {
+                                    Icons.Default.KeyboardArrowUp
+                                } else {
+                                    Icons.Default.ArrowDropDown
+                                }
                                 androidx.compose.material3.Icon(
-                                    androidx.compose.material.icons.Icons.Default.ArrowDropDown,
-                                    contentDescription = null
+                                    imageVector = icon,
+                                    contentDescription = "切换重要程度列表"
                                 )
                             }
                         }
                     )
+
                     DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
+                        expanded = importanceExpanded,
+                        onDismissRequest = { importanceExpanded = false }
                     ) {
                         TaskImportance.values().forEach { importanceOption ->
                             DropdownMenuItem(
                                 text = { Text(importanceOption.name) },
                                 onClick = {
                                     importance = importanceOption
-                                    expanded = false
+                                    importanceExpanded = false // 选择后关闭菜单
                                 }
                             )
                         }
@@ -121,37 +183,22 @@ fun AddTaskDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
+                    Button(onClick = onDismiss, modifier = Modifier.padding(end = 8.dp)) {
                         Text("取消")
                     }
-                    Button(
-                        onClick = {
-                            Log.d("addTask", "点击监听的")
-                            try {
-                                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                                val dueDate = dateFormat.parse(dueDateStr)?.time ?: Calendar.getInstance().timeInMillis
-                                // 如果用户未输入分类 ID，使用默认分类 ID
-                                val categoryId = categoryIdStr.toLongOrNull() ?: DEFAULT_CATEGORY_ID
-                                val madeDate = Calendar.getInstance().time
-                                val newTask = TodoTask(
-                                    title = title,
-                                    description = description,
-                                    madeDate = madeDate,
-                                    dueDate = dueDate,
-                                    isCompleted = false,
-                                    categoryId = categoryId,
-                                    importance = importance
-                                )
-                                onTaskAdded(newTask)
-                                onDismiss()
-                            } catch (e: Exception) {
-                                // 处理日期格式错误或分类 ID 转换错误，可添加提示信息
-                            }
-                        }
-                    ) {
+                    Button(onClick = {
+                        // 确保 selectedPersonalTimeId 不为空（可添加非空校验）
+                        val newTask = TodoTask(
+                            personalTimeId = selectedPersonalTimeId,
+                            description = description,
+                            duration = duration,
+                            importance = importance,
+                            madeDate = Calendar.getInstance().time,
+                            status = TaskStatus.INCOMPLETE
+                        )
+                        onTaskAdded(newTask)
+                        onDismiss()
+                    }) {
                         Text("确认")
                     }
                 }

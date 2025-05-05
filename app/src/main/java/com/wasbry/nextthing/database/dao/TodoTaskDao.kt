@@ -14,23 +14,19 @@ import kotlinx.coroutines.flow.Flow
 interface TodoTaskDao {
 
     // 查询所有待办事项，按照截止日期升序排列
-    @Query("SELECT * FROM todoTask ORDER BY dueDate ASC")
+    @Query("SELECT * FROM TodoTaskTable ORDER BY madeDate ASC")
     fun getAllTodoTasks(): Flow<List<TodoTask>>
 
     // 根据任务ID 查询单个Task
-    @Query("SELECT * FROM todoTask WHERE id = :taskId") // 这个语法，要想一下
+    @Query("SELECT * FROM TodoTaskTable WHERE id = :taskId")
     fun getTodoTaskById(taskId: Long): TodoTask
 
-    // 根据分类Id 查询该类下的所有任务，并按照截止日期进行升序排列
-    @Query("SELECT * FROM todoTask WHERE categoryId = :categoryId ORDER BY dueDate ASC")
-    fun getTodoTaskByCategoryId(categoryId: Long) : List<TodoTask>
-
-    // 查询所有已完成的待办任务，并按照截止日期升序排列
-    @Query("SELECT * FROM todoTask WHERE isCompleted = 1 ORDER BY dueDate ASC")
+    // 查询所有已完成的待办任务，并按照制定日期升序排列
+    @Query("SELECT * FROM TodoTaskTable WHERE status = 'COMPLETED' ORDER BY madeDate ASC")
     fun getCompletedTodoTasks(): List<TodoTask>
 
-    // 查询所有没有完成的待办任务，并按照截止日期升序排列
-    @Query("SELECT * FROM todoTask WHERE isCompleted = 0 ORDER BY dueDate ASC")
+    // 查询所有没有完成的待办任务，并按照制定日期升序排列
+    @Query("SELECT * FROM TodoTaskTable WHERE status = 'INCOMPLETE' ORDER BY madeDate ASC")
     fun getIncompleteTodoTasks(): List<TodoTask>
 
     // 插入单个任务，并返回id 如果主键重复，则替换原有数据
@@ -54,10 +50,18 @@ interface TodoTaskDao {
     fun deleteTodoTask(task: TodoTask)
 
     // 根据id 删除单个待办任务
-    @Query("DELETE FROM todoTask WHERE id = :taskId")
+    @Query("DELETE FROM TodoTaskTable WHERE id = :taskId")
     fun deleteTodoTaskById(taskId: Long)
 
     // 清空所有待办任务
-    @Query("DELETE FROM todoTask")
+    @Query("DELETE FROM TodoTaskTable")
     fun deleteAllTodoTasks()
+
+    // 根据关联的 PersonalTime 的 ID 查询相关的 TodoTask
+    @Query("SELECT * FROM TodoTaskTable WHERE personalTimeId = :personalTimeId")
+    fun getTodoTasksByPersonalTimeId(personalTimeId: Long): Flow<List<TodoTask>>
+
+    // 查询所有关联了特定 PersonalTime 的待办任务，并按照截止日期升序排列
+    @Query("SELECT * FROM TodoTaskTable WHERE personalTimeId = :personalTimeId ORDER BY madeDate ASC")
+    fun getTodoTasksByPersonalTimeIdSorted(personalTimeId: Long): Flow<List<TodoTask>>
 }
