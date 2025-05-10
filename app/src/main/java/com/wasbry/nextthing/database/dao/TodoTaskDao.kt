@@ -23,11 +23,19 @@ interface TodoTaskDao {
 
     // 查询所有已完成的待办任务，并按照制定日期升序排列
     @Query("SELECT * FROM TodoTaskTable WHERE status = 'COMPLETED' ORDER BY madeDate ASC")
-    fun getCompletedTodoTasks(): List<TodoTask>
+    fun getCompletedTodoTasks(): Flow<List<TodoTask>>
 
     // 查询所有没有完成的待办任务，并按照制定日期升序排列
     @Query("SELECT * FROM TodoTaskTable WHERE status = 'INCOMPLETE' ORDER BY madeDate ASC")
-    fun getIncompleteTodoTasks(): List<TodoTask>
+    fun getIncompleteTodoTasks(): Flow<List<TodoTask>>
+
+    // 查询所有放弃的任务，按照制定日期进行升序排列
+    @Query("SELECT * FROM TodoTaskTable WHERE status = 'ABANDONED' ORDER BY madeDate ASC")
+    fun getAbandonedTodoTasks(): Flow<List<TodoTask>>
+
+    // 查询所有延期的任务，按照制定日期进行升序排列
+    @Query("SELECT * FROM todotasktable WHERE status = 'POSTPONED' ORDER BY madeDate ASC")
+    fun getPostponedTodoTasks(): Flow<List<TodoTask>>
 
     // 插入单个任务，并返回id 如果主键重复，则替换原有数据
     @Insert(onConflict = OnConflictStrategy.REPLACE)

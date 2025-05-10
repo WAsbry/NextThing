@@ -29,8 +29,6 @@ import com.wasbry.nextthing.database.model.PersonalTime
 import com.wasbry.nextthing.database.repository.PersonalTimeRepository
 import com.wasbry.nextthing.database.repository.TodoTaskRepository
 import com.wasbry.nextthing.ui.componet.personaltime.edit.EditPersonalTimeDialog
-import com.wasbry.nextthing.viewmodel.TodoTaskViewModel
-import com.wasbry.nextthing.viewmodel.TodoTaskViewModelFactory
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModelFactory
 import androidx.compose.material.ExperimentalMaterialApi

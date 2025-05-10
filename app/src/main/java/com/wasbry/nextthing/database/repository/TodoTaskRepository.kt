@@ -16,6 +16,19 @@ class TodoTaskRepository(private val todoTaskDao: TodoTaskDao) {
             Log.d("TodoTaskRepository", "Received ${tasks.size} tasks: $tasks")
         }
 
+    // 获取所有已完成的任务
+    val getCompletedTodoTasks: Flow<List<TodoTask>> = todoTaskDao.getCompletedTodoTasks()
+
+    // 获取所有未完成的任务
+    val getIncompleteTodoTasks: Flow<List<TodoTask>> = todoTaskDao.getIncompleteTodoTasks()
+
+    // 获取所有放弃的任务
+    val getAbandonedTodoTasks: Flow<List<TodoTask>> = todoTaskDao.getAbandonedTodoTasks()
+
+    // 获取所有延期的任务
+    val getPostponedTodoTasks: Flow<List<TodoTask>> = todoTaskDao.getPostponedTodoTasks()
+
+
     // 插入单个待办任务，使用挂起函数处理
     suspend fun insertTodoTask(todoTask: TodoTask) {
         withContext(Dispatchers.IO) {
@@ -73,16 +86,9 @@ class TodoTaskRepository(private val todoTaskDao: TodoTaskDao) {
     }
 
     // 获取所有已完成的待办任务
-    suspend fun getCompletedTodoTasks(): List<TodoTask> {
+    suspend fun getCompletedTodoTasks(): Flow<List<TodoTask>> {
         return withContext(Dispatchers.IO) {
             todoTaskDao.getCompletedTodoTasks()
-        }
-    }
-
-    // 获取所有未完成的待办任务
-    suspend fun getIncompleteTodoTasks(): List<TodoTask> {
-        return withContext(Dispatchers.IO) {
-            todoTaskDao.getIncompleteTodoTasks()
         }
     }
 

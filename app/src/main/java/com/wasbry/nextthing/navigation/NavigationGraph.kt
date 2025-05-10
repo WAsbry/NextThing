@@ -14,8 +14,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.wasbry.nextthing.database.TodoDatabase
 import com.wasbry.nextthing.database.repository.TodoTaskRepository
-import com.wasbry.nextthing.viewmodel.TodoTaskViewModel
-import com.wasbry.nextthing.viewmodel.TodoTaskViewModelFactory
 import com.wasbry.nextthing.ui.bottombar.BottomBar
 import com.wasbry.nextthing.ui.screen.AddTask.AddTaskDialog
 import android.content.Context
@@ -28,6 +26,8 @@ import com.wasbry.nextthing.ui.screen.homepage.HomePage
 import com.wasbry.nextthing.ui.screen.mine.MinePage
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModelFactory
+import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
+import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModelFactory
 
 @Composable
 fun NavigationGraph(context: Context) {
