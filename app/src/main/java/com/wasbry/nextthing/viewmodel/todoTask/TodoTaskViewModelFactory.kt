@@ -4,7 +4,6 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.wasbry.nextthing.database.repository.TodoTaskRepository
-import com.wasbry.nextthing.viewmodel.TodoTaskViewModel
 
 class TodoTaskViewModelFactory(private val repository: TodoTaskRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
