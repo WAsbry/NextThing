@@ -34,13 +34,16 @@ import kotlinx.coroutines.launch
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 
 /**
  * 展示所有的任务噻
  * */
 @Composable
-fun AbandonedTasksList(viewModel: TodoTaskViewModel) {
-    val tasks by viewModel.getAbandonedTodoTasks.collectAsStateWithLifecycle(initialValue = emptyList())
+fun AbandonedTasksList(todoTaskViewModel: TodoTaskViewModel,personalTimeViewModel: PersonalTimeViewModel) {
+    val tasks by todoTaskViewModel.getAbandonedTodoTasks.collectAsStateWithLifecycle(initialValue = emptyList())
     var expanded by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
@@ -91,21 +94,26 @@ fun AbandonedTasksList(viewModel: TodoTaskViewModel) {
                 ) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(tasks) { task ->
+
+                            // 为每个任务的 personTimeId 获取对应的 PersonalTime
+                            val personalTime by personalTimeViewModel.getPersonalTimeByPersonTimeId(task.personalTimeId).collectAsState()
+
                             TaskItem(
                                 task = task,
+                                personalTime = personalTime,
                                 onCompleted = {
                                     coroutineScope.launch {
-                                        viewModel.markTaskAsCompleted(task)
+                                        todoTaskViewModel.markTaskAsCompleted(task)
                                     }
                                 },
                                 onAbandoned = {
                                     coroutineScope.launch {
-                                        viewModel.markTaskAsAbandoned(task)
+                                        todoTaskViewModel.markTaskAsAbandoned(task)
                                     }
                                 },
                                 onPostponed = {
                                     coroutineScope.launch {
-                                        viewModel.markTaskAsPostponed(task)
+                                        todoTaskViewModel.markTaskAsPostponed(task)
                                     }
                                 }
                             )

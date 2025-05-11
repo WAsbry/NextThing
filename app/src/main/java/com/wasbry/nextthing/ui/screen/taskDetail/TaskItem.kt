@@ -1,5 +1,8 @@
 package com.wasbry.nextthing.ui.screen.taskDetail
 
+import android.content.Context
+import android.content.res.Resources
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -21,10 +24,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.wasbry.nextthing.database.model.PersonalTime
 import com.wasbry.nextthing.database.model.TodoTask
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -33,6 +37,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun TaskItem(
     task: TodoTask,
+    personalTime: PersonalTime,
     onCompleted: () -> Unit,
     onAbandoned: () -> Unit,
     onPostponed: () -> Unit,
@@ -44,6 +49,7 @@ fun TaskItem(
     val totalButtonWidthPx = buttonWidthPx * 3
     val offsetX = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current // 获取全局context 属性噻
 
     val dragState = rememberDraggableState { delta ->
         coroutineScope.launch {
@@ -158,7 +164,14 @@ fun TaskItem(
             elevation = CardDefaults.cardElevation(4.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Row (modifier = Modifier.padding(16.dp)) {
+                val iconResId = getDrawableResourceId(context, personalTime.iconPath)
+                Icon(
+                    painter = painterResource(id = iconResId),
+                    contentDescription = null,
+                    modifier = Modifier.width(24.dp)
+                )
+
                 Text(
                     text = task.description ?: "",
                     style = MaterialTheme.typography.titleMedium,
@@ -175,5 +188,22 @@ fun TaskItem(
                 )
             }
         }
+    }
+}
+
+// 根据图标名称获取资源 ID（非 Compose 函数）
+private fun getDrawableResourceId(context: Context, iconName: String): Int {
+    // 这里假设传入的 iconName 是不带前缀和后缀的，例如 "icon_personal_time_cooking"
+    // 实际使用时可能需要根据你的资源命名规则进行调整
+    val packageName = context.packageName
+    try {
+        return context.resources.getIdentifier(
+            iconName,
+            "drawable",
+            packageName
+        )
+    } catch (e: Resources.NotFoundException) {
+        // 如果找不到资源，返回一个默认的资源 ID
+        return android.R.drawable.ic_menu_report_image
     }
 }

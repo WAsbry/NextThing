@@ -47,7 +47,7 @@ interface PersonalTimeDao {
 
     // 根据 ID 获取单个 PersonalTime 记录
     @Query("SELECT * FROM PersonalTimeTable WHERE id = :id")
-    fun getPersonalTimeById(id: Long): PersonalTime?
+    fun getPersonalTimeById(id: Long): Flow<PersonalTime>
 
     // 根据 startTime 和 endTime 查询时间段内的 PersonalTime 记录
     @Query("SELECT * FROM PersonalTimeTable WHERE startTime <= :endTime AND endTime >= :startTime")

@@ -1,6 +1,7 @@
 package com.wasbry.nextthing.ui.componet.personaltime
 
 import android.annotation.SuppressLint
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -117,6 +118,7 @@ fun PersonalTimeControl(viewModel: PersonalTimeViewModel = viewModel()) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 items(personalTimes) { time ->
+                    Log.d("personalTimes","time  = ${time}")
                     PersonalTimeItem(time)
                 }
             }
