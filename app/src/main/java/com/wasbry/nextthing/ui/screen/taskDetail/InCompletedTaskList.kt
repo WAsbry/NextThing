@@ -1,5 +1,6 @@
 package com.wasbry.nextthing.ui.screen.taskDetail
 
+import android.util.Log
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
@@ -34,13 +35,19 @@ import kotlinx.coroutines.launch
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 
 /**
  * 展示所有的任务噻
  * */
 @Composable
-fun InCompletedTaskList(viewModel: TodoTaskViewModel) {
-    val tasks by viewModel.getIncompleteTodoTasks.collectAsStateWithLifecycle(initialValue = emptyList())
+fun InCompletedTaskList(todoTaskViewModel: TodoTaskViewModel,personalTimeViewModel: PersonalTimeViewModel) {
+    val tasks by todoTaskViewModel.getIncompleteTodoTasks.collectAsStateWithLifecycle(initialValue = emptyList())
+
+
     var expanded by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
@@ -91,21 +98,31 @@ fun InCompletedTaskList(viewModel: TodoTaskViewModel) {
                 ) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(tasks) { task ->
+
+                            // 为每个任务的 personTimeId 获取对应的 PersonalTime
+                            val personalTime by personalTimeViewModel.getPersonalTimeByPersonTimeId(task.personalTimeId).collectAsState()
+
+                            // 仅在 personalTime 变化时执行一次
+                            LaunchedEffect(personalTime) {
+                                Log.d("taskDisplay", "数据更新，准备渲染: $personalTime")
+                            }
+
                             TaskItem(
                                 task = task,
+                                personalTime = personalTime,
                                 onCompleted = {
                                     coroutineScope.launch {
-                                        viewModel.markTaskAsCompleted(task)
+                                        todoTaskViewModel.markTaskAsCompleted(task)
                                     }
                                 },
                                 onAbandoned = {
                                     coroutineScope.launch {
-                                        viewModel.markTaskAsAbandoned(task)
+                                        todoTaskViewModel.markTaskAsAbandoned(task)
                                     }
                                 },
                                 onPostponed = {
                                     coroutineScope.launch {
-                                        viewModel.markTaskAsPostponed(task)
+                                        todoTaskViewModel.markTaskAsPostponed(task)
                                     }
                                 }
                             )

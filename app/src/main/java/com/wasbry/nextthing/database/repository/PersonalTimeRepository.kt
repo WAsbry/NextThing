@@ -3,6 +3,7 @@ package com.wasbry.nextthing.database.repository
 import android.util.Log
 import com.wasbry.nextthing.database.dao.PersonalTimeDao
 import com.wasbry.nextthing.database.model.PersonalTime
+import com.wasbry.nextthing.database.model.TodoTask
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onEach
@@ -58,11 +59,9 @@ class PersonalTimeRepository(private val personalTimeDao: PersonalTimeDao) {
             Log.d("PersonalTimeRepository", "Received ${times.size} PersonalTime records: $times")
         }
 
-    // 根据 ID 获取单个 PersonalTime 记录
-    suspend fun getPersonalTimeById(id: Long): PersonalTime? {
-        return withContext(Dispatchers.IO) {
-            personalTimeDao.getPersonalTimeById(id)
-        }
+    // 获取单个 PersonalTime 记录
+    fun getPersonalTimeById(id: Long): Flow<PersonalTime> {
+        return personalTimeDao.getPersonalTimeById(id)
     }
 
     // 根据 startTime 和 endTime 查询时间段内的 PersonalTime 记录
