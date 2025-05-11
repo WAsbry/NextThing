@@ -53,7 +53,7 @@ fun AddTaskDialog(
 
         var selectedPersonalTime by remember { mutableStateOf<PersonalTime?>(null) }
         var personalTimeText by remember { mutableStateOf("请选择个人时间段") } // 初始提示
-        var selectedPersonalTimeId by remember { mutableStateOf<Long?>(null) }
+        var selectedPersonalTimeId by remember { mutableStateOf<Long>(1L) }
 
         var description by remember { mutableStateOf("") }
         var duration by remember { mutableStateOf(1) }
