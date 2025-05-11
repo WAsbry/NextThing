@@ -43,7 +43,9 @@ fun NavigationGraph(context: Context) {
     )
 
     val repositoryPersonalTime = PersonalTimeRepository(database.personalTimeDao())
-    val viewModelPersonalTime: PersonalTimeViewModel = viewModel(factory = PersonalTimeViewModelFactory(repositoryPersonalTime))
+    val personalTimeViewModel: PersonalTimeViewModel = viewModel(
+        factory = PersonalTimeViewModelFactory(repositoryPersonalTime)
+    )
 
     Scaffold(
         bottomBar = {
@@ -67,7 +69,7 @@ fun NavigationGraph(context: Context) {
                     HomePage()
                 }
                 composable(Screen.TaskDetail.route) {
-                    TaskListScreen(viewModel = viewModelTodoTask)
+                    TaskListScreen(todoTaskViewModel = viewModelTodoTask,personalTimeViewModel = personalTimeViewModel)
                 }
                 composable(Screen.AddTask.route) {
                     // 这里可以添加添加任务页面的逻辑
@@ -76,7 +78,7 @@ fun NavigationGraph(context: Context) {
                     androidx.compose.material3.Text(text = "任务统计")
                 }
                 composable(Screen.Mine.route) {
-                    MinePage(viewModel = viewModelPersonalTime)
+                    MinePage(viewModel = personalTimeViewModel)
                 }
             }
         }

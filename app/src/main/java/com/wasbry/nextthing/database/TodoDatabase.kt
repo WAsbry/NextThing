@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 // entities 参数指定数据库包含的实体类，这里包含 TodoTask 和 Category
 // version 参数指定数据库的版本号，当数据库结构发生变化时需要更新版本号
 // exportSchema 参数指定是否导出数据库架构，这里设置为 false 不导出
-@Database(entities = [TodoTask::class,PersonalTime::class], version = 1, exportSchema = false)
+@Database(entities = [TodoTask::class,PersonalTime::class], version = 2, exportSchema = false)
 @TypeConverters(DateConverter::class)
 abstract class TodoDatabase : RoomDatabase() {
 
