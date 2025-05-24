@@ -17,11 +17,14 @@ import com.wasbry.nextthing.database.repository.TodoTaskRepository
 import com.wasbry.nextthing.ui.bottombar.BottomBar
 import com.wasbry.nextthing.ui.screen.AddTask.AddTaskDialog
 import android.content.Context
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.setValue
 import com.wasbry.nextthing.database.repository.PersonalTimeRepository
 import com.wasbry.nextthing.screen.TaskListScreen
+import com.wasbry.nextthing.ui.screen.AddTask.AddTaskPage
 import com.wasbry.nextthing.ui.screen.homepage.HomePage
 import com.wasbry.nextthing.ui.screen.mine.MinePage
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
@@ -29,15 +32,14 @@ import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModelFactory
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModelFactory
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun NavigationGraph(context: Context) {
     val TAG = "NavigationGraph"
     val navController = rememberNavController()
-    var showAddTaskDialog by remember { mutableStateOf(false) }
 
     val database = TodoDatabase.getDatabase(context)
     val repositoryTodoTask = TodoTaskRepository(database.todoTaskDao())
-    val personalTimeRepository = PersonalTimeRepository(database.personalTimeDao())
     val viewModelTodoTask: TodoTaskViewModel = viewModel(
         factory = TodoTaskViewModelFactory(repositoryTodoTask)
     )
@@ -51,7 +53,6 @@ fun NavigationGraph(context: Context) {
         bottomBar = {
             BottomBar(
                 navController = navController,
-                onAddTaskClick = { showAddTaskDialog = true }
             )
         }
     ) { innerPadding ->
@@ -65,7 +66,6 @@ fun NavigationGraph(context: Context) {
                 startDestination = Screen.HomePage.route
             ) {
                 composable(Screen.HomePage.route) {
-//                    androidx.compose.material3.Text(text = "首页")
                     HomePage()
                 }
                 composable(Screen.TaskDetail.route) {
@@ -73,6 +73,7 @@ fun NavigationGraph(context: Context) {
                 }
                 composable(Screen.AddTask.route) {
                     // 这里可以添加添加任务页面的逻辑
+                    AddTaskPage(navController = navController)
                 }
                 composable(Screen.Statistic.route) {
                     androidx.compose.material3.Text(text = "任务统计")
@@ -82,19 +83,5 @@ fun NavigationGraph(context: Context) {
                 }
             }
         }
-
-        /**
-         * 添加任务的对话框噻
-         * */
-        AddTaskDialog(
-            isOpen = showAddTaskDialog,
-            onDismiss = { showAddTaskDialog = false },
-            onTaskAdded = { task ->
-                Log.d(TAG, "task = $task")
-                viewModelTodoTask.insertTodoTask(task)
-                showAddTaskDialog = false
-            }
-            ,personalTimeRepository = personalTimeRepository
-        )
     }
 }
