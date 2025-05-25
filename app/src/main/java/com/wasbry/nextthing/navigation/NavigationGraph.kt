@@ -23,12 +23,15 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.setValue
 import com.wasbry.nextthing.database.repository.PersonalTimeRepository
+import com.wasbry.nextthing.database.repository.TimeTypeRepository
 import com.wasbry.nextthing.screen.TaskListScreen
 import com.wasbry.nextthing.ui.screen.AddTask.AddTaskPage
 import com.wasbry.nextthing.ui.screen.homepage.HomePage
 import com.wasbry.nextthing.ui.screen.mine.MinePage
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModelFactory
+import com.wasbry.nextthing.viewmodel.timetype.TimeTypeViewModel
+import com.wasbry.nextthing.viewmodel.timetype.TimeTypeViewModelFactory
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModelFactory
 
@@ -38,7 +41,7 @@ fun NavigationGraph(context: Context) {
     val TAG = "NavigationGraph"
     val navController = rememberNavController()
 
-    val database = TodoDatabase.getDatabase(context)
+    val database = TodoDatabase.getInstance(context)
     val repositoryTodoTask = TodoTaskRepository(database.todoTaskDao())
     val viewModelTodoTask: TodoTaskViewModel = viewModel(
         factory = TodoTaskViewModelFactory(repositoryTodoTask)
@@ -47,6 +50,12 @@ fun NavigationGraph(context: Context) {
     val repositoryPersonalTime = PersonalTimeRepository(database.personalTimeDao())
     val personalTimeViewModel: PersonalTimeViewModel = viewModel(
         factory = PersonalTimeViewModelFactory(repositoryPersonalTime)
+    )
+
+    // 构造相关viewmodel 层实例
+    val timeTypeRepository = TimeTypeRepository(database.timeTypeDao())
+    val timeTypeViewModel: TimeTypeViewModel = viewModel(
+        factory = TimeTypeViewModelFactory(timeTypeRepository)
     )
 
     Scaffold(
@@ -73,7 +82,7 @@ fun NavigationGraph(context: Context) {
                 }
                 composable(Screen.AddTask.route) {
                     // 这里可以添加添加任务页面的逻辑
-                    AddTaskPage(navController = navController)
+                    AddTaskPage(navController = navController,timeTypeViewModel)
                 }
                 composable(Screen.Statistic.route) {
                     androidx.compose.material3.Text(text = "任务统计")

@@ -1,7 +1,5 @@
 package com.wasbry.nextthing.ui.screen.AddTask.component.model
 
-import android.R
-
 /**
  * 健身Icon 的数据类
  * */
