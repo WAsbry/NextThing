@@ -4,9 +4,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -15,13 +12,10 @@ import androidx.navigation.compose.rememberNavController
 import com.wasbry.nextthing.database.TodoDatabase
 import com.wasbry.nextthing.database.repository.TodoTaskRepository
 import com.wasbry.nextthing.ui.bottombar.BottomBar
-import com.wasbry.nextthing.ui.screen.AddTask.AddTaskDialog
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.padding
-import androidx.compose.runtime.setValue
 import com.wasbry.nextthing.database.repository.PersonalTimeRepository
 import com.wasbry.nextthing.database.repository.TimeTypeRepository
 import com.wasbry.nextthing.screen.TaskListScreen
@@ -82,7 +76,10 @@ fun NavigationGraph(context: Context) {
                 }
                 composable(Screen.AddTask.route) {
                     // 这里可以添加添加任务页面的逻辑
-                    AddTaskPage(navController = navController,timeTypeViewModel)
+                    AddTaskPage(navController = navController,
+                            timeTypeViewModel = timeTypeViewModel,
+                            todoTaskViewModel = viewModelTodoTask  // 添加这一行
+                    )
                 }
                 composable(Screen.Statistic.route) {
                     androidx.compose.material3.Text(text = "任务统计")
