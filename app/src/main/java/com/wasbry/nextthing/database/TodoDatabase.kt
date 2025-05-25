@@ -6,8 +6,10 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.wasbry.nextthing.database.dao.PersonalTimeDao
+import com.wasbry.nextthing.database.dao.TimeTypeDao
 import com.wasbry.nextthing.database.dao.TodoTaskDao
 import com.wasbry.nextthing.database.model.PersonalTime
+import com.wasbry.nextthing.database.model.TimeType
 import com.wasbry.nextthing.database.model.TodoTask
 import com.wasbry.nextthing.database.utils.DateConverter
 import kotlinx.coroutines.CoroutineScope
@@ -18,7 +20,7 @@ import kotlinx.coroutines.launch
 // entities 参数指定数据库包含的实体类，这里包含 TodoTask 和 Category
 // version 参数指定数据库的版本号，当数据库结构发生变化时需要更新版本号
 // exportSchema 参数指定是否导出数据库架构，这里设置为 false 不导出
-@Database(entities = [TodoTask::class,PersonalTime::class], version = 2, exportSchema = false)
+@Database(entities = [TodoTask::class,PersonalTime::class,TimeType::class], version = 1, exportSchema = false)
 @TypeConverters(DateConverter::class)
 abstract class TodoDatabase : RoomDatabase() {
 
@@ -27,29 +29,25 @@ abstract class TodoDatabase : RoomDatabase() {
 
     abstract fun personalTimeDao(): PersonalTimeDao
 
-    // 单例模式，保证只有一个数据库实例
+    abstract fun timeTypeDao(): TimeTypeDao
+
+
+    // 单例方法名应为 getInstance（符合常规命名习惯）
     companion object {
-        // 使用 @Volatile 注解确保变量的可见性，保证多线程环境下的一致性
         @Volatile
         private var INSTANCE: TodoDatabase? = null
 
-        // 获取数据库实例的方法，传入上下文对象
-        fun getDatabase(context: Context): TodoDatabase {
-            // 使用双检锁机制确保只有一个数据库实例被创建
+        // ✅ 修正方法名：将 getDatabase 改为 getInstance
+        fun getInstance(context: Context): TodoDatabase {
             return INSTANCE ?: synchronized(this) {
-                // 如果 INSTANCE 为空，则创建一个新的数据库实例
                 val instance = Room.databaseBuilder(
-                    // 传入应用程序上下文
                     context.applicationContext,
-                    // 指定数据库类
                     TodoDatabase::class.java,
-                    // 指定数据库名称
                     "todoDatabase"
-                ).build()
-                // 将新创建的实例赋值给 INSTANCE
+                )
+                    // 如果需要数据库升级迁移，添加 .addMigrations(...)
+                    .build()
                 INSTANCE = instance
-
-                // 返回数据库实例
                 instance
             }
         }
