@@ -1,8 +1,11 @@
 package com.wasbry.nextthing.ui.screen.AddTask.component.content
 
+import android.R.attr.onClick
 import android.R.id.selectedIcon
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,10 +34,12 @@ import com.wasbry.nextthing.ui.screen.AddTask.component.model.TimeIconModel
  * 时间类别的网格布局
  * */
 // 图标展示网格组件（修改为接收TimeType数据）
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TimeTypeDisplayGrid(
     timeTypes: List<TimeType>,
     onItemClick: (TimeType) -> Unit,
+    onItemLongClick: (TimeType) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -46,7 +51,11 @@ fun TimeTypeDisplayGrid(
     ) {
         items(timeTypes) { timeType ->
             Box(
-                modifier = Modifier.clickable { onItemClick(timeType) },
+                modifier = Modifier
+                    .combinedClickable(
+                        onClick = { onItemClick(timeType) },
+                        onLongClick = { onItemLongClick(timeType) }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Column(

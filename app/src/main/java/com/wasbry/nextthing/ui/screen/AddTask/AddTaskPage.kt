@@ -23,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,9 +31,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.wasbry.nextthing.R
 import com.wasbry.nextthing.database.model.TimeType
+import com.wasbry.nextthing.ui.screen.AddTask.component.addTaskDialog.AddTaskDialog
 import com.wasbry.nextthing.ui.screen.AddTask.component.content.TimeTypeDisplayGrid
 import com.wasbry.nextthing.ui.screen.AddTask.component.tab.TopTabBar
 import com.wasbry.nextthing.viewmodel.timetype.TimeTypeViewModel
+import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
 
 /**
  * 新建任务页面，把这个项目弄得更加专业点，要有商业化的感觉噻
@@ -43,7 +44,8 @@ import com.wasbry.nextthing.viewmodel.timetype.TimeTypeViewModel
 @Composable
 fun AddTaskPage(
     navController: NavController,
-    timeTypeViewModel: TimeTypeViewModel
+    timeTypeViewModel: TimeTypeViewModel,
+    todoTaskViewModel: TodoTaskViewModel
 ) {
     // 定义分类标签和对应的数据库分类名
     val tabItems = listOf("健身", "工作", "生活", "娱乐")
@@ -60,6 +62,9 @@ fun AddTaskPage(
 
     // 当前选中的图标
     var selectedIcon by remember { mutableStateOf<TimeType?>(null) }
+
+    // ✅ 新增对话框显示状态
+    var showAddTaskDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // 顶部导航栏
@@ -97,11 +102,24 @@ fun AddTaskPage(
             TimeTypeDisplayGrid(
                 timeTypes = timeTypes,
                 onItemClick = { clickedIcon ->
-                    selectedIcon = clickedIcon
-                    Log.d("SelectedIcon", "选中图标: ${clickedIcon.description}")
+                    selectedIcon = clickedIcon // 更新选中图标
+                    Log.d("SelectedIcon", "选中图标: ${clickedIcon.description},准备弹出对话框")
+                    showAddTaskDialog = true   // 显示对话框
+                },
+                onItemLongClick = { clickIcon ->
+                    Log.d("SelectedIcon","长按监听")
                 },
                 modifier = Modifier.fillMaxSize()
             )
         }
+    }
+
+    // ✅ 显示对话框
+    if (showAddTaskDialog && selectedIcon != null) {
+        AddTaskDialog(
+            onDismiss = { showAddTaskDialog = false }, // 关闭对话框回调
+            timeType = selectedIcon!!,                // 传递选中的TimeType
+            todoTaskViewModel = todoTaskViewModel
+        )
     }
 }
