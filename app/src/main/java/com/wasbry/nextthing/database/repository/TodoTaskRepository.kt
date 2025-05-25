@@ -1,12 +1,21 @@
 package com.wasbry.nextthing.database.repository
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import com.wasbry.nextthing.database.dao.TodoTaskDao
+import com.wasbry.nextthing.database.model.TaskStatus
 import com.wasbry.nextthing.database.model.TodoTask
+import com.wasbry.nextthing.database.model.WeeklySummary
+import com.wasbry.nextthing.tool.TimeTool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.Date
 
 class TodoTaskRepository(private val todoTaskDao: TodoTaskDao) {
 
@@ -27,6 +36,41 @@ class TodoTaskRepository(private val todoTaskDao: TodoTaskDao) {
 
     // 获取所有延期的任务
     val getPostponedTodoTasks: Flow<List<TodoTask>> = todoTaskDao.getPostponedTodoTasks()
+
+    /** 获取指定日期范围的任务统计信息（同步方法） */
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun getWeeklySummary(startDate: LocalDate, endDate: LocalDate): WeeklySummary {
+        // 转换 LocalDate 为 Date
+        val startDateAsDate = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant())
+        val endDateAsDate = Date.from(endDate.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant())
+
+        return WeeklySummary(
+            startDate = startDate,
+            endDate = endDate,
+            taskTotalCount = todoTaskDao.getTaskCountByDateRange(startDateAsDate, endDateAsDate), // 修正逗号错误
+            taskIncompleteTotalCount = todoTaskDao.getTaskCountByStatusAndDateRange(
+                TaskStatus.INCOMPLETE.name,
+                startDateAsDate,
+                endDateAsDate
+            ),
+            taskCompletedTotalCount = todoTaskDao.getTaskCountByStatusAndDateRange(
+                TaskStatus.COMPLETED.name,
+                startDateAsDate,
+                endDateAsDate
+            ),
+            taskAbandonedTotalCount = todoTaskDao.getTaskCountByStatusAndDateRange(
+                TaskStatus.ABANDONED.name,
+                startDateAsDate,
+                endDateAsDate
+            ),
+            taskPostponedTotalCount = todoTaskDao.getTaskCountByStatusAndDateRange(
+                TaskStatus.POSTPONED.name,
+                startDateAsDate,
+                endDateAsDate
+            ),
+            expectedTaskCount = todoTaskDao.getExpectedTaskCountByDateRange(startDateAsDate, endDateAsDate)
+        )
+    }
 
 
     // 插入单个待办任务，使用挂起函数处理

@@ -9,6 +9,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.wasbry.nextthing.database.model.TodoTask
 import kotlinx.coroutines.flow.Flow
+import java.util.Date
 
 @Dao
 interface TodoTaskDao {
@@ -36,6 +37,20 @@ interface TodoTaskDao {
     // 查询所有延期的任务，按照制定日期进行升序排列
     @Query("SELECT * FROM todotasktable WHERE status = 'POSTPONED' ORDER BY madeDate ASC")
     fun getPostponedTodoTasks(): Flow<List<TodoTask>>
+
+    // 修改所有统计方法为返回 Flow<Int>
+    @Query("SELECT COUNT(*) FROM todotasktable WHERE madeDate BETWEEN :startDate AND :endDate")
+    fun getTaskCountByDateRange(startDate: Date, endDate: Date): Int
+
+    @Query("SELECT COUNT(*) FROM todotasktable WHERE status = :status AND madeDate BETWEEN :startDate AND :endDate")
+    fun getTaskCountByStatusAndDateRange(
+        status: String,
+        startDate: Date,
+        endDate: Date
+    ): Int
+
+    @Query("SELECT COUNT(*) FROM todotasktable WHERE madeDate BETWEEN :startDate AND :endDate AND status != 'COMPLETED'")
+    fun getExpectedTaskCountByDateRange(startDate: Date, endDate: Date): Int
 
     // 插入单个任务，并返回id 如果主键重复，则替换原有数据
     @Insert(onConflict = OnConflictStrategy.REPLACE)
