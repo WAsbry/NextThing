@@ -69,7 +69,7 @@ fun NavigationGraph(context: Context) {
                 startDestination = Screen.HomePage.route
             ) {
                 composable(Screen.HomePage.route) {
-                    HomePage()
+                    HomePage(todoTaskViewModel = viewModelTodoTask,personalTimeViewModel = personalTimeViewModel)
                 }
                 composable(Screen.TaskDetail.route) {
                     TaskListScreen(todoTaskViewModel = viewModelTodoTask,personalTimeViewModel = personalTimeViewModel)

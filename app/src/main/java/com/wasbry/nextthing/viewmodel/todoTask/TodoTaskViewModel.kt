@@ -1,15 +1,21 @@
 package com.wasbry.nextthing.viewmodel.todoTask
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wasbry.nextthing.database.model.TaskStatus
 import com.wasbry.nextthing.database.model.TodoTask
+import com.wasbry.nextthing.database.model.WeeklySummary
 import com.wasbry.nextthing.database.repository.TodoTaskRepository
+import com.wasbry.nextthing.tool.TimeTool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
 import java.util.Date
 
 
@@ -31,6 +37,16 @@ class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : Vi
 
     // 获取所有延期的任务
     val getPostponedTodoTasks: Flow<List<TodoTask>> = todoTaskRepository.getPostponedTodoTasks
+
+    /** 获取本周任务汇总（协程版本，非Flow） */
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun getWeeklySummaryByDate(date: LocalDate): WeeklySummary {
+        return withContext(Dispatchers.IO) { // 在IO线程执行同步操作
+            val startDate = TimeTool.getStartOfWeek(date)
+            val endDate = TimeTool.getEndOfWeek(date)
+            todoTaskRepository.getWeeklySummary(startDate, endDate)
+        }
+    }
 
     // 插入单个待办任务
     fun insertTodoTask(todoTask: TodoTask) = viewModelScope.launch {
