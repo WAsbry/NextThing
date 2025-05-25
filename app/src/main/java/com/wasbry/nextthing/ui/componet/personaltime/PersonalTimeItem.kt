@@ -48,7 +48,7 @@ fun PersonalTimeItem(time: PersonalTime) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
 
-    val database = TodoDatabase.getDatabase(context)
+    val database = TodoDatabase.getInstance(context)
     val repositoryPersonalTime = PersonalTimeRepository(database.personalTimeDao())
     val viewModelPersonalTime: PersonalTimeViewModel = viewModel(
         factory = PersonalTimeViewModelFactory(repositoryPersonalTime)
