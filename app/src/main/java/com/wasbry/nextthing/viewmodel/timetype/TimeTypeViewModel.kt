@@ -20,6 +20,11 @@ class TimeTypeViewModel(private val timeTypeRepository: TimeTypeRepository) : Vi
         return timeTypeRepository.getTimeTypesByCategory(category)
     }
 
+    // 根据ID 获取图标资源
+    suspend fun getTimeTypeById(id: Long): TimeType? {
+        return timeTypeRepository.getTimeTypeById(id)
+    }
+
     // 获取预置图标
     val presetTimeTypes: Flow<List<TimeType>> = timeTypeRepository.presetTimeTypes
 

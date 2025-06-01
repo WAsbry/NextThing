@@ -46,7 +46,7 @@ fun NavigationGraph(context: Context) {
         factory = PersonalTimeViewModelFactory(repositoryPersonalTime)
     )
 
-    // 构造相关viewmodel 层实例
+    // 构造TimeType相关viewmodel 层实例
     val timeTypeRepository = TimeTypeRepository(database.timeTypeDao())
     val timeTypeViewModel: TimeTypeViewModel = viewModel(
         factory = TimeTypeViewModelFactory(timeTypeRepository)
@@ -69,7 +69,9 @@ fun NavigationGraph(context: Context) {
                 startDestination = Screen.HomePage.route
             ) {
                 composable(Screen.HomePage.route) {
-                    HomePage(todoTaskViewModel = viewModelTodoTask,personalTimeViewModel = personalTimeViewModel)
+                    HomePage(todoTaskViewModel = viewModelTodoTask,
+                        personalTimeViewModel = personalTimeViewModel,
+                        timeTypeViewModel = timeTypeViewModel)
                 }
                 composable(Screen.TaskDetail.route) {
                     TaskListScreen(todoTaskViewModel = viewModelTodoTask,personalTimeViewModel = personalTimeViewModel)

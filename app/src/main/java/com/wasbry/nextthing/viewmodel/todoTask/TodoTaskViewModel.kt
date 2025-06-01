@@ -38,6 +38,11 @@ class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : Vi
     // 获取所有延期的任务
     val getPostponedTodoTasks: Flow<List<TodoTask>> = todoTaskRepository.getPostponedTodoTasks
 
+    // 获取指定日期的任务列表（按创建时间逆序排列）
+    fun getTasksByDate(targetDate: String): Flow<List<TodoTask>> {
+        return todoTaskRepository.getTasksByDate(targetDate)
+    }
+
     /** 获取本周任务汇总（协程版本，非Flow） */
     @RequiresApi(Build.VERSION_CODES.O)
     suspend fun getWeeklySummaryByDate(date: LocalDate): WeeklySummary {
@@ -94,7 +99,7 @@ class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : Vi
             val updatedTask = task.copy(
                 status = TaskStatus.POSTPONED,
                 // 可根据需求更新制定日期或其他时间字段
-                 madeDate = Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000) // （延期一天）
+                 madeDate = Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000).toString() // （延期一天）
             )
             Log.d("task status change","延期任务，task.name = ${task.description}")
             todoTaskRepository.updateTodoTask(updatedTask)
