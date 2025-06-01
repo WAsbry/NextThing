@@ -7,10 +7,8 @@ import com.wasbry.nextthing.database.dao.TodoTaskDao
 import com.wasbry.nextthing.database.model.TaskStatus
 import com.wasbry.nextthing.database.model.TodoTask
 import com.wasbry.nextthing.database.model.WeeklySummary
-import com.wasbry.nextthing.tool.TimeTool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -36,6 +34,11 @@ class TodoTaskRepository(private val todoTaskDao: TodoTaskDao) {
 
     // 获取所有延期的任务
     val getPostponedTodoTasks: Flow<List<TodoTask>> = todoTaskDao.getPostponedTodoTasks()
+
+    // 获取指定日期的任务列表（按创建时间逆序排列）
+    fun getTasksByDate(targetDate: String): Flow<List<TodoTask>> {
+        return todoTaskDao.getTasksByDate(targetDate)
+    }
 
     /** 获取指定日期范围的任务统计信息（同步方法） */
     @RequiresApi(Build.VERSION_CODES.O)

@@ -36,10 +36,12 @@ data class TodoTask(
     val id: Long = 0,
     // 新增关联 PersonalTime 的外键
     val personalTimeId: Long, // 任务的时间段
+    val timeTypeIconPath: String, // 任务对应的具体Icon的路径
     val title: String, // 任务的标题噻
     val description: String, // 任务的描述噻
     val duration: Int, // 任务的持续时间，min
     val importance: TaskImportance, // 任务的重要程度
-    val madeDate: Date, // 任务的制定日期
+    val madeDate: String, // 任务的制定日期
+    val madeTime: Date, // 任务的制定时刻
     val status: TaskStatus // 任务的状态
 )

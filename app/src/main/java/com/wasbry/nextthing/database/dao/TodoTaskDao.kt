@@ -1,6 +1,5 @@
 package com.wasbry.nextthing.database.dao
 
-import androidx.lifecycle.LiveData
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
@@ -17,6 +16,12 @@ interface TodoTaskDao {
     // 查询所有待办事项，按照截止日期升序排列
     @Query("SELECT * FROM TodoTaskTable ORDER BY madeDate ASC")
     fun getAllTodoTasks(): Flow<List<TodoTask>>
+
+    // 获取指定日期的任务，按照创建时间进行逆序排列
+    @Query("SELECT * FROM TodoTaskTable WHERE date(madeDate) = :targetDate ORDER BY madeDate ASC")
+    fun getTasksByDate(targetDate: String): Flow<List<TodoTask>>
+
+
 
     // 根据任务ID 查询单个Task
     @Query("SELECT * FROM TodoTaskTable WHERE id = :taskId")
