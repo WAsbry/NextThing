@@ -13,13 +13,19 @@ import com.wasbry.nextthing.database.repository.TodoTaskRepository
 import com.wasbry.nextthing.tool.TimeTool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Date
 
 
 class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : ViewModel() {
+
+    val TAG = "TodoTaskViewModel"
 
     // 获取所有待办任务
     // 直接暴露 Flow，不在 ViewModel 中收集！
@@ -43,14 +49,21 @@ class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : Vi
         return todoTaskRepository.getTasksByDate(targetDate)
     }
 
-    /** 获取本周任务汇总（协程版本，非Flow） */
+    // 获取指定日期未完成的任务列表（按创建时间逆序排列）
+    fun getIncompleteTasksByDate(targetDate: String): Flow<List<TodoTask>> {
+        return todoTaskRepository.getIncompleteTasksByDate(targetDate)
+    }
+
+    /**
+     * 获取本周任务统计信息（直接返回 Repository 的 Flow）
+     * @param date 基准日期（用于计算本周范围）
+     */
     @RequiresApi(Build.VERSION_CODES.O)
-    suspend fun getWeeklySummaryByDate(date: LocalDate): WeeklySummary {
-        return withContext(Dispatchers.IO) { // 在IO线程执行同步操作
-            val startDate = TimeTool.getStartOfWeek(date)
-            val endDate = TimeTool.getEndOfWeek(date)
-            todoTaskRepository.getWeeklySummary(startDate, endDate)
-        }
+    fun getWeeklySummary(date: LocalDate): Flow<WeeklySummary> {
+        val startDate = TimeTool.getStartOfWeek(date)
+        val endDate = TimeTool.getEndOfWeek(date)
+        return todoTaskRepository.getWeeklySummary(startDate, endDate)
+            .flowOn(Dispatchers.IO) // 调度到 IO 线程
     }
 
     // 插入单个待办任务
@@ -94,12 +107,13 @@ class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : Vi
     }
 
     // 标记任务为「已延期」（顺延）
+    @RequiresApi(Build.VERSION_CODES.O)
     fun markTaskAsPostponed(task: TodoTask) {
         viewModelScope.launch(Dispatchers.IO) {
             val updatedTask = task.copy(
                 status = TaskStatus.POSTPONED,
                 // 可根据需求更新制定日期或其他时间字段
-                 madeDate = Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000).toString() // （延期一天）
+                 madeDate = LocalDate.now().plusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE) // （延期一天）
             )
             Log.d("task status change","延期任务，task.name = ${task.description}")
             todoTaskRepository.updateTodoTask(updatedTask)
