@@ -1,17 +1,19 @@
 package com.wasbry.nextthing.database.model
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import java.time.LocalDate
 
 /**
  * 一周的数据类
  * */
-data class WeeklySummary(
-    val startDate: LocalDate, // 本周开始日期
-    val endDate: LocalDate, // 本周结束日期
-    val taskTotalCount: Int, // 本周任务总数
-    val taskIncompleteTotalCount: Int, // 本周未完成任务总数
-    val taskCompletedTotalCount: Int, // 本周已完成任务总数
-    val taskAbandonedTotalCount: Int, // 本周放弃任务总数
-    val taskPostponedTotalCount: Int, // 本周延期任务总数
-    val expectedTaskCount: Int, // // 本周延期任务总数
+data class WeeklySummary @RequiresApi(Build.VERSION_CODES.O) constructor(
+    val startDate: LocalDate = LocalDate.now(),  // 改为可为空
+    val endDate: LocalDate = LocalDate.now(),    // 改为可为空
+    val taskTotalCount: Int = 0,
+    val taskIncompleteTotalCount: Int = 0,
+    val taskCompletedTotalCount: Int = 0,
+    val taskAbandonedTotalCount: Int = 0,
+    val taskPostponedTotalCount: Int = 0,
+    val expectedTaskCount: Int = 0
 )
