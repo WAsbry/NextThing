@@ -1,4 +1,4 @@
-package com.wasbry.nextthing.database.dao
+`package com.wasbry.nextthing.database.dao
 
 import androidx.room.Dao
 import androidx.room.Delete
@@ -20,6 +20,10 @@ interface TodoTaskDao {
     // 获取指定日期的任务，按照创建时间进行逆序排列
     @Query("SELECT * FROM TodoTaskTable WHERE date(madeDate) = :targetDate ORDER BY madeDate ASC")
     fun getTasksByDate(targetDate: String): Flow<List<TodoTask>>
+
+    // 获取指定日期的未完成任务，按照创建时间逆序排列
+    @Query("SELECT * FROM TodoTaskTable WHERE date(madeDate) = :targetDate AND status != 'COMPLETED' ORDER BY madeDate DESC")
+    fun getIncompleteTasksByDate(targetDate: String): Flow<List<TodoTask>>
 
 
 
@@ -44,18 +48,18 @@ interface TodoTaskDao {
     fun getPostponedTodoTasks(): Flow<List<TodoTask>>
 
     // 修改所有统计方法为返回 Flow<Int>
-    @Query("SELECT COUNT(*) FROM todotasktable WHERE madeDate BETWEEN :startDate AND :endDate")
-    fun getTaskCountByDateRange(startDate: Date, endDate: Date): Int
+    @Query("SELECT COUNT(*) FROM todotasktable WHERE madeTime BETWEEN :startDate AND :endDate")
+    fun getTaskCountByDateRange(startDate: Date, endDate: Date): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM todotasktable WHERE status = :status AND madeDate BETWEEN :startDate AND :endDate")
+    @Query("SELECT COUNT(*) FROM todotasktable WHERE status = :status AND madeTime BETWEEN :startDate AND :endDate")
     fun getTaskCountByStatusAndDateRange(
         status: String,
         startDate: Date,
         endDate: Date
-    ): Int
+    ): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM todotasktable WHERE madeDate BETWEEN :startDate AND :endDate AND status != 'COMPLETED'")
-    fun getExpectedTaskCountByDateRange(startDate: Date, endDate: Date): Int
+    @Query("SELECT COUNT(*) FROM todotasktable WHERE madeTime BETWEEN :startDate AND :endDate AND status != 'COMPLETED'")
+    fun getExpectedTaskCountByDateRange(startDate: Date, endDate: Date): Flow<Int>
 
     // 插入单个任务，并返回id 如果主键重复，则替换原有数据
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -92,4 +96,4 @@ interface TodoTaskDao {
     // 查询所有关联了特定 PersonalTime 的待办任务，并按照截止日期升序排列
     @Query("SELECT * FROM TodoTaskTable WHERE personalTimeId = :personalTimeId ORDER BY madeDate ASC")
     fun getTodoTasksByPersonalTimeIdSorted(personalTimeId: Long): Flow<List<TodoTask>>
-}
+}`
