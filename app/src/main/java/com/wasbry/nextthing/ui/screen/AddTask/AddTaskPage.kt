@@ -1,7 +1,9 @@
 package com.wasbry.nextthing.ui.screen.AddTask
 
 import android.R.string
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable // 正确的导入
@@ -40,6 +42,7 @@ import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
 /**
  * 新建任务页面，把这个项目弄得更加专业点，要有商业化的感觉噻
  * */
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AddTaskPage(

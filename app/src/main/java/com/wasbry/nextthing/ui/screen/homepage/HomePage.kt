@@ -1,13 +1,16 @@
 package com.wasbry.nextthing.ui.screen.homepage
 
 import android.os.Build
-import android.widget.Space
+import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -16,10 +19,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.wasbry.nextthing.database.model.WeeklySummary
 import com.wasbry.nextthing.ui.componet.homepage.summary.WeeklySummaryPanel
-import com.wasbry.nextthing.ui.componet.homepage.today.TodayTaskPanel
+import com.wasbry.nextthing.ui.componet.homepage.today.TodayIncompleteTasksPanel
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 import com.wasbry.nextthing.viewmodel.timetype.TimeTypeViewModel
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
@@ -42,32 +46,41 @@ fun HomePage(
     val todayDate: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
     val todayTasks by todoTaskViewModel.getTasksByDate(todayDate).collectAsState(initial = emptyList())
 
-    val defaultSummary = WeeklySummary(
-        startDate = LocalDate.MIN,
-        endDate = LocalDate.MIN,
-        taskTotalCount = 0,
-        taskIncompleteTotalCount = 0,
-        taskCompletedTotalCount = 0,
-        taskAbandonedTotalCount = 0,
-        taskPostponedTotalCount = 0,
-        expectedTaskCount = 0
-    )
+    val todayIncompleteTasks by todoTaskViewModel.getIncompleteTasksByDate(todayDate).collectAsState(initial = emptyList())
 
-    var weeklySummary by remember { mutableStateOf<WeeklySummary>(defaultSummary) }
+    // 收集 ViewModel 返回的 Flow（关键行：直接使用 getWeeklySummary 返回的 Flow）
+    val weeklySummary by todoTaskViewModel.getWeeklySummary(today)
+        .collectAsState(
+            initial = WeeklySummary(
+                startDate = LocalDate.now(), // 初始值建议使用合理日期
+                endDate = LocalDate.now(),
+                taskTotalCount = 0,
+                taskIncompleteTotalCount = 0,
+                taskCompletedTotalCount = 0,
+                taskAbandonedTotalCount = 0,
+                taskPostponedTotalCount = 0,
+                expectedTaskCount = 0
+            )
+        )
 
+
+    // 手动订阅 Flow（测试用）
     LaunchedEffect(today) {
-        // 调用ViewModel的协程方法
-        weeklySummary = todoTaskViewModel.getWeeklySummaryByDate(today)
+        todoTaskViewModel.getWeeklySummary(today)
+            .collect { summary ->
+                // 此处会触发 Flow 执行，日志应打印
+                Log.d(TAG, "UI层收到数据：$summary")
+            }
     }
+
 
     Column (
         modifier = Modifier
             .fillMaxWidth() // 占满整块屏幕
     ) {
-        WeeklySummaryPanel(weeklySummary)
+        WeeklySummaryPanel(weeklySummary) // 本周概要面板
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        TodayTaskPanel(todayTasks = todayTasks, modifier = Modifier.fillMaxWidth())
+        // 展示今日未完成的任务
+        TodayIncompleteTasksPanel(todayIncompleteTasks = todayIncompleteTasks, modifier = Modifier.fillMaxWidth().height(500.dp), todoTaskViewModel = todoTaskViewModel)
     }
 }
