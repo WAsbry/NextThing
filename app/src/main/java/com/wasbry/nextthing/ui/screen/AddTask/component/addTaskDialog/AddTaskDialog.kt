@@ -1,5 +1,7 @@
 package com.wasbry.nextthing.ui.screen.AddTask.component.addTaskDialog
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,8 +39,10 @@ import com.wasbry.nextthing.database.model.TimeType
 import com.wasbry.nextthing.database.model.TodoTask
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Calendar
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AddTaskDialog(
     onDismiss: () -> Unit,
@@ -140,11 +144,13 @@ fun AddTaskDialog(
                     // 保存逻辑
                     val newTask = TodoTask(
                         personalTimeId = 1L,
+                        timeTypeIconPath = timeType.resPath,
                         title = timeType.description,
                         description = taskTitle,
                         duration = 15,
                         importance = TaskImportance.UNIMPORTANT_NOT_URGENT,
-                        madeDate = Calendar.getInstance().time,
+                        madeDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE),
+                        madeTime = Calendar.getInstance().time,
                         status = TaskStatus.INCOMPLETE
                     )
                     todoTaskViewModel.insertTodoTask(newTask)

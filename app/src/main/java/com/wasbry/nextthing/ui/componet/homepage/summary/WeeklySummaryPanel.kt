@@ -1,4 +1,4 @@
-package com.wasbry.nextthing.ui.componet.homepage
+package com.wasbry.nextthing.ui.componet.homepage.summary
 
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,6 +43,7 @@ fun WeeklySummaryPanel(
     Card(
         modifier = Modifier
             .width(400.dp)
+            .wrapContentHeight()
             .padding(16.dp),
         // 设置卡片的形状为圆角，圆角半径为 12dp
         shape = RoundedCornerShape(12.dp),
