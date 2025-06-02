@@ -20,7 +20,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
+import com.wasbry.nextthing.R
 import com.wasbry.nextthing.database.model.WeeklySummary
 import com.wasbry.nextthing.ui.componet.homepage.summary.WeeklySummaryPanel
 import com.wasbry.nextthing.ui.componet.homepage.today.TodayIncompleteTasksPanel
@@ -77,6 +79,7 @@ fun HomePage(
     Column (
         modifier = Modifier
             .fillMaxWidth() // 占满整块屏幕
+            .background(color = colorResource(R.color.background_color))
     ) {
         WeeklySummaryPanel(weeklySummary) // 本周概要面板
 
