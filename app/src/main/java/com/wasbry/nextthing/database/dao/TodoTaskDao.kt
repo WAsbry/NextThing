@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.wasbry.nextthing.database.model.TodoTask
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 import java.util.Date
 
 @Dao
@@ -24,6 +25,12 @@ interface TodoTaskDao {
     // 获取指定日期的未完成任务，按照创建时间逆序排列
     @Query("SELECT * FROM TodoTaskTable WHERE date(madeDate) = :targetDate AND status != 'COMPLETED' ORDER BY madeDate DESC")
     fun getIncompleteTasksByDate(targetDate: String): Flow<List<TodoTask>>
+
+    // 获取指定时间范围内的所有任务，按照创建时间逆序排序
+    @Query("SELECT * FROM TodoTaskTable " +
+            "WHERE madeDate BETWEEN :startTime AND :endTime " +
+            "ORDER BY madeDate DESC, madeTime DESC") // 按日期和时间双重排序
+    fun getTasksByDateRange(startTime: String, endTime: String): Flow<List<TodoTask>>
 
 
 

@@ -28,9 +28,12 @@ import com.wasbry.nextthing.ui.componet.common.TaskItem
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.android.material.color.ColorRoles
+import com.wasbry.nextthing.R
 import com.wasbry.nextthing.database.model.TodoTask
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
 import kotlinx.coroutines.coroutineScope
@@ -54,13 +57,15 @@ fun TodayIncompleteTasksPanel(
 
     Column(
         modifier = Modifier
-            .fillMaxSize(),
+            .fillMaxSize()
+            .background(color = colorResource(R.color.background_color))
+        ,
         horizontalAlignment = Alignment.CenterHorizontally // 水平居中
     ) {
         Card( // 项目里面用到了很多的这个Card 布局，应当仔细去总结一下才行啊
             modifier = modifier
                 .fillMaxSize()
-                .background(color = Color.White)
+                .background(color = colorResource(R.color.background_color))
                 .padding(16.dp)
                 .clip(MaterialTheme.shapes.medium), // 这个是什么意思
             elevation = CardDefaults.cardElevation(4.dp) // 添加阴影效果噻啊
