@@ -3,7 +3,6 @@ package com.wasbry.nextthing.viewmodel.todoTask
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
-import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wasbry.nextthing.database.model.TaskStatus
@@ -12,46 +11,75 @@ import com.wasbry.nextthing.database.model.WeeklySummary
 import com.wasbry.nextthing.database.repository.TodoTaskRepository
 import com.wasbry.nextthing.tool.TimeTool
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.Date
-
+import java.util.*
 
 class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : ViewModel() {
 
     val TAG = "TodoTaskViewModel"
 
-    // 获取所有待办任务
-    // 直接暴露 Flow，不在 ViewModel 中收集！
-    val allTodoTasks: Flow<List<TodoTask>> = todoTaskRepository.allTodoTasks
+    // 单一Flow实例，监听所有任务的变化
+    private val _allTasksFlow = todoTaskRepository.allTodoTasks
+        .distinctUntilChanged()
+        .shareIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            replay = 1
+        )
 
-    // 获取所有已完成的任务
-    val getCompletedTodoTask: Flow<List<TodoTask>> = todoTaskRepository.getCompletedTodoTasks
+    // 获取所有待办任务（使用单一Flow）
+    val allTodoTasks: Flow<List<TodoTask>> = _allTasksFlow
 
-    // 获取所有未完成的任务
-    val getIncompleteTodoTasks: Flow<List<TodoTask>> = todoTaskRepository.getIncompleteTodoTasks
+    // 获取所有已完成的任务（使用单一Flow）
+    val getCompletedTodoTask: Flow<List<TodoTask>> = _allTasksFlow
+        .map { tasks -> tasks.filter { it.status == TaskStatus.COMPLETED } }
+        .distinctUntilChanged()
 
+    // 获取所有未完成的任务（使用单一Flow）
+    val getIncompleteTodoTasks: Flow<List<TodoTask>> = _allTasksFlow
+        .map { tasks -> tasks.filter { it.status == TaskStatus.INCOMPLETE } }
+        .distinctUntilChanged()
 
-    // 获取所有放弃的任务
-    val getAbandonedTodoTasks: Flow<List<TodoTask>> = todoTaskRepository.getAbandonedTodoTasks
+    // 获取所有放弃的任务（使用单一Flow）
+    val getAbandonedTodoTasks: Flow<List<TodoTask>> = _allTasksFlow
+        .map { tasks -> tasks.filter { it.status == TaskStatus.ABANDONED } }
+        .distinctUntilChanged()
 
-    // 获取所有延期的任务
-    val getPostponedTodoTasks: Flow<List<TodoTask>> = todoTaskRepository.getPostponedTodoTasks
+    // 获取所有延期的任务（使用单一Flow）
+    val getPostponedTodoTasks: Flow<List<TodoTask>> = _allTasksFlow
+        .map { tasks -> tasks.filter { it.status == TaskStatus.POSTPONED } }
+        .distinctUntilChanged()
 
-    // 获取指定日期的任务列表（按创建时间逆序排列）
+    // 获取指定日期的任务列表（使用单一Flow）
     fun getTasksByDate(targetDate: String): Flow<List<TodoTask>> {
-        return todoTaskRepository.getTasksByDate(targetDate)
+        return _allTasksFlow
+            .map { tasks -> tasks.filter { it.madeDate == targetDate } }
+            .distinctUntilChanged()
     }
 
-    // 获取指定日期未完成的任务列表（按创建时间逆序排列）
+    // 获取指定日期未完成的任务列表（使用单一Flow）
     fun getIncompleteTasksByDate(targetDate: String): Flow<List<TodoTask>> {
-        return todoTaskRepository.getIncompleteTasksByDate(targetDate)
+        return _allTasksFlow
+            .map { tasks ->
+                tasks.filter { it.madeDate == targetDate && it.status == TaskStatus.INCOMPLETE }
+            }
+            .distinctUntilChanged()
+    }
+
+    // 获取指定时间范围的任务列表（使用单一Flow）
+    fun getTasksByDateRange(startTime: String, endTime: String): Flow<List<TodoTask>> {
+        return _allTasksFlow
+            .map { tasks ->
+                tasks.filter { task ->
+                    val taskDate = task.madeDate
+                    taskDate >= startTime && taskDate <= endTime
+                }
+            }
+            .distinctUntilChanged()
     }
 
     /**
@@ -81,7 +109,6 @@ class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : Vi
         todoTaskRepository.deleteTodoTask(todoTask)
     }
 
-
     // 标记任务为「已完成」
     fun markTaskAsCompleted(task: TodoTask) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -106,16 +133,21 @@ class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : Vi
         }
     }
 
-    // 标记任务为「已延期」（顺延）
     @RequiresApi(Build.VERSION_CODES.O)
     fun markTaskAsPostponed(task: TodoTask) {
         viewModelScope.launch(Dispatchers.IO) {
+            val today = LocalDate.now()
+            // 移除 coerceAtMost，允许延期到下月
+            val newDate = today.plusDays(1) // 直接加一天，无需限制
+
+            val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+            val madeDateStr = newDate.format(dateFormatter) // 格式化为 "yyyy-MM-dd"
+
             val updatedTask = task.copy(
                 status = TaskStatus.POSTPONED,
-                // 可根据需求更新制定日期或其他时间字段
-                 madeDate = LocalDate.now().plusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE) // （延期一天）
+                madeDate = madeDateStr
             )
-            Log.d("task status change","延期任务，task.name = ${task.description}")
+            Log.d("Postpone", "延期任务：${task.description}, 新日期：$madeDateStr")
             todoTaskRepository.updateTodoTask(updatedTask)
         }
     }

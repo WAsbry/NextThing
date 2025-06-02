@@ -50,6 +50,11 @@ class TodoTaskRepository(private val todoTaskDao: TodoTaskDao) {
         return todoTaskDao.getIncompleteTasksByDate(targetDate)
     }
 
+    // 获取指定时间范围的所有任务列表
+    fun getTasksByDateRange(startTime: String, endTime: String): Flow<List<TodoTask>> {
+        return todoTaskDao.getTasksByDateRange(startTime,endTime)
+    }
+
     @RequiresApi(Build.VERSION_CODES.O)
     fun getWeeklySummary(startDate: LocalDate, endDate: LocalDate): Flow<WeeklySummary> {
         val startDateAsDate = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant())
