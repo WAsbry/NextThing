@@ -1,5 +1,7 @@
 package com.wasbry.nextthing.screen
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
@@ -16,9 +18,10 @@ import androidx.compose.ui.res.colorResource
 
 // 添加项目的 R 类导入 ✅
 import com.wasbry.nextthing.R
+import com.wasbry.nextthing.ui.componet.taskDetails.MonthlyTaskListScreen
 
 
-
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun TaskListScreen(todoTaskViewModel: TodoTaskViewModel,personalTimeViewModel: PersonalTimeViewModel) {
 
@@ -62,7 +65,11 @@ fun TaskListScreen(todoTaskViewModel: TodoTaskViewModel,personalTimeViewModel: P
                 .weight(1f) // 占据剩余空间
         ) {
             when (selectedIndex) {
-                0 -> EmptyContent(text = "流水")
+                0 -> MonthlyTaskListScreen(
+                    todoTaskViewModel = todoTaskViewModel,
+                    modifier = Modifier.fillMaxSize()
+                        .padding(start = 20.dp, end = 20.dp),
+                )
                 1 -> EmptyContent(text = "日历")
             }
         }

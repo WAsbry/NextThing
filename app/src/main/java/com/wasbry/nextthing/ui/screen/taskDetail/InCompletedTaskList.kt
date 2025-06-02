@@ -1,6 +1,8 @@
 package com.wasbry.nextthing.ui.screen.taskDetail
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
@@ -43,6 +45,7 @@ import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 /**
  * 展示所有的任务噻
  * */
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun InCompletedTaskList(todoTaskViewModel: TodoTaskViewModel,personalTimeViewModel: PersonalTimeViewModel) {
     val tasks by todoTaskViewModel.getIncompleteTodoTasks.collectAsStateWithLifecycle(initialValue = emptyList())
