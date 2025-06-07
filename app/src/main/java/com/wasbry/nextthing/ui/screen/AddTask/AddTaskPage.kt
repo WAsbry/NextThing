@@ -38,6 +38,7 @@ import com.wasbry.nextthing.ui.screen.AddTask.component.content.TimeTypeDisplayG
 import com.wasbry.nextthing.ui.screen.AddTask.component.tab.TopTabBar
 import com.wasbry.nextthing.viewmodel.timetype.TimeTypeViewModel
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
+import kotlinx.coroutines.flow.Flow
 
 /**
  * 新建任务页面，把这个项目弄得更加专业点，要有商业化的感觉噻
@@ -60,8 +61,11 @@ fun AddTaskPage(
     val currentCategory by remember { derivedStateOf { categoryKeys[selectedTabIndex] } }
 
     // 从数据库获取当前分类的图标数据
-    val timeTypes: List<TimeType> by timeTypeViewModel.getTimeTypesByCategory(currentCategory)
-        .collectAsStateWithLifecycle(emptyList())
+//    val tasks by todoTaskViewModel.allTodoTasks.collectAsStateWithLifecycle(initialValue = emptyList())
+    val timeTypes by timeTypeViewModel.getTimeTypesByCategory(currentCategory)
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+
+
 
     // 当前选中的图标
     var selectedIcon by remember { mutableStateOf<TimeType?>(null) }
@@ -122,7 +126,8 @@ fun AddTaskPage(
         AddTaskDialog(
             onDismiss = { showAddTaskDialog = false }, // 关闭对话框回调
             timeType = selectedIcon!!,                // 传递选中的TimeType
-            todoTaskViewModel = todoTaskViewModel
+            todoTaskViewModel = todoTaskViewModel,
+            timeTypeViewModel = timeTypeViewModel
         )
     }
 }

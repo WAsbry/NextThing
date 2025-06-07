@@ -25,6 +25,9 @@ class TimeTypeRepository(private val timeTypeDao: TimeTypeDao) {
     // 按分类获取图标类型
     fun getTimeTypesByCategory(category: String): Flow<List<TimeType>> {
         return timeTypeDao.getTimeTypesByCategory(category)
+            .onEach { types ->
+                Log.d("TimeTypeRepository", "Received ${types.size} time types: $types")
+            }
     }
 
     // 获取预置图标

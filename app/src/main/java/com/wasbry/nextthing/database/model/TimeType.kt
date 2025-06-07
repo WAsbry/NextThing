@@ -18,5 +18,6 @@ data class TimeType(
     val category: String,     // 分类：健身/工作/生活/娱乐
     val isUserUploaded: Boolean = false, // 是否用户上传
 
-    val createTime: Long = System.currentTimeMillis() // 创建时间戳
+    var createTime: Long = System.currentTimeMillis(), // 创建时间戳
+    var count: Long = 0
 )
