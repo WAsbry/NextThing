@@ -1,6 +1,7 @@
 package com.wasbry.nextthing.ui.screen.AddTask.component.addTaskDialog
 
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalGraphicsContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,10 +39,12 @@ import com.wasbry.nextthing.database.model.TaskImportance
 import com.wasbry.nextthing.database.model.TaskStatus
 import com.wasbry.nextthing.database.model.TimeType
 import com.wasbry.nextthing.database.model.TodoTask
+import com.wasbry.nextthing.viewmodel.timetype.TimeTypeViewModel
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
+import kotlin.String
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -48,8 +52,13 @@ fun AddTaskDialog(
     onDismiss: () -> Unit,
     timeType: TimeType,
     todoTaskViewModel: TodoTaskViewModel,
+    timeTypeViewModel: TimeTypeViewModel,
     modifier: Modifier = Modifier
 ) {
+
+
+    val TAG = "AddTaskDialog"
+
     // -------------------
     // 状态管理
     // -------------------
@@ -154,9 +163,18 @@ fun AddTaskDialog(
                         status = TaskStatus.INCOMPLETE
                     )
                     todoTaskViewModel.insertTodoTask(newTask)
+
+                    // 更新时间Icon
+                    timeType.createTime = System.currentTimeMillis()
+                    timeType.count++
+                    Log.d(TAG,"更新当前时间Icon 的创建时间，timeType.createTime = " + timeType.createTime)
+                    timeTypeViewModel.updateTimeType(timeType)
+
+
                     onDismiss()
                 },
                 modifier = Modifier.fillMaxWidth()
+
             ) {
                 Text("保存任务", fontWeight = FontWeight.Medium)
             }

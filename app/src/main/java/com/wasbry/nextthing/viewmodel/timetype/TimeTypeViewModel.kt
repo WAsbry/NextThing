@@ -8,6 +8,9 @@ import com.wasbry.nextthing.database.model.TimeType
 import com.wasbry.nextthing.database.repository.TimeTypeRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 
 class TimeTypeViewModel(private val timeTypeRepository: TimeTypeRepository) : ViewModel() {
@@ -18,6 +21,12 @@ class TimeTypeViewModel(private val timeTypeRepository: TimeTypeRepository) : Vi
     // 按分类获取图标类型
     fun getTimeTypesByCategory(category: String): Flow<List<TimeType>> {
         return timeTypeRepository.getTimeTypesByCategory(category)
+            .distinctUntilChanged()
+            .shareIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                replay = 1
+            )
     }
 
     // 根据ID 获取图标资源
