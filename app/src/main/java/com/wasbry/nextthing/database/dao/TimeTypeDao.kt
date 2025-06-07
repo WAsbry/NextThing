@@ -17,7 +17,7 @@ interface TimeTypeDao {
     fun getPresetTimeTypes(): Flow<List<TimeType>>
 
     // 根据分类查询图标类型
-    @Query("SELECT * FROM TimeTypeTable WHERE category = :category ORDER BY createTime ASC")
+    @Query("SELECT * FROM TimeTypeTable WHERE category = :category ORDER BY createTime DESC")
     fun getTimeTypesByCategory(category: String): Flow<List<TimeType>>
 
     // 查询用户上传图标
