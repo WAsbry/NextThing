@@ -5,26 +5,22 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import com.wasbry.nextthing.R
-import com.wasbry.nextthing.database.model.WeeklySummary
-import com.wasbry.nextthing.ui.componet.homepage.summary.WeeklySummaryPanel
+import com.wasbry.nextthing.database.model.TaskSummary
+import com.wasbry.nextthing.ui.componet.homepage.summary.TaskSummaryPanel
 import com.wasbry.nextthing.ui.componet.homepage.today.TodayIncompleteTasksPanel
 import com.wasbry.nextthing.viewmodel.personalTime.PersonalTimeViewModel
 import com.wasbry.nextthing.viewmodel.timetype.TimeTypeViewModel
@@ -53,7 +49,7 @@ fun HomePage(
     // 收集 ViewModel 返回的 Flow（关键行：直接使用 getWeeklySummary 返回的 Flow）
     val weeklySummary by todoTaskViewModel.getWeeklySummary(today)
         .collectAsState(
-            initial = WeeklySummary(
+            initial = TaskSummary(
                 startDate = LocalDate.now(), // 初始值建议使用合理日期
                 endDate = LocalDate.now(),
                 taskTotalCount = 0,
@@ -81,7 +77,10 @@ fun HomePage(
             .fillMaxWidth() // 占满整块屏幕
             .background(color = colorResource(R.color.background_color))
     ) {
-        WeeklySummaryPanel(weeklySummary) // 本周概要面板
+        TaskSummaryPanel(weeklySummary,0, modifier = Modifier
+                .width(400.dp)
+                .wrapContentHeight()
+                .padding(16.dp)) // 本周概要面板
 
         // 展示今日未完成的任务
         TodayIncompleteTasksPanel(todayIncompleteTasks = todayIncompleteTasks, modifier = Modifier.fillMaxWidth().height(500.dp), todoTaskViewModel = todoTaskViewModel)

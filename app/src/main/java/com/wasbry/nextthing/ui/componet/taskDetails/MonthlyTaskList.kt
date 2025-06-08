@@ -1,51 +1,33 @@
 package com.wasbry.nextthing.ui.componet.taskDetails
 
-import android.annotation.SuppressLint
-import android.graphics.Color
+
 import android.os.Build
-import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.wasbry.nextthing.database.model.TaskSummary
 import com.wasbry.nextthing.database.model.TodoTask
 import com.wasbry.nextthing.ui.componet.common.TaskItem
+import com.wasbry.nextthing.ui.componet.homepage.summary.TaskSummaryPanel
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.time.LocalDate
 import java.util.*
 
 /**
@@ -57,6 +39,9 @@ fun MonthlyTaskListScreen(
     modifier: Modifier = Modifier,
     todoTaskViewModel: TodoTaskViewModel = viewModel()
 ) {
+
+    val TAG = "MonthlyTaskListScreen"
+
     val coroutineScope = rememberCoroutineScope()
 
     // 计算本月第一天和最后一天
@@ -88,20 +73,42 @@ fun MonthlyTaskListScreen(
         }
     }
 
-    // 主布局
-    Column(modifier = modifier.fillMaxSize()) {
-        // 顶部标题栏
-        Text(
-            text = "本月任务列表",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .padding(16.dp)
-                .align(Alignment.CenterHorizontally)
+    val today = LocalDate.now()
+    // 收集 ViewModel 返回的 Flow（关键行：直接使用 getWeeklySummary 返回的 Flow）
+    val monthlySummary by todoTaskViewModel.getMonthlySummary(today)
+        .collectAsState(
+            initial = TaskSummary(
+                startDate = LocalDate.now(), // 初始值建议使用合理日期
+                endDate = LocalDate.now(),
+                taskTotalCount = 0,
+                taskIncompleteTotalCount = 0,
+                taskCompletedTotalCount = 0,
+                taskAbandonedTotalCount = 0,
+                taskPostponedTotalCount = 0,
+                expectedTaskCount = 0
+            )
         )
 
+    // 手动订阅 Flow（测试用）
+    LaunchedEffect(today) {
+        todoTaskViewModel.getMonthlySummary(today)
+            .collect { summary ->
+                // 此处会触发 Flow 执行，日志应打印
+                Log.d(TAG, "UI层收到数据：$summary")
+            }
+    }
+
+    // 主布局
+    Column(modifier = modifier.fillMaxSize()) {
+        // 引入月度总结面板
+        TaskSummaryPanel(monthlySummary,1,modifier = Modifier
+            .width(400.dp)
+            .wrapContentHeight()
+            .padding(16.dp))
+
         // 任务列表区域
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.fillMaxSize()
+                                .padding(start = 20.dp, end = 20.dp)) {
             // 检查是否有任务
             if (tasksByDate.isEmpty()) {
                 item { EmptyTaskPlaceholder() }

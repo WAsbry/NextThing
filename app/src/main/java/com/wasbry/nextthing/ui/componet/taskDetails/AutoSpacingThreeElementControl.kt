@@ -1,20 +1,16 @@
 package com.wasbry.nextthing.ui.componet.taskDetails
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.unit.Dp
@@ -38,14 +34,20 @@ fun AutoSpacingThreeElementControl(
     SubcomposeLayout(modifier = Modifier.width(totalWidth)) { constraints ->
         // 1. 测量所有子元素（包括高度）
         val textPlaceable = subcompose("text") {
-            Text(text = text, modifier = Modifier.padding(vertical = 4.dp)) // 示例内边距
+            Text(
+                text = text,
+                modifier = Modifier.padding(vertical = 4.dp), // 示例内边距
+                style = MaterialTheme.typography.titleMedium, // 使用主题中的标题中号样式
+                color = MaterialTheme.colorScheme.onSurface // 使用主题中的表面内容色
+            )
         }.first().measure(constraints.copy(minWidth = 0, minHeight = 0)) // 允许自由测量高度
 
         val leftArrowPlaceable = subcompose("leftArrow") {
             Icon(
                 imageVector = Icons.Default.ArrowBack,
                 contentDescription = "左箭头",
-                modifier = Modifier.clickable { onLeftArrowClick() }
+                modifier = Modifier.clickable { onLeftArrowClick() },
+                tint = MaterialTheme.colorScheme.primary // 使用主题中的主色调
             )
         }.first().measure(constraints.copy(minWidth = 0, minHeight = 0))
 
@@ -53,7 +55,8 @@ fun AutoSpacingThreeElementControl(
             Icon(
                 imageVector = Icons.Default.ArrowForward,
                 contentDescription = "右箭头",
-                modifier = Modifier.clickable { onRightArrowClick() }
+                modifier = Modifier.clickable { onRightArrowClick() },
+                tint = MaterialTheme.colorScheme.primary // 使用主题中的主色调
             )
         }.first().measure(constraints.copy(minWidth = 0, minHeight = 0))
 

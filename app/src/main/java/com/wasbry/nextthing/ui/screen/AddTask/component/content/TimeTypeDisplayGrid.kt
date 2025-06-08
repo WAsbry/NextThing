@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -76,10 +77,13 @@ fun TimeTypeDisplayGrid(
 
                     Text(
                         text = timeType.description,
-                        fontSize = 12.sp,
+                        // 使用主题中的小正文字体样式（bodySmall = 12sp）
+                        style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp)
+                        modifier = Modifier.padding(top = 4.dp),
+                        // 使用主题中的表面内容色
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
