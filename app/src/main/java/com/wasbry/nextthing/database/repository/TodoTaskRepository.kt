@@ -5,13 +5,11 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import com.wasbry.nextthing.database.dao.TodoTaskDao
 import com.wasbry.nextthing.database.model.TaskStatus
+import com.wasbry.nextthing.database.model.TaskSummary
 import com.wasbry.nextthing.database.model.TodoTask
-import com.wasbry.nextthing.database.model.WeeklySummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -55,8 +53,11 @@ class TodoTaskRepository(private val todoTaskDao: TodoTaskDao) {
         return todoTaskDao.getTasksByDateRange(startTime,endTime)
     }
 
+    /**
+     * 获取本周任务的概要
+     * */
     @RequiresApi(Build.VERSION_CODES.O)
-    fun getWeeklySummary(startDate: LocalDate, endDate: LocalDate): Flow<WeeklySummary> {
+    fun getWeeklySummary(startDate: LocalDate, endDate: LocalDate): Flow<TaskSummary> {
         val startDateAsDate = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant())
         val endDateAsDate = Date.from(endDate.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant())
 
@@ -87,7 +88,55 @@ class TodoTaskRepository(private val todoTaskDao: TodoTaskDao) {
             abandonedFlow,
             postponedFlow
         ) { total, incomplete, completed, abandoned, postponed ->
-            WeeklySummary(
+            TaskSummary(
+                startDate = startDate,
+                endDate = endDate,
+                taskTotalCount = total,
+                taskIncompleteTotalCount = incomplete,
+                taskCompletedTotalCount = completed,
+                taskAbandonedTotalCount = abandoned,
+                taskPostponedTotalCount = postponed,
+                expectedTaskCount = 0 // 按需计算
+            )
+        }
+    }
+
+    /**
+     * 获取本月任务的概要
+     * */
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun getMonthlySummary(startDate: LocalDate, endDate: LocalDate): Flow<TaskSummary> {
+        val startDateAsDate = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant())
+        val endDateAsDate = Date.from(endDate.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant())
+
+        // 获取各状态的 Flow（Room 自动响应数据库变更）
+        val taskTotalFlow = todoTaskDao.getTaskCountByDateRange(startDateAsDate, endDateAsDate)
+        val incompleteFlow = todoTaskDao.getTaskCountByStatusAndDateRange(
+            TaskStatus.INCOMPLETE.name,
+            startDateAsDate, endDateAsDate
+        )
+        val completedFlow = todoTaskDao.getTaskCountByStatusAndDateRange(
+            TaskStatus.COMPLETED.name,
+            startDateAsDate, endDateAsDate
+        )
+        val abandonedFlow = todoTaskDao.getTaskCountByStatusAndDateRange(
+            TaskStatus.ABANDONED.name,
+            startDateAsDate, endDateAsDate
+        )
+        val postponedFlow = todoTaskDao.getTaskCountByStatusAndDateRange(
+            TaskStatus.POSTPONED.name,
+            startDateAsDate, endDateAsDate
+        )
+
+        // 合并所有 Flow，数据变更时自动发射新的 WeeklySummary
+        return combine(
+            taskTotalFlow,
+            incompleteFlow,
+            completedFlow,
+            abandonedFlow,
+            postponedFlow
+        ) { total, incomplete, completed, abandoned, postponed ->
+            TaskSummary(
                 startDate = startDate,
                 endDate = endDate,
                 taskTotalCount = total,

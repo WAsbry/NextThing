@@ -68,7 +68,6 @@ fun TaskListScreen(todoTaskViewModel: TodoTaskViewModel,personalTimeViewModel: P
                 0 -> MonthlyTaskListScreen(
                     todoTaskViewModel = todoTaskViewModel,
                     modifier = Modifier.fillMaxSize()
-                        .padding(start = 20.dp, end = 20.dp),
                 )
                 1 -> EmptyContent(text = "日历")
             }

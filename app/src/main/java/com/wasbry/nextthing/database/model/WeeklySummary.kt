@@ -5,9 +5,9 @@ import androidx.annotation.RequiresApi
 import java.time.LocalDate
 
 /**
- * 一周的数据类
+ * 指定时间段内任务概要的数据类
  * */
-data class WeeklySummary @RequiresApi(Build.VERSION_CODES.O) constructor(
+data class TaskSummary @RequiresApi(Build.VERSION_CODES.O) constructor(
     val startDate: LocalDate = LocalDate.now(),  // 改为可为空
     val endDate: LocalDate = LocalDate.now(),    // 改为可为空
     val taskTotalCount: Int = 0,

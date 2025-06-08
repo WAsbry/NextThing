@@ -1,9 +1,9 @@
 package com.wasbry.nextthing.ui.componet.taskDetails
 
 import androidx.compose.foundation.background
-import androidx.compose.material.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.ui.unit.Dp
-
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,16 +22,17 @@ fun TabSwitchComponent(
     modifier: Modifier = Modifier,
     tabWidth: Dp = 100.dp,
     tabHeight: Dp = 48.dp,
-    selectedColor: Color = Color(0xFFF8BBD0),
-    unselectedColor: Color = Color.White
+    // 使用主题中的主色和表面色
+    selectedColor: Color = MaterialTheme.colorScheme.primary,
+    unselectedColor: Color = MaterialTheme.colorScheme.surface
 ) {
     Surface(
         modifier = modifier
             .width(tabWidth)
             .height(tabHeight),
-        shape = RoundedCornerShape(15.dp),
+        shape = RoundedCornerShape(15.dp), // 保留原有圆角设计
         shadowElevation = 4.dp,
-        color = unselectedColor // 外层默认未选中颜色
+        color = unselectedColor // 外层默认未选中颜色（主题表面色）
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),
@@ -43,6 +44,7 @@ fun TabSwitchComponent(
                 text = "流水",
                 isSelected = selectedIndex == 0,
                 onClick = { onTabSelected(0) },
+                // 使用主题颜色
                 selectedColor = selectedColor,
                 unselectedColor = unselectedColor,
                 modifier = Modifier.weight(1f) // ✅ 正确：在 Row 中分配权重
@@ -53,6 +55,7 @@ fun TabSwitchComponent(
                 text = "日历",
                 isSelected = selectedIndex == 1,
                 onClick = { onTabSelected(1) },
+                // 使用主题颜色
                 selectedColor = selectedColor,
                 unselectedColor = unselectedColor,
                 modifier = Modifier.weight(1f) // ✅ 正确：在 Row 中分配权重
@@ -81,7 +84,8 @@ private fun TabButton(
     ) {
         Text(
             text = text,
-            color = if (isSelected) Color(0xFFE91E63) else Color.Gray
+            // 使用主题中的内容色（选中时用主色，未选中时用表面变体色）
+            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
