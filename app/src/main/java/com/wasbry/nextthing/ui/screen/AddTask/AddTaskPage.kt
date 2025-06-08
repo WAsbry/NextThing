@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -93,9 +94,11 @@ fun AddTaskPage(
                 tabItems = tabItems,
                 selectedIndex = selectedTabIndex,
                 onTabSelected = { selectedTabIndex = it },
-                selectedTextColor = Color.Gray,
-                unselectedTextColor = Color.Black,
-                selectedIndicatorColor = Color(0xFF89E5ED),
+                // 使用主题中的文本颜色
+                selectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
+                // 使用主题中的主色作为指示器颜色
+                selectedIndicatorColor = MaterialTheme.colorScheme.primary,
                 unselectedIndicatorColor = Color.Transparent
             )
         }

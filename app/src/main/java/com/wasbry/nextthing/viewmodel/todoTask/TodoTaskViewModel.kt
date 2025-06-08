@@ -6,17 +6,15 @@ import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wasbry.nextthing.database.model.TaskStatus
+import com.wasbry.nextthing.database.model.TaskSummary
 import com.wasbry.nextthing.database.model.TodoTask
-import com.wasbry.nextthing.database.model.WeeklySummary
 import com.wasbry.nextthing.database.repository.TodoTaskRepository
 import com.wasbry.nextthing.tool.TimeTool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.*
 
 class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : ViewModel() {
 
@@ -87,10 +85,22 @@ class TodoTaskViewModel(private val todoTaskRepository: TodoTaskRepository) : Vi
      * @param date 基准日期（用于计算本周范围）
      */
     @RequiresApi(Build.VERSION_CODES.O)
-    fun getWeeklySummary(date: LocalDate): Flow<WeeklySummary> {
+    fun getWeeklySummary(date: LocalDate): Flow<TaskSummary> {
         val startDate = TimeTool.getStartOfWeek(date)
         val endDate = TimeTool.getEndOfWeek(date)
         return todoTaskRepository.getWeeklySummary(startDate, endDate)
+            .flowOn(Dispatchers.IO) // 调度到 IO 线程
+    }
+
+    /**
+     * 获取本月任务统计信息（直接返回 Repository 的 Flow）
+     * @param date 基准日期（用于计算本月范围）
+     */
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun getMonthlySummary(date: LocalDate): Flow<TaskSummary> {
+        val startDate = TimeTool.getStartOfMonth(date)
+        val endDate = TimeTool.getEndOfMonth(date)
+        return todoTaskRepository.getMonthlySummary(startDate, endDate)
             .flowOn(Dispatchers.IO) // 调度到 IO 线程
     }
 

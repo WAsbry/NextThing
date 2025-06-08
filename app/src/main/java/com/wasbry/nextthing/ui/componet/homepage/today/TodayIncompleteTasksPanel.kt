@@ -6,7 +6,6 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
@@ -27,16 +25,10 @@ import androidx.compose.ui.Modifier
 import com.wasbry.nextthing.ui.componet.common.TaskItem
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.google.android.material.color.ColorRoles
-import com.wasbry.nextthing.R
 import com.wasbry.nextthing.database.model.TodoTask
 import com.wasbry.nextthing.viewmodel.todoTask.TodoTaskViewModel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -58,16 +50,16 @@ fun TodayIncompleteTasksPanel(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(color = colorResource(R.color.background_color))
+            .background(color = MaterialTheme.colorScheme.background) // 替换为主题背景色
         ,
         horizontalAlignment = Alignment.CenterHorizontally // 水平居中
     ) {
         Card( // 项目里面用到了很多的这个Card 布局，应当仔细去总结一下才行啊
             modifier = modifier
                 .fillMaxSize()
-                .background(color = colorResource(R.color.background_color))
+                .background(color = MaterialTheme.colorScheme.background) // 替换为主题背景色
                 .padding(16.dp)
-                .clip(MaterialTheme.shapes.medium), // 这个是什么意思
+                .clip(MaterialTheme.shapes.medium), // 使用主题中定义的形状
             elevation = CardDefaults.cardElevation(4.dp) // 添加阴影效果噻啊
         ) {
             Column(
@@ -85,9 +77,10 @@ fun TodayIncompleteTasksPanel(
                     ) {
                         Text(
                             text = "今日待办", // 后期需要做多语言适配的
-                            style = MaterialTheme.typography.titleMedium, // 这个后期需要弄一个自定义的主题，NextThingTheme
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
+                            style = MaterialTheme.typography.titleMedium.copy( // 使用主题中的标题中号样式
+                                fontWeight = FontWeight.Bold // 保持原有字体粗细设置
+                            ),
+                            // fontSize = 18.sp // 移除硬编码的字体大小，使用主题定义
                         )
                         // 任务统计：展示未完成的任务数
                         Text(
@@ -140,5 +133,4 @@ fun TodayIncompleteTasksPanel(
             }
         }
     }
-
 }
