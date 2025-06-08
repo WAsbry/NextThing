@@ -238,7 +238,6 @@ fun TaskItem(
                         modifier = Modifier
                             .width(4.dp)
                             .fillMaxHeight()
-//                            .background(Color(0xFF2196F3))
                     )
                 }
             }
