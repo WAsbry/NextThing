@@ -3,86 +3,122 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
     id("kotlin-kapt")
+    alias(libs.plugins.hilt.android)
+    id("kotlin-parcelize")
 }
 
 android {
-    namespace = "com.wasbry.nextthing"
-    compileSdk = 35
+    namespace = "com.example.nextthingb1"
+    compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.wasbry.nextthing"
+        applicationId = "com.example.nextthingb1"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables.useSupportLibrary = true
+        vectorDrawables {
+            useSupportLibrary = true
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
     kotlinOptions {
         jvmTarget = "17"
     }
-
     buildFeatures {
         compose = true
     }
-
-
-    packaging.resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-
-//    composeOptions {
-//        kotlinCompilerExtensionVersion = "1.5.15"  // 指定与 Kotlin 1.9.20 兼容的版本
-//    }
+    
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
 }
 
 dependencies {
-    // AndroidX 基础库
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.google.android.material)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
 
-    // Compose BOM（管理所有 Compose 依赖版本）
     implementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-
-    // Compose 核心库
-    implementation(libs.androidx.compose.foundation)
-    implementation(libs.androidx.compose.foundation.layout)  // 布局库
-    implementation(libs.androidx.compose.material)
     implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.material3)  // Material Design 3 支持
+    implementation(libs.androidx.compose.ui.tooling)
+    implementation(libs.androidx.compose.material3)
 
-    // 架构组件
-    implementation(libs.androidx.lifecycle.runtime.ktx)  // Lifecycle KTX 扩展
-    implementation(libs.androidx.lifecycle.runtime.compose.android)  // Compose 生命周期集成
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.7.6")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
 
-    // 导航组件
-    implementation(libs.androidx.navigation.compose)  // Compose 导航库
+    // Hilt
+    implementation("com.google.dagger:hilt-android:2.48.1")
+    kapt("com.google.dagger:hilt-compiler:2.48.1")
+    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 
-    // Activity 与 Compose 集成
-    implementation(libs.androidx.activity.compose)  // Activity 与 Compose 绑定
+    // Room
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
 
-    // Room 数据库
-    implementation(libs.androidx.room.ktx)  // Room KTX 扩展
-    implementation(libs.androidx.room.runtime)  // Room 运行时库
-    kapt(libs.androidx.room.compiler)  // Room 注解处理器
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // 测试框架
-    androidTestImplementation(libs.androidx.espresso.core)  // Espresso 测试核心库
+    // Retrofit/OkHttp
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // Glide 图片加载库
-    implementation(libs.glide)
-    kapt(libs.glide.compiler)
+    // Gson
+    implementation("com.google.code.gson:gson:2.10.1")
+
+    // Coil
+    implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Timber
+    implementation("com.jakewharton.timber:timber:5.0.1")
+
+    // WorkManager + Hilt integration
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.hilt:hilt-work:1.1.0")
+    kapt("androidx.hilt:hilt-compiler:1.1.0")
+
+    // App Startup
+    implementation("androidx.startup:startup-runtime:1.1.1")
+
+    // Location Services
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
+
+    testImplementation(libs.junit)
+    testImplementation("org.mockito:mockito-core:5.8.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("androidx.arch.core:core-testing:2.2.0")
+
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation("com.google.dagger:hilt-android-testing:2.48.1")
+    kaptAndroidTest("com.google.dagger:hilt-compiler:2.48.1")
+
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.12")
 }
