@@ -11,17 +11,16 @@ navigation = "2.7.0"
 activityCompose = "1.8.0"
 lifecycle = "2.6.2"
 lifecycleRuntimeComposeAndroid = "2.9.0"
-
-# ... 现有版本 ...
-glide = "4.16.0"  # 添加 Glide 版本
-
-
+hilt = "2.48.1"
+androidxJunit = "1.1.5"
+junit = "4.13.2"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 org-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 
 [libraries]
 # AndroidX 基础库
@@ -51,6 +50,7 @@ androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }  # 开发时预览工具
 #androidx-compose-ui-test = { group = "androidx.compose.ui", name = "ui-test" }  # 测试库（已注释）
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }  # JUnit4 测试支持
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 
 # Lifecycle 组件
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
@@ -69,7 +69,5 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 
 # 测试框架
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
-
-# Glide 图片加载库
-glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
-glide-compiler = { group = "com.github.bumptech.glide", name = "compiler", version.ref = "glide" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
