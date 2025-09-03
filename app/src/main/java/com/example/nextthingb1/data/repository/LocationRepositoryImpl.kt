@@ -102,8 +102,8 @@ class LocationRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getCurrentSystemLocation(): LocationInfo? {
-        // 这里需要实现实际的系统定位获取
-        // 暂时返回null，在后续步骤中实现
+        // 这里可以集成LocationService来获取实时位置
+        // 暂时返回null，具体实现在LocationService中
         return null
     }
 
