@@ -43,7 +43,7 @@ class LocationServiceImpl @Inject constructor(
         private const val LOCATION_UPDATE_INTERVAL = 5 * 60 * 1000L // 5分钟
         private const val FASTEST_UPDATE_INTERVAL = 2 * 60 * 1000L // 2分钟
         private const val LOCATION_CACHE_DURATION = 5 * 60 * 1000L // 5分钟缓存
-        private const val LOCATION_TIMEOUT = 10000L // 10秒超时
+        private const val LOCATION_TIMEOUT = 30000L // 30秒超时，给GPS更多时间
     }
 
     override suspend fun getCurrentLocation(forceRefresh: Boolean): Result<LocationInfo> {
@@ -84,32 +84,39 @@ class LocationServiceImpl @Inject constructor(
 
             // 第二步：如果快速定位失败或精度不够，使用高精度GPS
             Timber.d("快速定位不理想，尝试高精度GPS定位")
-            val location = withTimeoutOrNull(LOCATION_TIMEOUT) { // 10秒超时
+            val location = withTimeoutOrNull(LOCATION_TIMEOUT) { // 30秒超时
                 suspendCancellableCoroutine<android.location.Location?> { continuation ->
-                    val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
-                        .setMaxUpdates(1)
-                        .setMinUpdateIntervalMillis(500) // 最小更新间隔0.5秒
-                        .setMaxUpdateDelayMillis(5000) // 5秒最大延迟
-                        .setMinUpdateDistanceMeters(0f) // 不限制移动距离
-                        .setWaitForAccurateLocation(true) // 等待精确位置
+                    val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2000)
+                        .setMaxUpdates(3) // 最多获取3次位置更新
+                        .setMinUpdateIntervalMillis(1000) // 最小更新间隔1秒
+                        .setMaxUpdateDelayMillis(10000) // 10秒最大延迟
+                        .setMinUpdateDistanceMeters(5f) // 最小移动距离5米
+                        .setWaitForAccurateLocation(false) // 不等待精确位置，避免无限等待
                         .build()
 
-                                        val locationCallback = object : LocationCallback() {
+                    val locationCallback = object : LocationCallback() {
                         override fun onLocationResult(result: LocationResult) {
                             val location = result.lastLocation
                             Timber.d("收到位置回调: lat=${location?.latitude}, lng=${location?.longitude}, 精度=${location?.accuracy}")
                             
                             // 简化精度策略：接受任何有效位置，优先高精度
                             if (location != null) {
-                                if (location.accuracy <= 200f) {
-                                    // 可接受精度位置（200米以内）
-                                    Timber.d("获取到可用精度位置: ${location.accuracy}m")
+                                if (location.accuracy <= 100f) {
+                                    // 高精度位置（100米以内）
+                                    Timber.d("获取到高精度位置: ${location.accuracy}m")
+                                    fusedLocationClient.removeLocationUpdates(this)
+                                    if (continuation.isActive) {
+                                        continuation.resume(location)
+                                    }
+                                } else if (location.accuracy <= 500f) {
+                                    // 中等精度位置（500米以内）
+                                    Timber.d("获取到中等精度位置: ${location.accuracy}m")
                                     fusedLocationClient.removeLocationUpdates(this)
                                     if (continuation.isActive) {
                                         continuation.resume(location)
                                     }
                                 } else {
-                                    // 低精度位置，接受但记录警告
+                                    // 低精度位置，但接受使用
                                     Timber.w("位置精度较低: ${location.accuracy}m，但仍可使用")
                                     fusedLocationClient.removeLocationUpdates(this)
                                     if (continuation.isActive) {
@@ -129,6 +136,7 @@ class LocationServiceImpl @Inject constructor(
                             Timber.d("位置可用性: ${availability.isLocationAvailable}")
                             if (!availability.isLocationAvailable) {
                                 Timber.w("位置服务不可用，可能GPS信号弱或位置服务被禁用")
+                                fusedLocationClient.removeLocationUpdates(this)
                                 if (continuation.isActive) {
                                     continuation.resume(null)
                                 }
@@ -147,6 +155,16 @@ class LocationServiceImpl @Inject constructor(
                                 locationCallback,
                                 Looper.getMainLooper()
                             )
+                            
+                            // 添加超时保护，避免无限等待
+                            GlobalScope.launch {
+                                kotlinx.coroutines.delay(LOCATION_TIMEOUT)
+                                if (continuation.isActive) {
+                                    Timber.w("位置获取超时，强制结束")
+                                    fusedLocationClient.removeLocationUpdates(locationCallback)
+                                    continuation.resume(null)
+                                }
+                            }
                             
                             continuation.invokeOnCancellation {
                                 fusedLocationClient.removeLocationUpdates(locationCallback)
@@ -229,7 +247,7 @@ class LocationServiceImpl @Inject constructor(
                 .setMaxUpdateDelayMillis(3000) // 3秒快速获取
                 .build()
             
-            val quickLocation = withTimeoutOrNull(5000) { // 5秒快速超时
+            val quickLocation = withTimeoutOrNull(8000) { // 8秒快速超时
                 suspendCancellableCoroutine<android.location.Location?> { continuation ->
                     val quickCallback = object : LocationCallback() {
                         override fun onLocationResult(result: LocationResult) {
@@ -238,6 +256,16 @@ class LocationServiceImpl @Inject constructor(
                             fusedLocationClient.removeLocationUpdates(this)
                             if (continuation.isActive) {
                                 continuation.resume(location)
+                            }
+                        }
+                        
+                        override fun onLocationAvailability(availability: LocationAvailability) {
+                            if (!availability.isLocationAvailable) {
+                                Timber.w("快速定位服务不可用")
+                                fusedLocationClient.removeLocationUpdates(this)
+                                if (continuation.isActive) {
+                                    continuation.resume(null)
+                                }
                             }
                         }
                     }
@@ -252,6 +280,16 @@ class LocationServiceImpl @Inject constructor(
                             quickCallback,
                             Looper.getMainLooper()
                         )
+                        
+                        // 添加超时保护
+                        GlobalScope.launch {
+                            kotlinx.coroutines.delay(8000)
+                            if (continuation.isActive) {
+                                Timber.w("快速定位超时，强制结束")
+                                fusedLocationClient.removeLocationUpdates(quickCallback)
+                                continuation.resume(null)
+                            }
+                        }
                         
                         continuation.invokeOnCancellation {
                             fusedLocationClient.removeLocationUpdates(quickCallback)

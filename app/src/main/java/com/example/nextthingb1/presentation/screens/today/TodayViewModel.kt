@@ -53,8 +53,14 @@ class TodayViewModel @Inject constructor(
     init {
         loadTodayTasks()
         checkLocationPermissionAndStatus()
-        // 移除自动位置刷新，改为用户主动触发
+        // 自动开始获取位置
+        autoStartLocationUpdate()
     }
+    
+    // 位置缓存
+    private var cachedLocationInfo: LocationInfo? = null
+    private var lastLocationUpdateTime: Long = 0
+    private val LOCATION_CACHE_DURATION = 5 * 60 * 1000L // 5分钟缓存
     
     private fun loadTodayTasks() {
         viewModelScope.launch {
@@ -201,7 +207,7 @@ class TodayViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 isLocationLoading = true,
                 locationError = null,
-                currentLocationName = "正在获取精确位置..."
+                currentLocationName = "正在获取位置..."
             )
             
             // 检查权限状态
@@ -228,20 +234,23 @@ class TodayViewModel @Inject constructor(
             Timber.d("权限和服务检查通过，开始获取位置")
             
             try {
-                // 添加超时保护，避免一直加载
-                withTimeoutOrNull(15000) { // 15秒超时
+                // 优先网络定位，再GPS定位
+                val location = withTimeoutOrNull(35000) { // 35秒超时
                     locationService.getCurrentLocation(forceRefresh = true)
                 }?.fold(
-                    onSuccess = { location ->
+                    onSuccess = { locationInfo ->
+                        // 位置获取成功，更新缓存和UI
+                        updateLocationCache(locationInfo)
                         _uiState.value = _uiState.value.copy(
-                            currentLocation = location,
-                            currentLocationName = location.locationName,
+                            currentLocation = locationInfo,
+                            currentLocationName = locationInfo.locationName,
                             isLocationLoading = false,
                             locationError = null
                         )
+                        Timber.d("手动位置获取成功: ${locationInfo.locationName}")
+                        
                         // 显示位置更新提示
                         showLocationTooltip()
-                        Timber.d("位置更新成功: ${location.locationName}")
                     },
                     onFailure = { error ->
                         val errorMsg = when {
@@ -258,7 +267,7 @@ class TodayViewModel @Inject constructor(
                             isLocationLoading = false,
                             locationError = error.message
                         )
-                        Timber.w(error, "位置获取失败: $errorMsg")
+                        Timber.w(error, "手动位置获取失败: $errorMsg")
                         
                         // 显示位置获取帮助对话框
                         _showLocationHelpDialog.value = true
@@ -270,7 +279,7 @@ class TodayViewModel @Inject constructor(
                         isLocationLoading = false,
                         locationError = "位置获取超时，请检查GPS信号或稍后重试"
                     )
-                    Timber.w("位置获取操作超时")
+                    Timber.w("手动位置获取操作超时")
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -278,7 +287,7 @@ class TodayViewModel @Inject constructor(
                     isLocationLoading = false,
                     locationError = e.message
                 )
-                Timber.e(e, "位置获取异常")
+                Timber.e(e, "手动位置获取异常")
             }
         }
     }
@@ -321,15 +330,17 @@ class TodayViewModel @Inject constructor(
     fun forceCheckPermissionsAndRefresh() {
         viewModelScope.launch {
             checkLocationPermissionAndStatus()
-            // 只检查权限状态，不自动获取位置
+            // 检查权限状态，如果有权限则进行静默更新
             if (_uiState.value.hasLocationPermission && _uiState.value.isLocationEnabled) {
-                // 有权限时更新状态为可点击
                 if (_uiState.value.currentLocationName == "需要位置权限" || 
                     _uiState.value.currentLocationName == "请开启位置服务") {
+                    // 更新状态为可点击
                     _uiState.value = _uiState.value.copy(
-                        currentLocationName = "点击获取位置",
+                        currentLocationName = "正在获取位置...",
                         isLocationLoading = false
                     )
+                    // 开始静默更新
+                    silentLocationUpdate()
                 }
             }
         }
@@ -412,11 +423,21 @@ class TodayViewModel @Inject constructor(
                     isLocationLoading = false
                 )
             } else if (_uiState.value.currentLocation == null) {
-                // 有权限但没有位置信息时，显示可点击状态
-                _uiState.value = _uiState.value.copy(
-                    currentLocationName = "点击获取位置",
-                    isLocationLoading = false
-                )
+                // 有权限但没有位置信息时，检查缓存
+                if (isCacheValid()) {
+                    // 缓存有效，使用缓存位置
+                    _uiState.value = _uiState.value.copy(
+                        currentLocation = cachedLocationInfo,
+                        currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
+                        isLocationLoading = false
+                    )
+                } else {
+                    // 缓存无效，显示正在获取状态
+                    _uiState.value = _uiState.value.copy(
+                        currentLocationName = "正在获取位置...",
+                        isLocationLoading = true
+                    )
+                }
             }
         }
     }
@@ -437,15 +458,12 @@ class TodayViewModel @Inject constructor(
         val newLocationEnabled = _uiState.value.isLocationEnabled
         
         if (!oldPermission && newPermission && newLocationEnabled) {
-            // 权限刚被授予，更新状态但不自动获取位置
-            Timber.d("检测到权限刚被授予，更新位置状态")
-            _uiState.value = _uiState.value.copy(
-                currentLocationName = "点击获取位置",
-                isLocationLoading = false
-            )
+            // 权限刚被授予，自动开始获取位置
+            Timber.d("检测到权限刚被授予，自动开始获取位置")
+            autoStartLocationUpdate()
         } else if (newPermission && newLocationEnabled) {
-            // 有权限时检查缓存
-            refreshLocationIfNeeded()
+            // 有权限时进行静默更新
+            silentLocationUpdate()
         }
     }
     
@@ -455,24 +473,183 @@ class TodayViewModel @Inject constructor(
     fun refreshLocationIfNeeded() {
         viewModelScope.launch {
             try {
-                // 先尝试获取缓存位置
-                val cachedLocation = locationService.getCachedLocation()
-                if (cachedLocation != null) {
-                    _uiState.value = _uiState.value.copy(
-                        currentLocation = cachedLocation,
-                        currentLocationName = cachedLocation.locationName
-                    )
+                // 先检查缓存是否有效
+                if (isCacheValid()) {
+                    Timber.d("缓存位置有效，无需刷新")
                     return@launch
                 }
                 
-                // 如果没有缓存位置且需要刷新，显示提示用户点击获取
-                if (cachedLocation == null && locationService.shouldRefreshLocation()) {
-                    _uiState.value = _uiState.value.copy(
-                        currentLocationName = "点击获取位置"
-                    )
-                }
+                // 缓存无效，进行静默更新
+                silentLocationUpdate()
             } catch (e: Exception) {
                 Timber.w(e, "位置刷新检查失败")
+            }
+        }
+    }
+
+    /**
+     * 自动开始位置更新
+     */
+    private fun autoStartLocationUpdate() {
+        viewModelScope.launch {
+            // 检查权限和服务状态
+            if (!locationService.hasLocationPermission()) {
+                Timber.d("无位置权限，等待用户授权")
+                return@launch
+            }
+            
+            if (!locationService.isLocationEnabled()) {
+                Timber.d("位置服务未启用，等待用户开启")
+                return@launch
+            }
+            
+            // 检查缓存是否有效
+            if (isCacheValid()) {
+                Timber.d("使用缓存位置: ${cachedLocationInfo?.locationName}")
+                _uiState.value = _uiState.value.copy(
+                    currentLocation = cachedLocationInfo,
+                    currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
+                    isLocationLoading = false
+                )
+                return@launch
+            }
+            
+            // 开始获取位置
+            startLocationAcquisition()
+        }
+    }
+    
+    /**
+     * 开始位置获取
+     */
+    private fun startLocationAcquisition() {
+        viewModelScope.launch {
+            Timber.d("开始获取位置")
+            _uiState.value = _uiState.value.copy(
+                isLocationLoading = true,
+                currentLocationName = "正在获取位置...",
+                locationError = null
+            )
+            
+            try {
+                // 优先网络定位，再GPS定位
+                val location = withTimeoutOrNull(35000) { // 35秒超时
+                    locationService.getCurrentLocation(forceRefresh = true)
+                }?.fold(
+                    onSuccess = { locationInfo ->
+                        // 位置获取成功，更新缓存和UI
+                        updateLocationCache(locationInfo)
+                        _uiState.value = _uiState.value.copy(
+                            currentLocation = locationInfo,
+                            currentLocationName = locationInfo.locationName,
+                            isLocationLoading = false,
+                            locationError = null
+                        )
+                        Timber.d("位置获取成功: ${locationInfo.locationName}")
+                        locationInfo
+                    },
+                    onFailure = { error ->
+                        // 位置获取失败
+                        val errorMsg = when {
+                            error is SecurityException -> "需要位置权限"
+                            error is IllegalStateException -> "请开启位置服务"
+                            error.message?.contains("超时") == true -> "位置获取超时"
+                            error.message?.contains("GPS") == true -> "GPS信号弱"
+                            error.message?.contains("首次使用") == true -> "首次GPS定位"
+                            else -> "获取位置失败"
+                        }
+                        
+                        _uiState.value = _uiState.value.copy(
+                            currentLocationName = errorMsg,
+                            isLocationLoading = false,
+                            locationError = error.message
+                        )
+                        Timber.w(error, "位置获取失败: $errorMsg")
+                        null
+                    }
+                ) ?: run {
+                    // 超时处理
+                    _uiState.value = _uiState.value.copy(
+                        currentLocationName = "位置获取超时",
+                        isLocationLoading = false,
+                        locationError = "位置获取超时，请检查GPS信号或稍后重试"
+                    )
+                    Timber.w("位置获取操作超时")
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    currentLocationName = "位置获取异常",
+                    isLocationLoading = false,
+                    locationError = e.message
+                )
+                Timber.e(e, "位置获取异常")
+            }
+        }
+    }
+    
+    /**
+     * 检查缓存是否有效
+     */
+    private fun isCacheValid(): Boolean {
+        return cachedLocationInfo != null && 
+               (System.currentTimeMillis() - lastLocationUpdateTime) < LOCATION_CACHE_DURATION
+    }
+    
+    /**
+     * 更新位置缓存
+     */
+    private fun updateLocationCache(locationInfo: LocationInfo) {
+        // 如果缓存的位置与新位置不同，则更新
+        if (cachedLocationInfo == null || 
+            cachedLocationInfo?.latitude != locationInfo.latitude || 
+            cachedLocationInfo?.longitude != locationInfo.longitude) {
+            cachedLocationInfo = locationInfo
+            lastLocationUpdateTime = System.currentTimeMillis()
+            Timber.d("位置缓存已更新: ${locationInfo.locationName}")
+        }
+    }
+    
+    /**
+     * 静默更新位置（用户从其他页面切换回来时调用）
+     */
+    fun silentLocationUpdate() {
+        viewModelScope.launch {
+            // 检查权限和服务状态
+            if (!locationService.hasLocationPermission() || !locationService.isLocationEnabled()) {
+                return@launch
+            }
+            
+            // 如果缓存有效，直接使用
+            if (isCacheValid()) {
+                Timber.d("静默更新：使用缓存位置")
+                return@launch
+            }
+            
+            // 缓存无效，静默获取新位置
+            Timber.d("静默更新：开始获取新位置")
+            try {
+                val location = locationService.getCurrentLocation(forceRefresh = false)
+                location.fold(
+                    onSuccess = { locationInfo ->
+                        updateLocationCache(locationInfo)
+                        // 静默更新UI，不显示加载状态
+                        _uiState.value = _uiState.value.copy(
+                            currentLocation = locationInfo,
+                            currentLocationName = locationInfo.locationName,
+                            isLocationLoading = false // 确保加载状态为false
+                        )
+                        Timber.d("静默位置更新成功: ${locationInfo.locationName}")
+                    },
+                    onFailure = { error ->
+                        Timber.w(error, "静默位置更新失败")
+                        // 失败时也要确保加载状态为false
+                        _uiState.value = _uiState.value.copy(
+                            isLocationLoading = false
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "静默位置更新异常")
             }
         }
     }

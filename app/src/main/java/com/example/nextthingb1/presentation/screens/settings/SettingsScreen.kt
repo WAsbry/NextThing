@@ -38,11 +38,6 @@ fun SettingsScreen(
             .background(BgPrimary)
     ) {
         item {
-            // 头部导航
-            SettingsTopHeader()
-        }
-        
-        item {
             // 用户信息卡片
             UserInfoCard(
                 username = uiState.username,
@@ -70,49 +65,6 @@ fun SettingsScreen(
         item {
             // 版本信息
             VersionInfo(version = uiState.version)
-        }
-    }
-}
-
-@Composable
-private fun SettingsTopHeader() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(BgCard)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "NextThing",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_mylocation),
-                contentDescription = null,
-                tint = Primary,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        
-        IconButton(
-            onClick = { /* TODO: 搜索功能 */ },
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(BgPrimary)
-        ) {
-            Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_search),
-                contentDescription = "搜索",
-                tint = TextSecondary,
-                modifier = Modifier.size(16.dp)
-            )
         }
     }
 }

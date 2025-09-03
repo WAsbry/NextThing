@@ -41,6 +41,13 @@ import com.example.nextthingb1.presentation.theme.*
 import com.example.nextthingb1.util.PermissionHelper
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.style.TextAlign
 
 @Composable
 fun TodayScreen(
@@ -60,7 +67,7 @@ fun TodayScreen(
         
         // 定期检查权限状态变化（降低频率避免性能问题）
         while (true) {
-            kotlinx.coroutines.delay(3000) // 3秒检查一次
+            kotlinx.coroutines.delay(5000) // 5秒检查一次
             viewModel.forceCheckPermissionsAndRefresh()
         }
     }
@@ -204,25 +211,26 @@ private fun LocationIcon(
                 when {
                     !hasPermission -> Danger.copy(alpha = 0.1f)
                     !isLocationEnabled -> Warning.copy(alpha = 0.1f)
-                    isLoading -> Primary.copy(alpha = 0.15f)
+                    isLoading -> Primary.copy(alpha = 0.2f)
                     else -> Primary.copy(alpha = 0.1f)
                 },
                 RoundedCornerShape(20.dp)
             )
             .border(
-                width = 0.5.dp,
+                width = 1.dp,
                 color = when {
-                    !hasPermission -> Danger.copy(alpha = 0.3f)
-                    !isLocationEnabled -> Warning.copy(alpha = 0.3f)
-                    else -> Primary.copy(alpha = 0.3f)
+                    !hasPermission -> Danger.copy(alpha = 0.4f)
+                    !isLocationEnabled -> Warning.copy(alpha = 0.4f)
+                    isLoading -> Primary.copy(alpha = 0.6f)
+                    else -> Primary.copy(alpha = 0.4f)
                 },
                 shape = RoundedCornerShape(20.dp)
             )
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         if (isLoading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(14.dp),
+                modifier = Modifier.size(16.dp),
                 strokeWidth = 2.dp,
                 color = Primary
             )
@@ -235,22 +243,23 @@ private fun LocationIcon(
                     !isLocationEnabled -> Warning
                     else -> Primary
                 },
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(16.dp)
             )
         }
         
         if (currentLocation.isNotBlank()) {
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = currentLocation,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 color = when {
                     !hasPermission -> Danger
                     !isLocationEnabled -> Warning
-                    else -> Primary
+                    isLoading -> Primary
+                    else -> TextSecondary
                 },
                 maxLines = 1,
-                fontWeight = FontWeight.Medium
+                modifier = Modifier.widthIn(max = 120.dp)
             )
         }
     }
@@ -286,17 +295,17 @@ private fun TopHeader(
                 onClick = { 
                     if (!uiState.hasLocationPermission) {
                         viewModel.requestLocationPermission()
-                    } else if (uiState.currentLocation != null) {
-                        // 如果有位置信息，显示详情对话框
+                    } else if (uiState.currentLocation != null && !uiState.isLocationLoading) {
+                        // 如果有位置信息且不在加载中，显示详情对话框
                         viewModel.showLocationDetail()
-                    } else {
-                        // 如果没有位置信息，刷新位置
+                    } else if (!uiState.isLocationLoading) {
+                        // 如果不在加载中，手动刷新位置
                         viewModel.requestCurrentLocation()
                     }
                 },
                 onLongClick = {
                     // 长按强制刷新位置
-                    if (uiState.hasLocationPermission) {
+                    if (uiState.hasLocationPermission && !uiState.isLocationLoading) {
                         viewModel.requestCurrentLocation()
                     }
                 }
