@@ -1,5 +1,6 @@
 package com.example.nextthingb1
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -56,6 +57,21 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+        
+        // 启动JWT测试（仅用于调试）
+        startJwtTest()
+    }
+    
+    /**
+     * 启动JWT测试Activity
+     */
+    private fun startJwtTest() {
+        try {
+            val intent = Intent(this, JwtTestActivity::class.java)
+            startActivity(intent)
+        } catch (e: Exception) {
+            Timber.e(e, "启动JWT测试失败")
         }
     }
 }
