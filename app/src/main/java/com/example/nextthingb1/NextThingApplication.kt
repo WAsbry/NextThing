@@ -6,7 +6,7 @@ import androidx.work.Configuration
 import com.example.nextthingb1.domain.repository.TaskRepository
 
 import com.example.nextthingb1.util.SyncScheduler
-import com.squareup.leakcanary.core.BuildConfig
+
 import dagger.hilt.android.HiltAndroidApp
 
 import timber.log.Timber
@@ -21,9 +21,8 @@ class NextThingApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        if (BuildConfig.DEBUG) {
-            Timber.plant(Timber.DebugTree())
-        }
+        // 暂时总是启用调试日志
+        Timber.plant(Timber.DebugTree())
         Timber.d("NextThingApplication initialized")
 
         // 定时同步调度
