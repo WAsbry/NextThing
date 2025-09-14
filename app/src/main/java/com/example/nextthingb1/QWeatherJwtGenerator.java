@@ -3,137 +3,114 @@ package com.example.nextthingb1;
 import android.content.Context;
 import android.content.res.AssetManager;
 import com.google.gson.Gson;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters;
+import org.bouncycastle.crypto.signers.Ed25519Signer;
+import org.bouncycastle.util.encoders.Base64;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyFactory;
-import java.security.PrivateKey;
-import java.security.Security;
-import java.security.Signature;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.util.Base64;
 import java.time.Instant;
+import android.util.Log;
 
-// 注意：此类需放在app模块的java目录下（如 com.yourpackage.util）
 public class QWeatherJwtGenerator {
-    // 静态初始化块：注册BouncyCastle提供者以支持EdDSA
-    static {
-        Security.addProvider(new BouncyCastleProvider());
-    }
-    
-    // 1. 替换为你的参数（核心！必须改）
-    private static final String PRIVATE_KEY_ASSETS_PATH = "ed25519-private.pem"; // assets中的私钥文件名
-    private static final String KID = "TNB27NDAYA"; // 控制台→项目→凭据列表→凭据ID
-    private static final String SUB = "2HDXW9HPCN"; // 控制台→项目→项目信息→项目ID
-    private static final long EXPIRATION_SECONDS = 3600; // 1小时有效期（最长24小时）
 
-    // 2. 传入Android Context（用于读取assets文件）
+    private static final String PRIVATE_KEY_ASSETS_PATH = "ed25519-private.pem";
+    private static final String KID = "T85DFFFK2W";
+    private static final String SUB = "3KDX498DD3";
+    private static final long EXPIRATION_SECONDS = 3600;
+
     public static String generateJwt(Context context) throws Exception {
-        // 步骤1：从assets读取并解析Ed25519私钥
-        PrivateKey privateKey = loadEd25519PrivateKeyFromAssets(context, PRIVATE_KEY_ASSETS_PATH);
+        Ed25519PrivateKeyParameters privateKey = loadEd25519PrivateKeyFromAssets(context, PRIVATE_KEY_ASSETS_PATH);
 
-        // 步骤2：构建Header并Base64URL编码
         Header header = new Header("EdDSA", KID);
         String headerEncoded = base64UrlEncode(new Gson().toJson(header).getBytes(StandardCharsets.UTF_8));
 
-        // 步骤3：构建Payload并Base64URL编码
         long currentTime = Instant.now().getEpochSecond();
-        long iat = currentTime - 30; // 减30秒避免服务器时间误差
+        long iat = currentTime - 30;
         long exp = iat + EXPIRATION_SECONDS;
         Payload payload = new Payload(SUB, iat, exp);
-        String payloadEncoded = base64UrlEncode(new Gson().toJson(payload).getBytes(StandardCharsets.UTF_8));
 
-        // 步骤4：生成签名（Ed25519私钥签名）
+        // 详细日志
+        Log.d("QWeatherJWT", "📊 JWT Payload详情:");
+        Log.d("QWeatherJWT", "   - SUB (项目ID): " + SUB);
+        Log.d("QWeatherJWT", "   - IAT (签发时间): " + iat + " (" + new java.util.Date(iat * 1000) + ")");
+        Log.d("QWeatherJWT", "   - EXP (过期时间): " + exp + " (" + new java.util.Date(exp * 1000) + ")");
+        Log.d("QWeatherJWT", "   - 有效时长: " + EXPIRATION_SECONDS + "秒");
+
+        String payloadJson = new Gson().toJson(payload);
+        Log.d("QWeatherJWT", "   - Payload JSON: " + payloadJson);
+        String payloadEncoded = base64UrlEncode(payloadJson.getBytes(StandardCharsets.UTF_8));
+
         String dataToSign = headerEncoded + "." + payloadEncoded;
         String signatureEncoded = signWithPrivateKey(dataToSign, privateKey);
 
-        // 步骤5：拼接最终JWT
         return dataToSign + "." + signatureEncoded;
     }
 
-    /**
-     * 从Android assets目录读取Ed25519私钥（适配Android）
-     * @param context Android上下文（如Activity、Application）
-     * @param assetsPath assets中的私钥路径（如 "ed25519-private.pem"）
-     * @return Ed25519私钥
-     */
-    private static PrivateKey loadEd25519PrivateKeyFromAssets(Context context, String assetsPath) throws Exception {
+    private static Ed25519PrivateKeyParameters loadEd25519PrivateKeyFromAssets(Context context, String assetsPath) throws Exception {
         AssetManager assetManager = context.getAssets();
         StringBuilder pemContent = new StringBuilder();
 
-        // 1. 读取assets中的PEM文件（按行读取，避免编码问题）
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(assetManager.open(assetsPath), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                // 跳过PEM头尾部（如 "-----BEGIN PRIVATE KEY-----"）
                 if (line.startsWith("-----BEGIN") || line.startsWith("-----END")) {
                     continue;
                 }
-                pemContent.append(line.trim()); // 拼接并去除空格
+                pemContent.append(line.trim());
             }
         } catch (IOException e) {
-            throw new RuntimeException("读取assets私钥失败：" + e.getMessage(), e);
+            throw new RuntimeException("Failed to read private key from assets: " + e.getMessage(), e);
         }
 
-        // 2. Base64解码PEM内容（得到私钥字节数组）
-        byte[] privateKeyBytes = Base64.getDecoder().decode(pemContent.toString());
+        String base64Content = pemContent.toString();
+        Log.d("QWeatherJWT", "Read base64 content: " + base64Content);
+        Log.d("QWeatherJWT", "Base64 content length: " + base64Content.length());
+        
+        // Debug: print first and last few characters
+        if (base64Content.length() > 0) {
+            Log.d("QWeatherJWT", "First 10 chars: " + base64Content.substring(0, Math.min(10, base64Content.length())));
+            Log.d("QWeatherJWT", "Last 10 chars: " + base64Content.substring(Math.max(0, base64Content.length() - 10)));
+        }
 
-        // 3. 根据和风天气官方文档，使用EdDSA算法
+        byte[] privateKeyBytes = Base64.decode(base64Content);
+        Log.d("QWeatherJWT", "Decoded key length: " + privateKeyBytes.length);
+
         try {
-            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
-            // 优先尝试BouncyCastle的EdDSA
-            KeyFactory keyFactory = KeyFactory.getInstance("EdDSA", "BC");
-            return keyFactory.generatePrivate(keySpec);
-        } catch (Exception e) {
-            // 如果BouncyCastle失败，尝试系统默认的EdDSA
-            try {
-                PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
-                KeyFactory keyFactory = KeyFactory.getInstance("EdDSA");
-                return keyFactory.generatePrivate(keySpec);
-            } catch (Exception e2) {
-                throw new RuntimeException("无法生成Ed25519私钥。根据和风天气官方文档，应该使用EdDSA算法。请检查：1) 私钥格式是否正确 2) BouncyCastle依赖是否正确添加。错误：" + e2.getMessage(), e2);
+            if (privateKeyBytes.length == 48) {
+                byte[] rawKey = new byte[32];
+                System.arraycopy(privateKeyBytes, 16, rawKey, 0, 32);
+                return new Ed25519PrivateKeyParameters(rawKey, 0);
+            } else if (privateKeyBytes.length == 32) {
+                return new Ed25519PrivateKeyParameters(privateKeyBytes, 0);
+            } else {
+                throw new RuntimeException("Invalid Ed25519 private key length: " + privateKeyBytes.length + " bytes. Expected 32 (raw) or 48 (PKCS#8) bytes.");
             }
+        } catch (Exception e) {
+            throw new RuntimeException("Cannot generate Ed25519 private key. Please check: 1) Private key format is correct 2) Private key is 32-byte Ed25519 format. Error: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * JWT标准Base64URL编码（替换+为-、/为_，去除=）
-     */
     private static String base64UrlEncode(byte[] data) {
-        return Base64.getUrlEncoder()
-                .withoutPadding() // 去除末尾的=
+        return java.util.Base64.getUrlEncoder()
+                .withoutPadding()
                 .encodeToString(data);
     }
 
-    /**
-     * 用Ed25519私钥签名（使用EdDSA算法）
-     */
-    private static String signWithPrivateKey(String data, PrivateKey privateKey) throws Exception {
+    private static String signWithPrivateKey(String data, Ed25519PrivateKeyParameters privateKey) throws Exception {
         try {
-            // 根据和风天气官方文档，使用EdDSA算法
-            Signature signature = Signature.getInstance("EdDSA", "BC");
-            signature.initSign(privateKey);
-            signature.update(data.getBytes(StandardCharsets.UTF_8));
-            byte[] signatureBytes = signature.sign();
+            Ed25519Signer signer = new Ed25519Signer();
+            signer.init(true, privateKey);
+            signer.update(data.getBytes(StandardCharsets.UTF_8), 0, data.length());
+            byte[] signatureBytes = signer.generateSignature();
             return base64UrlEncode(signatureBytes);
         } catch (Exception e) {
-            // 如果BouncyCastle失败，尝试系统默认的EdDSA
-            try {
-                Signature signature = Signature.getInstance("EdDSA");
-                signature.initSign(privateKey);
-                signature.update(data.getBytes(StandardCharsets.UTF_8));
-                byte[] signatureBytes = signature.sign();
-                return base64UrlEncode(signatureBytes);
-            } catch (Exception e2) {
-                throw new RuntimeException("无法使用Ed25519私钥签名。根据和风天气官方文档，应该使用EdDSA算法。请检查BouncyCastle依赖配置。错误：" + e2.getMessage(), e2);
-            }
+            throw new RuntimeException("Cannot sign with Ed25519 private key. Please check algorithm support. Error: " + e.getMessage(), e);
         }
     }
 
-    // 内部类：JWT Header（固定alg=EdDSA，kid=凭据ID）
     static class Header {
         private String alg;
         private String kid;
@@ -143,12 +120,10 @@ public class QWeatherJwtGenerator {
             this.kid = kid;
         }
 
-        // FastJSON序列化需要Getter（必须有，否则JSON字段缺失）
         public String getAlg() { return alg; }
         public String getKid() { return kid; }
     }
 
-    // 内部类：JWT Payload（必须包含sub/iat/exp）
     static class Payload {
         private String sub;
         private long iat;
@@ -160,7 +135,6 @@ public class QWeatherJwtGenerator {
             this.exp = exp;
         }
 
-        // FastJSON序列化需要Getter（必须有，否则JSON字段缺失）
         public String getSub() { return sub; }
         public long getIat() { return iat; }
         public long getExp() { return exp; }
