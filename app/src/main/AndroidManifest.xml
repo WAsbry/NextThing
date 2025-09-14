@@ -5,6 +5,17 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- 为天气SDK和精确位置服务添加的权限 -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    
+    <!-- 高德定位所需权限 -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <application
         android:name=".NextThingApplication"
@@ -17,6 +28,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.NextThingB1"
         tools:targetApi="31">
+        
+        <!-- 高德地图API Key -->
+        <meta-data
+            android:name="com.amap.api.v2.apikey"
+            android:value="5d4c7e449168c7a9a17853d03f8ac9f7" />
+        
+        <!-- 主Activity - 正常启动入口 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -24,9 +42,16 @@
             android:theme="@style/Theme.NextThingB1">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+        
+        <!-- JWT测试Activity - 保留用于调试 -->
+        <activity
+            android:name=".JwtTestActivity"
+            android:exported="false"
+            android:label="JWT测试"
+            android:theme="@style/Theme.NextThingB1">
         </activity>
     </application>
 
