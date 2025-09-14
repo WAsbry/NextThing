@@ -7,7 +7,9 @@ import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
 import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatus
+import com.example.nextthingb1.domain.model.WeatherInfo
 import com.example.nextthingb1.domain.service.LocationService
+import com.example.nextthingb1.domain.service.WeatherService
 import com.example.nextthingb1.domain.usecase.TaskUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,13 +40,17 @@ data class TodayUiState(
     val hasLocationPermission: Boolean = false,
     val isLocationEnabled: Boolean = false,
     val isLoading: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val weatherInfo: WeatherInfo? = null,
+    val isWeatherLoading: Boolean = false,
+    val weatherError: String? = null
 )
 
 @HiltViewModel
 class TodayViewModel @Inject constructor(
     private val taskUseCases: TaskUseCases,
-    private val locationService: LocationService
+    private val locationService: LocationService,
+    private val weatherService: WeatherService
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(TodayUiState())
@@ -399,6 +405,64 @@ class TodayViewModel @Inject constructor(
     fun hideLocationHelpDialog() {
         _showLocationHelpDialog.value = false
     }
+
+    /**
+     * 获取天气信息
+     */
+    fun loadWeatherInfo(forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            Timber.d("🌤️ [TodayViewModel] 开始获取天气信息，强制刷新: $forceRefresh")
+            
+            val currentLocation = _uiState.value.currentLocation
+            if (currentLocation == null) {
+                Timber.w("❌ [TodayViewModel] 位置信息为空，无法获取天气")
+                _uiState.value = _uiState.value.copy(
+                    weatherError = "需要位置信息才能获取天气"
+                )
+                return@launch
+            }
+            
+            Timber.d("📍 [TodayViewModel] 使用位置: ${currentLocation.locationName} (${currentLocation.latitude}, ${currentLocation.longitude})")
+            
+            _uiState.value = _uiState.value.copy(
+                isWeatherLoading = true,
+                weatherError = null
+            )
+            
+            try {
+                weatherService.getCurrentWeather(currentLocation, forceRefresh).fold(
+                    onSuccess = { weatherInfo ->
+                        Timber.d("✅ [TodayViewModel] 天气信息获取成功: ${weatherInfo.condition.displayName}, ${weatherInfo.temperature}°C, 湿度: ${weatherInfo.humidity}%")
+                        _uiState.value = _uiState.value.copy(
+                            weatherInfo = weatherInfo,
+                            isWeatherLoading = false,
+                            weatherError = null
+                        )
+                    },
+                    onFailure = { error ->
+                        Timber.e(error, "❌ [TodayViewModel] 天气信息获取失败")
+                        _uiState.value = _uiState.value.copy(
+                            isWeatherLoading = false,
+                            weatherError = error.message ?: "获取天气信息失败"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "💥 [TodayViewModel] 天气信息获取异常")
+                _uiState.value = _uiState.value.copy(
+                    isWeatherLoading = false,
+                    weatherError = e.message ?: "获取天气信息异常"
+                )
+            }
+        }
+    }
+
+    /**
+     * 清除天气错误信息
+     */
+    fun clearWeatherError() {
+        _uiState.value = _uiState.value.copy(weatherError = null)
+    }
     
 
     
@@ -511,6 +575,11 @@ class TodayViewModel @Inject constructor(
                     currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
                     isLocationLoading = false
                 )
+                // 位置可用时，检查是否需要获取天气
+                if (_uiState.value.weatherInfo == null || weatherService.shouldRefreshWeather()) {
+                    Timber.d("🌤️ [TodayViewModel] 使用缓存位置，开始调用天气服务...")
+                    loadWeatherInfo()
+                }
                 return@launch
             }
             
@@ -546,6 +615,9 @@ class TodayViewModel @Inject constructor(
                             locationError = null
                         )
                         Timber.d("位置获取成功: ${locationInfo.locationName}")
+                        // 自动获取天气信息
+                        Timber.d("🌤️ [TodayViewModel] 位置获取成功，开始调用天气服务...")
+                        loadWeatherInfo()
                         locationInfo
                     },
                     onFailure = { error ->

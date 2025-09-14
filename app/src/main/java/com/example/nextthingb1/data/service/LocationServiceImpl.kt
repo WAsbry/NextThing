@@ -19,12 +19,15 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.LocalDateTime
 import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @Singleton
 class LocationServiceImpl @Inject constructor(
@@ -41,349 +44,318 @@ class LocationServiceImpl @Inject constructor(
     
     companion object {
         private const val LOCATION_UPDATE_INTERVAL = 5 * 60 * 1000L // 5分钟
-        private const val FASTEST_UPDATE_INTERVAL = 2 * 60 * 1000L // 2分钟
+        private const val FASTEST_UPDATE_INTERVAL = 1000L // 改为1秒，加快响应
         private const val LOCATION_CACHE_DURATION = 5 * 60 * 1000L // 5分钟缓存
-        private const val LOCATION_TIMEOUT = 30000L // 30秒超时，给GPS更多时间
+        private const val NETWORK_LOCATION_TIMEOUT = 15000L // 网络定位15秒超时（延长）
+        private const val GPS_LOCATION_TIMEOUT = 20000L // GPS定位20秒超时（缩短）
+    }
+
+    // 网络定位配置（优先级：高精度确保网络定位生效）
+    private val networkLocationRequest: LocationRequest by lazy {
+        LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FASTEST_UPDATE_INTERVAL)
+            .setWaitForAccurateLocation(false) // 不等待高精度，接受网络位置
+            .setMinUpdateIntervalMillis(FASTEST_UPDATE_INTERVAL)
+            .setMaxUpdateDelayMillis(NETWORK_LOCATION_TIMEOUT)
+            .setMaxUpdates(1) // 只要一次成功的更新
+            .build()
+    }
+    
+    // 粗略网络定位配置（备用方案，只使用网络）
+    private val coarseNetworkRequest: LocationRequest by lazy {
+        LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, FASTEST_UPDATE_INTERVAL)
+            .setWaitForAccurateLocation(false)
+            .setMinUpdateIntervalMillis(FASTEST_UPDATE_INTERVAL)
+            .setMaxUpdateDelayMillis(8000L) // 8秒快速超时
+            .setMaxUpdates(1)
+            .build()
+    }
+
+    // GPS高精度定位配置
+    private val gpsLocationRequest: LocationRequest by lazy {
+        LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FASTEST_UPDATE_INTERVAL)
+            .setWaitForAccurateLocation(true)
+            .setMinUpdateIntervalMillis(FASTEST_UPDATE_INTERVAL)
+            .setMaxUpdateDelayMillis(GPS_LOCATION_TIMEOUT)
+            .build()
     }
 
     override suspend fun getCurrentLocation(forceRefresh: Boolean): Result<LocationInfo> {
         return try {
-            Timber.d("开始获取位置，强制刷新: $forceRefresh")
+            Timber.d("🔍 [LocationService] 开始获取位置，强制刷新: $forceRefresh")
             
             // 检查权限
             if (!hasLocationPermission()) {
-                Timber.w("位置权限未授予")
+                Timber.w("❌ [LocationService] 位置权限未授予")
                 return Result.failure(SecurityException("位置权限未授予"))
             }
+            Timber.d("✅ [LocationService] 位置权限检查通过")
 
             // 检查位置服务
             if (!isLocationEnabled()) {
-                Timber.w("位置服务未启用")
+                Timber.w("❌ [LocationService] 位置服务未启用")
                 return Result.failure(IllegalStateException("位置服务未启用"))
             }
+            Timber.d("✅ [LocationService] 位置服务检查通过")
 
             // 如果不强制刷新且有缓存，检查缓存是否有效
             if (!forceRefresh && !shouldRefreshLocation()) {
                 cachedLocation?.let { 
-                    Timber.d("使用缓存位置: ${it.locationName}")
+                    Timber.d("✅ [LocationService] 使用缓存位置: ${it.locationName}")
                     return Result.success(it)
                 }
             }
             
-            Timber.d("开始获取实时位置...")
+            Timber.d("🔄 [LocationService] 开始获取实时位置...")
 
-            // 第一步：尝试快速网络定位
-            val quickLocation = getQuickLocation()
-            if (quickLocation != null && quickLocation.accuracy <= 100f) {
-                Timber.d("快速定位成功，精度: ${quickLocation.accuracy}m")
-                val locationInfo = convertToLocationInfo(quickLocation)
-                cachedLocation = locationInfo
-                lastLocationUpdateTime = System.currentTimeMillis()
+            // 第0步：尝试粗略网络定位（最快，室内友好）
+            Timber.d("📶 [LocationService] 第0步：尝试粗略网络定位（8秒超时）")
+            val coarseLocation = getLocationByType(
+                locationRequest = coarseNetworkRequest,
+                timeout = 8000L,
+                locationType = "粗略网络定位"
+            )
+            
+            if (coarseLocation != null) {
+                Timber.d("✅ [LocationService] 粗略网络定位成功，精度: ${coarseLocation.accuracy}m")
+                val locationInfo = convertToLocationInfo(coarseLocation)
+                updateLocationCache(locationInfo)
                 return Result.success(locationInfo)
-            }
-
-            // 第二步：如果快速定位失败或精度不够，使用高精度GPS
-            Timber.d("快速定位不理想，尝试高精度GPS定位")
-            val location = withTimeoutOrNull(LOCATION_TIMEOUT) { // 30秒超时
-                suspendCancellableCoroutine<android.location.Location?> { continuation ->
-                    val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2000)
-                        .setMaxUpdates(3) // 最多获取3次位置更新
-                        .setMinUpdateIntervalMillis(1000) // 最小更新间隔1秒
-                        .setMaxUpdateDelayMillis(10000) // 10秒最大延迟
-                        .setMinUpdateDistanceMeters(5f) // 最小移动距离5米
-                        .setWaitForAccurateLocation(false) // 不等待精确位置，避免无限等待
-                        .build()
-
-                    val locationCallback = object : LocationCallback() {
-                        override fun onLocationResult(result: LocationResult) {
-                            val location = result.lastLocation
-                            Timber.d("收到位置回调: lat=${location?.latitude}, lng=${location?.longitude}, 精度=${location?.accuracy}")
-                            
-                            // 简化精度策略：接受任何有效位置，优先高精度
-                            if (location != null) {
-                                if (location.accuracy <= 100f) {
-                                    // 高精度位置（100米以内）
-                                    Timber.d("获取到高精度位置: ${location.accuracy}m")
-                                    fusedLocationClient.removeLocationUpdates(this)
-                                    if (continuation.isActive) {
-                                        continuation.resume(location)
-                                    }
-                                } else if (location.accuracy <= 500f) {
-                                    // 中等精度位置（500米以内）
-                                    Timber.d("获取到中等精度位置: ${location.accuracy}m")
-                                    fusedLocationClient.removeLocationUpdates(this)
-                                    if (continuation.isActive) {
-                                        continuation.resume(location)
-                                    }
-                                } else {
-                                    // 低精度位置，但接受使用
-                                    Timber.w("位置精度较低: ${location.accuracy}m，但仍可使用")
-                                    fusedLocationClient.removeLocationUpdates(this)
-                                    if (continuation.isActive) {
-                                        continuation.resume(location)
-                                    }
-                                }
-                            } else {
-                                Timber.w("收到空位置信息")
-                                fusedLocationClient.removeLocationUpdates(this)
-                                if (continuation.isActive) {
-                                    continuation.resume(null)
-                                }
-                            }
-                        }
-                        
-                        override fun onLocationAvailability(availability: LocationAvailability) {
-                            Timber.d("位置可用性: ${availability.isLocationAvailable}")
-                            if (!availability.isLocationAvailable) {
-                                Timber.w("位置服务不可用，可能GPS信号弱或位置服务被禁用")
-                                fusedLocationClient.removeLocationUpdates(this)
-                                if (continuation.isActive) {
-                                    continuation.resume(null)
-                                }
-                            }
-                        }
-                    }
-
-                    if (ActivityCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        try {
-                            fusedLocationClient.requestLocationUpdates(
-                                locationRequest,
-                                locationCallback,
-                                Looper.getMainLooper()
-                            )
-                            
-                            // 添加超时保护，避免无限等待
-                            GlobalScope.launch {
-                                kotlinx.coroutines.delay(LOCATION_TIMEOUT)
-                                if (continuation.isActive) {
-                                    Timber.w("位置获取超时，强制结束")
-                                    fusedLocationClient.removeLocationUpdates(locationCallback)
-                                    continuation.resume(null)
-                                }
-                            }
-                            
-                            continuation.invokeOnCancellation {
-                                fusedLocationClient.removeLocationUpdates(locationCallback)
-                            }
-                        } catch (e: Exception) {
-                            Timber.e(e, "请求位置更新失败")
-                            if (continuation.isActive) {
-                                continuation.resume(null)
-                            }
-                        }
-                    } else {
-                        continuation.resume(null)
-                    }
-                }
-            }
-
-            if (location != null) {
-                val locationInfo = convertToLocationInfo(location)
-                // 更新缓存
-                cachedLocation = locationInfo
-                lastLocationUpdateTime = System.currentTimeMillis()
-                
-                Timber.d("位置获取成功: ${locationInfo.locationName}")
-                Result.success(locationInfo)
             } else {
-                Timber.w("精确位置获取超时或失败，尝试使用最后已知位置")
-                // 尝试获取最后已知位置
+                Timber.w("⚠️ [LocationService] 粗略网络定位失败，尝试高精度网络定位")
+            }
+
+            // 第一步：尝试网络定位（快速但可能精度较低）
+            Timber.d("📡 [LocationService] 第一步：尝试网络定位（${NETWORK_LOCATION_TIMEOUT/1000}秒超时）")
+            val networkLocation = getLocationByType(
+                locationRequest = networkLocationRequest,
+                timeout = NETWORK_LOCATION_TIMEOUT,
+                locationType = "网络定位"
+            )
+            
+            if (networkLocation != null && networkLocation.accuracy <= 100f) {
+                Timber.d("✅ [LocationService] 网络定位成功，精度: ${networkLocation.accuracy}m")
+                val locationInfo = convertToLocationInfo(networkLocation)
+                updateLocationCache(locationInfo)
+                return Result.success(locationInfo)
+            } else {
+                Timber.w("⚠️ [LocationService] 网络定位失败或精度不够")
+                // 先快速尝试最后已知位置作为备选
+                Timber.d("📍 [LocationService] 快速尝试最后已知位置...")
                 try {
-                    if (ActivityCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        val lastKnownLocation = fusedLocationClient.lastLocation
-                        val lastLocation = suspendCancellableCoroutine<android.location.Location?> { cont ->
-                            lastKnownLocation.addOnSuccessListener { loc ->
-                                Timber.d("获取到最后已知位置: lat=${loc?.latitude}, lng=${loc?.longitude}, 精度=${loc?.accuracy}")
-                                cont.resume(loc)
-                            }.addOnFailureListener { exception ->
-                                Timber.w(exception, "获取最后已知位置失败")
-                                cont.resume(null)
-                            }
+                    val lastKnownResult = getLastKnownLocation()
+                    if (lastKnownResult.isSuccess) {
+                        val locationInfo = lastKnownResult.getOrNull()
+                        if (locationInfo != null) {
+                            Timber.d("✅ [LocationService] 最后已知位置可用，跳过GPS直接使用")
+                            updateLocationCache(locationInfo)
+                            return Result.success(locationInfo)
                         }
-                        
-                        if (lastLocation != null) {
-                            val locationInfo = convertToLocationInfo(lastLocation)
-                            cachedLocation = locationInfo
-                            lastLocationUpdateTime = System.currentTimeMillis()
-                            Timber.d("使用最后已知位置: ${locationInfo.locationName}, 精度: ${lastLocation.accuracy}m")
-                            Result.success(locationInfo)
-                        } else {
-                            Timber.w("最后已知位置也为空，可能是首次使用GPS")
-                            Result.failure(Exception("无法获取位置信息\n\n可能原因：\n• 首次使用GPS需要时间定位\n• 请到室外或窗边获取更好的GPS信号\n• 确保位置服务已开启"))
-                        }
-                    } else {
-                        Timber.w("获取最后已知位置时权限检查失败")
-                        Result.failure(Exception("位置权限不足"))
                     }
                 } catch (e: Exception) {
-                    Timber.e(e, "获取最后已知位置失败")
-                    Result.failure(Exception("位置服务暂时不可用\n\n请尝试：\n• 重启位置服务\n• 检查网络连接\n• 到室外获取更好信号"))
+                    Timber.w(e, "最后已知位置获取失败，继续GPS定位")
                 }
+                Timber.d("继续尝试GPS定位...")
             }
+
+            // 第二步：网络定位失败或精度不够，使用GPS高精度定位
+            Timber.d("🛰️ [LocationService] 第二步：尝试GPS高精度定位（${GPS_LOCATION_TIMEOUT/1000}秒超时）")
+            val gpsLocation = getLocationByType(
+                locationRequest = gpsLocationRequest,
+                timeout = GPS_LOCATION_TIMEOUT,
+                locationType = "GPS定位"
+            )
+
+            if (gpsLocation != null) {
+                Timber.d("✅ [LocationService] GPS定位成功，精度: ${gpsLocation.accuracy}m")
+                val locationInfo = convertToLocationInfo(gpsLocation)
+                updateLocationCache(locationInfo)
+                return Result.success(locationInfo)
+            } else {
+                Timber.e("❌ [LocationService] GPS定位也失败了")
+                
+                // 第三步：如果都失败了，尝试获取最后已知位置
+                Timber.d("📍 [LocationService] 第三步：尝试获取最后已知位置")
+                return getLastKnownLocation()
+            }
+
         } catch (e: Exception) {
-            Timber.e(e, "获取位置失败")
+            Timber.e(e, "💥 [LocationService] 获取位置异常")
             Result.failure(e)
         }
     }
 
     /**
-     * 快速位置获取策略：先尝试网络定位，再尝试GPS
+     * 根据类型获取位置（网络定位或GPS定位）
      */
-    private suspend fun getQuickLocation(): android.location.Location? {
-        return try {
-            Timber.d("尝试快速网络定位")
-            
-            // 使用网络定位进行快速获取
-            val networkLocationRequest = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 2000)
-                .setMaxUpdates(1)
-                .setMaxUpdateDelayMillis(3000) // 3秒快速获取
-                .build()
-            
-            val quickLocation = withTimeoutOrNull(8000) { // 8秒快速超时
-                suspendCancellableCoroutine<android.location.Location?> { continuation ->
-                    val quickCallback = object : LocationCallback() {
-                        override fun onLocationResult(result: LocationResult) {
-                            val location = result.lastLocation
-                            Timber.d("快速定位结果: lat=${location?.latitude}, lng=${location?.longitude}, 精度=${location?.accuracy}")
-                            fusedLocationClient.removeLocationUpdates(this)
-                            if (continuation.isActive) {
-                                continuation.resume(location)
-                            }
-                        }
-                        
-                        override fun onLocationAvailability(availability: LocationAvailability) {
-                            if (!availability.isLocationAvailable) {
-                                Timber.w("快速定位服务不可用")
-                                fusedLocationClient.removeLocationUpdates(this)
-                                if (continuation.isActive) {
-                                    continuation.resume(null)
-                                }
-                            }
-                        }
-                    }
+    private suspend fun getLocationByType(
+        locationRequest: LocationRequest,
+        timeout: Long,
+        locationType: String
+    ): android.location.Location? = withTimeoutOrNull(timeout) {
+        Timber.d("⏱️ [LocationService] $locationType 开始，超时时间: ${timeout/1000}秒")
+        
+        suspendCancellableCoroutine { continuation ->
+            val locationCallback = object : LocationCallback() {
+                override fun onLocationResult(locationResult: LocationResult) {
+                    Timber.d("📍 [LocationService] $locationType 收到位置结果")
+                    fusedLocationClient.removeLocationUpdates(this)
                     
-                    if (ActivityCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        fusedLocationClient.requestLocationUpdates(
-                            networkLocationRequest,
-                            quickCallback,
-                            Looper.getMainLooper()
-                        )
-                        
-                        // 添加超时保护
-                        GlobalScope.launch {
-                            kotlinx.coroutines.delay(8000)
-                            if (continuation.isActive) {
-                                Timber.w("快速定位超时，强制结束")
-                                fusedLocationClient.removeLocationUpdates(quickCallback)
-                                continuation.resume(null)
-                            }
-                        }
-                        
-                        continuation.invokeOnCancellation {
-                            fusedLocationClient.removeLocationUpdates(quickCallback)
-                        }
-                    } else {
+                    locationResult.lastLocation?.let { location ->
+                        Timber.d("✅ [LocationService] $locationType 成功: 经度=${location.longitude}, 纬度=${location.latitude}, 精度=${location.accuracy}m")
+                        continuation.resume(location)
+                    } ?: run {
+                        Timber.w("⚠️ [LocationService] $locationType 返回空位置")
+                        continuation.resume(null)
+                    }
+                }
+
+                override fun onLocationAvailability(availability: LocationAvailability) {
+                    if (!availability.isLocationAvailable) {
+                        Timber.w("❌ [LocationService] $locationType 不可用")
+                        fusedLocationClient.removeLocationUpdates(this)
                         continuation.resume(null)
                     }
                 }
             }
+
+            try {
+                Timber.d("🚀 [LocationService] 发起$locationType 请求")
+                fusedLocationClient.requestLocationUpdates(
+                    locationRequest,
+                    locationCallback,
+                    Looper.getMainLooper()
+                )
+            } catch (e: SecurityException) {
+                Timber.e(e, "❌ [LocationService] $locationType 权限错误")
+                continuation.resumeWithException(e)
+            }
+
+            continuation.invokeOnCancellation {
+                Timber.d("🛑 [LocationService] $locationType 被取消，移除回调")
+                fusedLocationClient.removeLocationUpdates(locationCallback)
+            }
+        }
+    } ?: run {
+        Timber.w("⏰ [LocationService] $locationType 超时")
+        null
+    }
+
+    /**
+     * 获取最后已知位置（作为兜底方案）
+     */
+    private suspend fun getLastKnownLocation(): Result<LocationInfo> = withContext(Dispatchers.IO) {
+        try {
+            Timber.d("📱 [LocationService] 尝试获取最后已知位置")
             
-            quickLocation
+            if (ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return@withContext Result.failure(SecurityException("位置权限未授予"))
+            }
+
+            val lastLocation = fusedLocationClient.lastLocation
+            val location = suspendCancellableCoroutine<android.location.Location?> { continuation ->
+                lastLocation.addOnSuccessListener { location ->
+                    continuation.resume(location)
+                }.addOnFailureListener { exception ->
+                    continuation.resumeWithException(exception)
+                }
+            }
+
+            if (location != null) {
+                Timber.d("✅ [LocationService] 最后已知位置获取成功，精度: ${location.accuracy}m")
+                val locationInfo = convertToLocationInfo(location)
+                updateLocationCache(locationInfo)
+                Result.success(locationInfo)
+            } else {
+                Timber.e("❌ [LocationService] 最后已知位置也为空")
+                Result.failure(Exception("无法获取任何位置信息，请检查设备定位设置"))
+            }
         } catch (e: Exception) {
-            Timber.w(e, "快速定位失败")
-            null
+            Timber.e(e, "💥 [LocationService] 获取最后已知位置异常")
+            Result.failure(e)
         }
     }
 
     override suspend fun hasLocationPermission(): Boolean {
-        val fineGranted = ActivityCompat.checkSelfPermission(
+        val fineLocationGranted = ActivityCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         
-        val coarseGranted = ActivityCompat.checkSelfPermission(
+        val coarseLocationGranted = ActivityCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         
-        val hasPermission = fineGranted || coarseGranted
-        
-        Timber.d("LocationService权限检查 - 精确:$fineGranted, 粗略:$coarseGranted, 结果:$hasPermission")
-        
-        return hasPermission
+        val result = fineLocationGranted && coarseLocationGranted
+        Timber.d("🔐 [LocationService] 权限检查: 精确位置=$fineLocationGranted, 粗略位置=$coarseLocationGranted, 结果=$result")
+        return result
     }
 
-        override suspend fun isLocationEnabled(): Boolean {
+    override suspend fun isLocationEnabled(): Boolean {
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
         val networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
         
-        Timber.d("位置服务状态 - GPS: $gpsEnabled, 网络: $networkEnabled")
-        
-        return gpsEnabled || networkEnabled
+        val result = gpsEnabled || networkEnabled
+        Timber.d("🛰️ [LocationService] 位置服务检查: GPS=$gpsEnabled, 网络=$networkEnabled, 结果=$result")
+        return result
     }
 
     override fun observeLocationUpdates(): Flow<LocationInfo> = callbackFlow {
-        if (!hasLocationPermission()) {
-            close(SecurityException("位置权限未授予"))
-            return@callbackFlow
-        }
-
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, LOCATION_UPDATE_INTERVAL)
-            .setMinUpdateIntervalMillis(FASTEST_UPDATE_INTERVAL)
-            .build()
-
+        Timber.d("👁️ [LocationService] 开始监听位置更新")
+        
         val locationCallback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let { location ->
+            override fun onLocationResult(locationResult: LocationResult) {
+                locationResult.lastLocation?.let { location ->
+                    Timber.d("📍 [LocationService] 位置更新: ${location.latitude}, ${location.longitude}")
                     val locationInfo = convertToLocationInfo(location)
+                    updateLocationCache(locationInfo)
                     trySend(locationInfo)
                 }
             }
         }
 
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
+        try {
             fusedLocationClient.requestLocationUpdates(
-                locationRequest,
+                networkLocationRequest,
                 locationCallback,
                 Looper.getMainLooper()
             )
+        } catch (e: SecurityException) {
+            Timber.e(e, "❌ [LocationService] 位置更新权限错误")
+            close(e)
         }
 
         awaitClose {
+            Timber.d("🛑 [LocationService] 停止位置更新监听")
             fusedLocationClient.removeLocationUpdates(locationCallback)
         }
     }
 
     override fun stopLocationUpdates() {
+        Timber.d("🛑 [LocationService] 手动停止位置更新")
         // 位置更新会在Flow取消时自动停止
     }
 
     override fun shouldRefreshLocation(): Boolean {
-        return System.currentTimeMillis() - lastLocationUpdateTime > LOCATION_CACHE_DURATION
+        val shouldRefresh = System.currentTimeMillis() - lastLocationUpdateTime > LOCATION_CACHE_DURATION
+        Timber.d("⏰ [LocationService] 缓存检查: 上次更新=${lastLocationUpdateTime}, 当前=${System.currentTimeMillis()}, 需要刷新=$shouldRefresh")
+        return shouldRefresh
     }
 
     override suspend fun getCachedLocation(): LocationInfo? {
-        return if (shouldRefreshLocation()) null else cachedLocation
+        val cached = if (shouldRefreshLocation()) null else cachedLocation
+        Timber.d("📦 [LocationService] 缓存位置: ${cached?.locationName ?: "无缓存"}")
+        return cached
     }
 
     private fun convertToLocationInfo(location: android.location.Location): LocationInfo {
+        Timber.d("🔄 [LocationService] 开始地址解析...")
+        
         var locationName = "获取地址中..."
         var address = ""
         var city = ""
@@ -397,6 +369,13 @@ class LocationServiceImpl @Inject constructor(
             val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
             if (!addresses.isNullOrEmpty()) {
                 val addr = addresses[0]
+                
+                Timber.d("🏠 [LocationService] 地址解析成功:")
+                Timber.d("  - 国家: ${addr.countryName}")
+                Timber.d("  - 省份: ${addr.adminArea}")
+                Timber.d("  - 城市: ${addr.locality}")
+                Timber.d("  - 区县: ${addr.subLocality}")
+                Timber.d("  - 街道: ${addr.thoroughfare}")
                 
                 // 获取详细地址信息
                 address = addr.getAddressLine(0) ?: ""
@@ -414,48 +393,38 @@ class LocationServiceImpl @Inject constructor(
                 
                 // 构建精细的位置名称，参考手机天气预报格式
                 locationName = when {
-                    // 最详细：包含街道和建筑物信息
-                    city.isNotBlank() && district.isNotBlank() && subLocality.isNotBlank() && featureName.isNotBlank() -> {
-                        "${city}${district}${subLocality}${featureName}"
+                    // 优先显示详细地址
+                    district.isNotBlank() && subLocality.isNotBlank() -> {
+                        "$district$subLocality"
                     }
-                    // 包含街道信息
-                    city.isNotBlank() && district.isNotBlank() && subLocality.isNotBlank() -> {
-                        "${city}${district}${subLocality}"
-                    }
-                    // 城市和区域
-                    city.isNotBlank() && district.isNotBlank() -> {
-                        "${city}${district}"
-                    }
-                    // 仅城市（去掉"市"字以简化显示）
-                    city.isNotBlank() -> {
-                        city.replace("市", "").replace("县", "")
-                    }
-                    // 省份（去掉"省"字）
-                    province.isNotBlank() -> {
-                        province.replace("省", "").replace("自治区", "").replace("市", "")
-                    }
-                    // 如果都没有，使用精确坐标（6位小数）
-                    else -> "${String.format("%.6f", location.latitude)}°N, ${String.format("%.6f", location.longitude)}°E"
+                    // 其次显示区县
+                    district.isNotBlank() -> district
+                    // 再次显示城市
+                    city.isNotBlank() -> city
+                    // 最后显示省份
+                    province.isNotBlank() -> province
+                    // 兜底显示完整地址
+                    address.isNotBlank() -> address
+                    // 无法解析时显示坐标
+                    else -> "位置(${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)})"
                 }
                 
-                Timber.d("地址解析成功: $locationName")
-                Timber.d("详细信息 - 省:$province, 市:$city, 区:$district, 街道:$subLocality")
+                Timber.d("✅ [LocationService] 地址解析完成: $locationName")
             } else {
-                // 如果地址解析失败，显示坐标
-                locationName = "${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)}"
-                Timber.w("地址解析返回空结果，使用坐标显示")
+                Timber.w("⚠️ [LocationService] 地址解析返回空结果")
+                locationName = "位置(${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)})"
             }
         } catch (e: Exception) {
-            Timber.w(e, "地址解析失败，使用坐标显示")
-            locationName = "${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)}"
+            Timber.e(e, "❌ [LocationService] 地址解析异常")
+            locationName = "位置(${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)})"
         }
 
         return LocationInfo(
-            locationName = locationName,
             latitude = location.latitude,
             longitude = location.longitude,
             accuracy = location.accuracy,
             altitude = if (location.hasAltitude()) location.altitude else null,
+            locationName = locationName,
             address = address,
             city = city,
             district = district,
@@ -464,7 +433,13 @@ class LocationServiceImpl @Inject constructor(
             addedAt = LocalDateTime.now(),
             updatedAt = LocalDateTime.now(),
             isCurrentLocation = true,
-            locationType = LocationType.AUTO
+            locationType = LocationType.AUTO // 自动获取的位置
         )
+    }
+
+    private fun updateLocationCache(locationInfo: LocationInfo) {
+        Timber.d("💾 [LocationService] 更新位置缓存: ${locationInfo.locationName}")
+        cachedLocation = locationInfo
+        lastLocationUpdateTime = System.currentTimeMillis()
     }
 } 

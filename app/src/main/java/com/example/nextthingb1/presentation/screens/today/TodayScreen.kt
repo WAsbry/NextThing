@@ -37,6 +37,8 @@ import com.example.nextthingb1.LocalPermissionLauncher
 import com.example.nextthingb1.presentation.components.LocationDetailDialog
 import com.example.nextthingb1.presentation.components.LocationHelpDialog
 import com.example.nextthingb1.presentation.components.LocationPermissionDialog
+import com.example.nextthingb1.presentation.components.WeatherSummaryCard
+import com.example.nextthingb1.domain.model.WeatherInfo
 import com.example.nextthingb1.presentation.theme.*
 import com.example.nextthingb1.util.PermissionHelper
 import kotlinx.coroutines.GlobalScope
@@ -105,7 +107,13 @@ fun TodayScreen(
                     completionRate = uiState.completionRate,
                     totalTasks = uiState.totalTasks,
                     completedTasks = uiState.completedTasks,
-                    remainingTasks = uiState.remainingTasks
+                    remainingTasks = uiState.remainingTasks,
+                    weatherInfo = uiState.weatherInfo,
+                    onWeatherClick = {
+                        // TODO: 未来可以导航到天气详情页
+                        // 暂时显示Log
+                        timber.log.Timber.d("点击天气卡片")
+                    }
                 )
             }
             
@@ -334,7 +342,9 @@ private fun ProgressOverviewCard(
     completionRate: Float,
     totalTasks: Int,
     completedTasks: Int,
-    remainingTasks: Int
+    remainingTasks: Int,
+    weatherInfo: WeatherInfo? = null,
+    onWeatherClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -363,28 +373,20 @@ private fun ProgressOverviewCard(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
+                    // 左侧：今日完成标题
                     Text(
                         text = "今日完成",
                         color = Color.White,
                         fontSize = 16.sp
                     )
                     
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                Color.White.copy(alpha = 0.2f),
-                                RoundedCornerShape(20.dp)
-                            )
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "8月1日-8月31日",
-                            color = Color.White,
-                            fontSize = 12.sp
-                        )
-                    }
+                    // 右侧：天气信息区域
+                    WeatherInfoSection(
+                        weatherInfo = weatherInfo,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -426,6 +428,87 @@ private fun StatItem(label: String, value: String) {
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
         )
+    }
+}
+
+@Composable
+private fun WeatherInfoSection(
+    weatherInfo: WeatherInfo?,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.End
+    ) {
+        if (weatherInfo != null) {
+            // 天气状况和温度
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // 天气图标
+                Text(
+                    text = weatherInfo.condition.iconRes,
+                    fontSize = 16.sp,
+                    color = Color(weatherInfo.condition.color)
+                )
+                
+                // 天气状态
+                Text(
+                    text = weatherInfo.condition.displayName,
+                    color = Color.White,
+                    fontSize = 12.sp
+                )
+                
+                // 温度
+                Text(
+                    text = "${weatherInfo.temperature}°C",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // 湿度信息
+            Text(
+                text = "湿度 ${weatherInfo.humidity}%",
+                color = Color.White.copy(alpha = 0.8f),
+                fontSize = 11.sp
+            )
+            
+            // 生活建议（如果有紧急建议）
+            weatherInfo.getPrioritySuggestion()?.let { suggestion ->
+                if (suggestion.isUrgent) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "💡 ${suggestion.message}",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+            
+        } else {
+            // 加载状态
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    color = Color.White.copy(alpha = 0.7f),
+                    strokeWidth = 1.dp
+                )
+                Text(
+                    text = "获取天气中...",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 11.sp
+                )
+            }
+        }
     }
 }
 
