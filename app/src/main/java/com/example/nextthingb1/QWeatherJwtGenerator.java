@@ -16,8 +16,8 @@ import android.util.Log;
 public class QWeatherJwtGenerator {
 
     private static final String PRIVATE_KEY_ASSETS_PATH = "ed25519-private.pem";
-    private static final String KID = "T85DFFFK2W";
-    private static final String SUB = "3KDX498DD3";
+    private static final String KID = "TEGW8767AT";
+    private static final String SUB = "2HKR2NHF6R";
     private static final long EXPIRATION_SECONDS = 3600;
 
     public static String generateJwt(Context context) throws Exception {

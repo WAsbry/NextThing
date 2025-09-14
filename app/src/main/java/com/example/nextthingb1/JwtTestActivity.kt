@@ -43,6 +43,8 @@ class JwtTestActivity : ComponentActivity() {
                 val jwt = QWeatherJwtGenerator.generateJwt(this@JwtTestActivity)
                 
                 Log.d(TAG, " 生成的和风天气JWT成功：")
+                Log.d(TAG, "项目ID (SUB): 2HKR2NHF6R")
+                Log.d(TAG, "凭据ID (KID): TEGW8767AT")
                 Log.d(TAG, "JWT: $jwt")
                 Log.d(TAG, "JWT长度：${jwt.length}字符")
                 
