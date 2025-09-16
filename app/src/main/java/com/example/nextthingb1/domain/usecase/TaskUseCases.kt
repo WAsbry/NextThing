@@ -7,6 +7,7 @@ import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.repository.TaskRepository
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 import java.time.LocalDateTime
 import javax.inject.Inject
 
@@ -21,7 +22,8 @@ data class TaskUseCases @Inject constructor(
     val getTaskStatistics: GetTaskStatisticsUseCase,
     val searchTasks: SearchTasksUseCase,
     val getTasksByCategory: GetTasksByCategoryUseCase,
-    val getUrgentTasks: GetUrgentTasksUseCase
+    val getUrgentTasks: GetUrgentTasksUseCase,
+    val getEarliestTaskDate: GetEarliestTaskDateUseCase
 )
 
 class GetAllTasksUseCase @Inject constructor(
@@ -179,5 +181,13 @@ class DeleteAllTasksUseCase @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+}
+
+class GetEarliestTaskDateUseCase @Inject constructor(
+    private val repository: TaskRepository
+) {
+    suspend operator fun invoke(): LocalDate? {
+        return repository.getEarliestTaskDate()
     }
 } 
