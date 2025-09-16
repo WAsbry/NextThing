@@ -26,7 +26,8 @@ object UseCaseModule {
             getTaskStatistics = GetTaskStatisticsUseCase(repository),
             searchTasks = SearchTasksUseCase(repository),
             getTasksByCategory = GetTasksByCategoryUseCase(repository),
-            getUrgentTasks = GetUrgentTasksUseCase(repository)
+            getUrgentTasks = GetUrgentTasksUseCase(repository),
+            getEarliestTaskDate = GetEarliestTaskDateUseCase(repository)
         )
     }
 } 
