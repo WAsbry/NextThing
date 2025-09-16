@@ -6,6 +6,7 @@ import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 interface TaskRepository {
@@ -35,6 +36,7 @@ interface TaskRepository {
     suspend fun getTaskStatistics(): TaskStatistics
     suspend fun getTaskStatisticsByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): TaskStatistics
     suspend fun getCategoryStatistics(): Map<TaskCategory, Int>
+    suspend fun getEarliestTaskDate(): LocalDate?
     
     // 批量操作
     suspend fun markTasksAsCompleted(taskIds: List<String>)

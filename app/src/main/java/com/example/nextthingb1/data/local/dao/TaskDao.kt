@@ -108,9 +108,19 @@ interface TaskDao {
     suspend fun getCategoryStatistics(): List<CategoryCount>
     
     @Query("""
-        SELECT AVG(actualDuration) 
-        FROM tasks 
+        SELECT AVG(actualDuration)
+        FROM tasks
         WHERE status = 'COMPLETED' AND actualDuration > 0
     """)
     suspend fun getAverageCompletionTime(): Double?
+
+    @Query("SELECT MIN(createdAt) FROM tasks")
+    suspend fun getEarliestTaskDate(): LocalDateTime?
+
+    @Query("""
+        SELECT * FROM tasks
+        WHERE createdAt >= :weekStart AND createdAt <= :weekEnd
+        ORDER BY createdAt ASC
+    """)
+    suspend fun getTasksInWeek(weekStart: LocalDateTime, weekEnd: LocalDateTime): List<TaskEntity>
 } 

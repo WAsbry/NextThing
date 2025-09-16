@@ -9,8 +9,10 @@ import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.repository.TaskRepository
+import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
 import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -144,5 +146,14 @@ class TaskRepositoryImpl @Inject constructor(
     override suspend fun importTasks(filePath: String): Result<Int> {
         // TODO: 实现任务导入逻辑
         return Result.success(0)
+    }
+
+    override suspend fun getEarliestTaskDate(): LocalDate? {
+        Log.d("weekCount", "Repository: 开始查询数据库最早任务日期...")
+        val earliestDateTime = taskDao.getEarliestTaskDate()
+        Log.d("weekCount", "Repository: 数据库返回的最早任务DateTime: $earliestDateTime")
+        val earliestDate = earliestDateTime?.toLocalDate()
+        Log.d("weekCount", "Repository: 转换后的最早任务LocalDate: $earliestDate")
+        return earliestDate
     }
 } 
