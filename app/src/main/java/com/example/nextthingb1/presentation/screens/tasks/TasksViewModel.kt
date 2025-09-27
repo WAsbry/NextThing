@@ -16,8 +16,8 @@ import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 enum class TaskView(val title: String) {
-    LIST("流水"),
-    CALENDAR("日历")
+    LIST("周"),
+    CALENDAR("月")
 }
 
 data class TaskGroup(
@@ -88,6 +88,9 @@ class TasksViewModel @Inject constructor(
     private fun loadTasks() {
         Log.d("TasksViewModel", "=== loadTasks() 开始 ===")
         Log.d("TasksViewModel", "当前周偏移量: ${_uiState.value.currentWeekOffset}")
+        Log.d("clickEvent", "loadTasks() 方法被调用，开始重新计算任务数据")
+        Log.d("clickEvent", "  - 使用的周偏移量: ${_uiState.value.currentWeekOffset}")
+        Log.d("clickEvent", "  - 线程信息: ${Thread.currentThread().name}")
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
@@ -95,6 +98,9 @@ class TasksViewModel @Inject constructor(
             try {
                 taskUseCases.getAllTasks().collect { tasks ->
                     Log.d("TasksViewModel", "从数据库获取到 ${tasks.size} 个任务")
+                    Log.d("clickEvent", "数据库查询完成:")
+                    Log.d("clickEvent", "  - 任务总数: ${tasks.size}")
+                    Log.d("clickEvent", "  - 当前周偏移量: ${_uiState.value.currentWeekOffset}")
 
                     // 计算当前周的任务统计
                     val currentWeekTasks = filterTasksByWeek(tasks, _uiState.value.currentWeekOffset)
@@ -139,9 +145,17 @@ class TasksViewModel @Inject constructor(
                     _uiState.value = newState
 
                     Log.d("TasksViewModel", "UI状态更新完成")
+                    Log.d("clickEvent", "UI状态更新完成:")
+                    Log.d("clickEvent", "  - 新的任务组数量: ${taskGroups.size}")
+                    Log.d("clickEvent", "  - 新的总任务数: ${currentWeekTasks.size}")
+                    Log.d("clickEvent", "  - 新的完成任务数: $weekCompletedTasks")
+                    Log.d("clickEvent", "  - 新的周偏移量: ${newState.currentWeekOffset}")
                 }
             } catch (e: Exception) {
                 Log.e("TasksViewModel", "loadTasks() 异常: ${e.message}", e)
+                Log.e("clickEvent", "loadTasks() 方法发生异常: ${e.message}")
+                Log.e("clickEvent", "  - 异常类型: ${e.javaClass.simpleName}")
+                Log.e("clickEvent", "  - 当前周偏移量: ${_uiState.value.currentWeekOffset}")
                 _uiState.value = _uiState.value.copy(
                     errorMessage = e.message,
                     isLoading = false
@@ -182,6 +196,9 @@ class TasksViewModel @Inject constructor(
         Log.d("TasksViewModel", "=== filterTasksByWeek() 开始 ===")
         Log.d("TasksViewModel", "传入的任务数量: ${tasks.size}")
         Log.d("TasksViewModel", "周偏移量: $weekOffset")
+        Log.d("clickEvent", "filterTasksByWeek() 过滤器开始工作:")
+        Log.d("clickEvent", "  - 输入任务数量: ${tasks.size}")
+        Log.d("clickEvent", "  - 使用的周偏移量: $weekOffset")
 
         val today = LocalDate.now()
         val currentWeekStart = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
@@ -202,6 +219,10 @@ class TasksViewModel @Inject constructor(
 
         Log.d("TasksViewModel", "过滤后的任务数量: ${filteredTasks.size}")
         Log.d("TasksViewModel", "=== filterTasksByWeek() 结束 ===")
+        Log.d("clickEvent", "filterTasksByWeek() 过滤器完成:")
+        Log.d("clickEvent", "  - 输出任务数量: ${filteredTasks.size}")
+        Log.d("clickEvent", "  - 过滤效率: ${if (tasks.isNotEmpty()) "${(filteredTasks.size.toFloat() / tasks.size * 100).toInt()}%" else "N/A"}")
+        Log.d("clickEvent", "  - 目标周范围: $targetWeekStart ~ $targetWeekEnd")
 
         return filteredTasks
     }
@@ -328,20 +349,28 @@ class TasksViewModel @Inject constructor(
     }
 
     fun changeWeek(weekOffset: Int) {
-        Log.d("switchWeek", "=== changeWeek() 开始 ===")
-        Log.d("switchWeek", "ViewModel接收到新的周偏移量: $weekOffset")
-        Log.d("switchWeek", "当前状态中的周偏移量: ${_uiState.value.currentWeekOffset}")
+        Log.d("clickEvent", "=== ViewModel.changeWeek() 方法开始 ===")
+        Log.d("clickEvent", "ViewModel接收到的参数:")
+        Log.d("clickEvent", "  - 新的周偏移量: $weekOffset")
+        Log.d("clickEvent", "  - 当前状态中的周偏移量: ${_uiState.value.currentWeekOffset}")
+        Log.d("clickEvent", "  - 早期任务日期: ${_uiState.value.earliestTaskDate}")
+        Log.d("clickEvent", "  - 当前任务总数: ${_uiState.value.allTasks.size}")
 
         val oldState = _uiState.value
+        Log.d("clickEvent", "备份旧状态完成，准备更新UI状态...")
+
         _uiState.value = _uiState.value.copy(currentWeekOffset = weekOffset)
 
-        Log.d("switchWeek", "状态更新后的周偏移量: ${_uiState.value.currentWeekOffset}")
-        Log.d("switchWeek", "开始重新加载任务数据...")
+        Log.d("clickEvent", "UI状态更新完成:")
+        Log.d("clickEvent", "  - 更新后的周偏移量: ${_uiState.value.currentWeekOffset}")
+        Log.d("clickEvent", "  - 状态是否发生变化: ${oldState.currentWeekOffset != _uiState.value.currentWeekOffset}")
+
+        Log.d("clickEvent", "准备重新加载任务数据以应用新的周过滤器...")
 
         // 重新加载任务数据以应用新的周过滤
         loadTasks()
 
-        Log.d("switchWeek", "=== changeWeek() 结束 ===")
+        Log.d("clickEvent", "=== ViewModel.changeWeek() 方法结束 ===")
     }
 
     private fun loadEarliestTaskDate() {

@@ -9,7 +9,7 @@ interface LocationService {
      * @param forceRefresh 是否强制刷新位置
      * @return 位置信息结果
      */
-    suspend fun getCurrentLocation(forceRefresh: Boolean = false): Result<LocationInfo>
+    suspend fun getCurrentLocation(forceRefresh: Boolean = false): LocationInfo?
     
     /**
      * 检查位置权限是否已授予

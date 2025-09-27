@@ -5,9 +5,11 @@ import java.util.UUID
 
 data class LocationInfo(
     val id: String = UUID.randomUUID().toString(),
-    val locationName: String = "", // 位置名称（如：北京市朝阳区）
-    val latitude: Double, // 纬度
-    val longitude: Double, // 经度
+    val locationName: String = "", // 地点名字
+    val latitude: Double, // 纬度信息
+    val longitude: Double, // 经度信息
+    val usageCount: Int = 0, // 使用频次
+    val lastUsedAt: LocalDateTime? = null, // 最后使用时间
     val accuracy: Float? = null, // 定位精度（米）
     val altitude: Double? = null, // 海拔高度（米）
     val address: String = "", // 详细地址

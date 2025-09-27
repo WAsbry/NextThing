@@ -243,49 +243,34 @@ class TodayViewModel @Inject constructor(
                 // 优先网络定位，再GPS定位
                 val location = withTimeoutOrNull(35000) { // 35秒超时
                     locationService.getCurrentLocation(forceRefresh = true)
-                }?.fold(
-                    onSuccess = { locationInfo ->
-                        // 位置获取成功，更新缓存和UI
-                        updateLocationCache(locationInfo)
-                        _uiState.value = _uiState.value.copy(
-                            currentLocation = locationInfo,
-                            currentLocationName = locationInfo.locationName,
-                            isLocationLoading = false,
-                            locationError = null
-                        )
-                        Timber.d("手动位置获取成功: ${locationInfo.locationName}")
-                        
-                        // 显示位置更新提示
-                        showLocationTooltip()
-                    },
-                    onFailure = { error ->
-                        val errorMsg = when {
-                            error is SecurityException -> "需要位置权限"
-                            error is IllegalStateException -> "请开启位置服务"
-                            error.message?.contains("超时") == true -> "位置获取超时"
-                            error.message?.contains("GPS") == true -> "GPS信号弱"
-                            error.message?.contains("首次使用") == true -> "首次GPS定位"
-                            else -> "获取位置失败"
-                        }
-                        
-                        _uiState.value = _uiState.value.copy(
-                            currentLocationName = errorMsg,
-                            isLocationLoading = false,
-                            locationError = error.message
-                        )
-                        Timber.w(error, "手动位置获取失败: $errorMsg")
-                        
-                        // 显示位置获取帮助对话框
-                        _showLocationHelpDialog.value = true
-                    }
-                ) ?: run {
-                    // 超时处理
+                }
+
+                if (location != null) {
+                    // 位置获取成功，更新缓存和UI
+                    updateLocationCache(location)
                     _uiState.value = _uiState.value.copy(
-                        currentLocationName = "位置获取超时",
+                        currentLocation = location,
+                        currentLocationName = location.locationName,
                         isLocationLoading = false,
-                        locationError = "位置获取超时，请检查GPS信号或稍后重试"
+                        locationError = null
                     )
-                    Timber.w("手动位置获取操作超时")
+                    Timber.d("手动位置获取成功: ${location.locationName}")
+
+                    // 显示位置更新提示
+                    showLocationTooltip()
+                } else {
+                    // 位置获取失败或超时
+                    val errorMsg = "获取位置失败"
+
+                    _uiState.value = _uiState.value.copy(
+                        currentLocationName = errorMsg,
+                        isLocationLoading = false,
+                        locationError = "位置获取失败，请检查权限和位置服务"
+                    )
+                    Timber.w("手动位置获取失败: $errorMsg")
+
+                    // 显示位置获取帮助对话框
+                    _showLocationHelpDialog.value = true
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -604,45 +589,27 @@ class TodayViewModel @Inject constructor(
                 // 优先网络定位，再GPS定位
                 val location = withTimeoutOrNull(35000) { // 35秒超时
                     locationService.getCurrentLocation(forceRefresh = true)
-                }?.fold(
-                    onSuccess = { locationInfo ->
-                        // 位置获取成功，更新缓存和UI
-                        updateLocationCache(locationInfo)
-                        _uiState.value = _uiState.value.copy(
-                            currentLocation = locationInfo,
-                            currentLocationName = locationInfo.locationName,
-                            isLocationLoading = false,
-                            locationError = null
-                        )
-                        Timber.d("位置获取成功: ${locationInfo.locationName}")
-                        // 自动获取天气信息
-                        Timber.d("🌤️ [TodayViewModel] 位置获取成功，开始调用天气服务...")
-                        loadWeatherInfo()
-                        locationInfo
-                    },
-                    onFailure = { error ->
-                        // 位置获取失败
-                        val errorMsg = when {
-                            error is SecurityException -> "需要位置权限"
-                            error is IllegalStateException -> "请开启位置服务"
-                            error.message?.contains("超时") == true -> "位置获取超时"
-                            error.message?.contains("GPS") == true -> "GPS信号弱"
-                            error.message?.contains("首次使用") == true -> "首次GPS定位"
-                            else -> "获取位置失败"
-                        }
-                        
-                        _uiState.value = _uiState.value.copy(
-                            currentLocationName = errorMsg,
-                            isLocationLoading = false,
-                            locationError = error.message
-                        )
-                        Timber.w(error, "位置获取失败: $errorMsg")
-                        null
-                    }
-                ) ?: run {
-                    // 超时处理
+                }
+
+                if (location != null) {
+                    // 位置获取成功，更新缓存和UI
+                    updateLocationCache(location)
                     _uiState.value = _uiState.value.copy(
-                        currentLocationName = "位置获取超时",
+                        currentLocation = location,
+                        currentLocationName = location.locationName,
+                        isLocationLoading = false,
+                        locationError = null
+                    )
+                    Timber.d("位置获取成功: ${location.locationName}")
+                    // 自动获取天气信息
+                    Timber.d("🌤️ [TodayViewModel] 位置获取成功，开始调用天气服务...")
+                    loadWeatherInfo()
+                } else {
+                    // 位置获取失败或超时
+                    val errorMsg = "获取位置失败"
+
+                    _uiState.value = _uiState.value.copy(
+                        currentLocationName = errorMsg,
                         isLocationLoading = false,
                         locationError = "位置获取超时，请检查GPS信号或稍后重试"
                     )
@@ -701,25 +668,22 @@ class TodayViewModel @Inject constructor(
             Timber.d("静默更新：开始获取新位置")
             try {
                 val location = locationService.getCurrentLocation(forceRefresh = false)
-                location.fold(
-                    onSuccess = { locationInfo ->
-                        updateLocationCache(locationInfo)
-                        // 静默更新UI，不显示加载状态
-                        _uiState.value = _uiState.value.copy(
-                            currentLocation = locationInfo,
-                            currentLocationName = locationInfo.locationName,
-                            isLocationLoading = false // 确保加载状态为false
-                        )
-                        Timber.d("静默位置更新成功: ${locationInfo.locationName}")
-                    },
-                    onFailure = { error ->
-                        Timber.w(error, "静默位置更新失败")
-                        // 失败时也要确保加载状态为false
-                        _uiState.value = _uiState.value.copy(
-                            isLocationLoading = false
-                        )
-                    }
-                )
+                if (location != null) {
+                    updateLocationCache(location)
+                    // 静默更新UI，不显示加载状态
+                    _uiState.value = _uiState.value.copy(
+                        currentLocation = location,
+                        currentLocationName = location.locationName,
+                        isLocationLoading = false // 确保加载状态为false
+                    )
+                    Timber.d("静默位置更新成功: ${location.locationName}")
+                } else {
+                    Timber.w("静默位置更新失败")
+                    // 失败时也要确保加载状态为false
+                    _uiState.value = _uiState.value.copy(
+                        isLocationLoading = false
+                    )
+                }
             } catch (e: Exception) {
                 Timber.e(e, "静默位置更新异常")
             }
