@@ -9,7 +9,7 @@ import java.time.LocalDateTime
 @Dao
 interface LocationDao {
     
-    @Query("SELECT * FROM locations ORDER BY addedAt DESC")
+    @Query("SELECT * FROM locations ORDER BY usageCount DESC, lastUsedAt DESC, addedAt DESC")
     fun getAllLocations(): Flow<List<LocationEntity>>
     
     @Query("SELECT * FROM locations WHERE isCurrentLocation = 1 LIMIT 1")
@@ -56,6 +56,12 @@ interface LocationDao {
     
     @Query("UPDATE locations SET isCurrentLocation = 1 WHERE id = :locationId")
     suspend fun setAsCurrentLocation(locationId: String)
+
+    @Query("UPDATE locations SET usageCount = usageCount + 1, lastUsedAt = :usedAt WHERE id = :locationId")
+    suspend fun incrementUsageCount(locationId: String, usedAt: LocalDateTime)
+
+    @Query("SELECT * FROM locations ORDER BY usageCount DESC LIMIT :limit")
+    suspend fun getMostUsedLocations(limit: Int = 10): List<LocationEntity>
     
     // 统计查询
     @Query("SELECT COUNT(*) FROM locations")

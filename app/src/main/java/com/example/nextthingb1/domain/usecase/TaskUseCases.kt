@@ -51,7 +51,8 @@ class CreateTaskUseCase @Inject constructor(
         priority: TaskPriority = TaskPriority.MEDIUM,
         category: TaskCategory = TaskCategory.WORK,
         dueDate: LocalDateTime? = null,
-        tags: List<String> = emptyList()
+        tags: List<String> = emptyList(),
+        imageUri: String? = null
     ): Result<String> {
         return try {
             if (title.isBlank()) {
@@ -64,7 +65,8 @@ class CreateTaskUseCase @Inject constructor(
                     category = category,
                     dueDate = dueDate,
                     tags = tags,
-                    isUrgent = dueDate?.let { it.isBefore(LocalDateTime.now().plusHours(2)) } ?: false
+                    isUrgent = dueDate?.let { it.isBefore(LocalDateTime.now().plusHours(2)) } ?: false,
+                    imageUri = imageUri
                 )
                 val taskId = repository.insertTask(task)
                 Result.success(taskId)

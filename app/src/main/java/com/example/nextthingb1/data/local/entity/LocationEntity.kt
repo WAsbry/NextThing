@@ -9,18 +9,20 @@ import java.time.LocalDateTime
 data class LocationEntity(
     @PrimaryKey
     val id: String,
-    val locationName: String,
-    val latitude: Double,
-    val longitude: Double,
-    val accuracy: Float?,
-    val altitude: Double?,
-    val address: String,
-    val city: String,
-    val district: String,
-    val province: String,
-    val country: String,
+    val locationName: String,           // 地点名字
+    val latitude: Double,               // 纬度信息
+    val longitude: Double,              // 经度信息
+    val usageCount: Int = 0,           // 使用频次
+    val lastUsedAt: LocalDateTime? = null, // 最后使用时间
+    val accuracy: Float? = null,
+    val altitude: Double? = null,
+    val address: String = "",
+    val city: String = "",
+    val district: String = "",
+    val province: String = "",
+    val country: String = "中国",
     val addedAt: LocalDateTime,
     val updatedAt: LocalDateTime,
-    val isCurrentLocation: Boolean,
-    val locationType: LocationType
+    val isCurrentLocation: Boolean = false,
+    val locationType: LocationType = LocationType.MANUAL
 ) 

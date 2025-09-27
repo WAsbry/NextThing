@@ -79,29 +79,29 @@ class LocationServiceImpl @Inject constructor(
             .build()
     }
 
-    override suspend fun getCurrentLocation(forceRefresh: Boolean): Result<LocationInfo> {
+    override suspend fun getCurrentLocation(forceRefresh: Boolean): LocationInfo? {
         return try {
             Timber.d("🔍 [LocationService] 开始获取位置，强制刷新: $forceRefresh")
-            
+
             // 检查权限
             if (!hasLocationPermission()) {
                 Timber.w("❌ [LocationService] 位置权限未授予")
-                return Result.failure(SecurityException("位置权限未授予"))
+                return null
             }
             Timber.d("✅ [LocationService] 位置权限检查通过")
 
             // 检查位置服务
             if (!isLocationEnabled()) {
                 Timber.w("❌ [LocationService] 位置服务未启用")
-                return Result.failure(IllegalStateException("位置服务未启用"))
+                return null
             }
             Timber.d("✅ [LocationService] 位置服务检查通过")
 
             // 如果不强制刷新且有缓存，检查缓存是否有效
             if (!forceRefresh && !shouldRefreshLocation()) {
-                cachedLocation?.let { 
+                cachedLocation?.let {
                     Timber.d("✅ [LocationService] 使用缓存位置: ${it.locationName}")
-                    return Result.success(it)
+                    return it
                 }
             }
             
@@ -119,7 +119,7 @@ class LocationServiceImpl @Inject constructor(
                 Timber.d("✅ [LocationService] 粗略网络定位成功，精度: ${coarseLocation.accuracy}m")
                 val locationInfo = convertToLocationInfo(coarseLocation)
                 updateLocationCache(locationInfo)
-                return Result.success(locationInfo)
+                return locationInfo
             } else {
                 Timber.w("⚠️ [LocationService] 粗略网络定位失败，尝试高精度网络定位")
             }
@@ -136,20 +136,17 @@ class LocationServiceImpl @Inject constructor(
                 Timber.d("✅ [LocationService] 网络定位成功，精度: ${networkLocation.accuracy}m")
                 val locationInfo = convertToLocationInfo(networkLocation)
                 updateLocationCache(locationInfo)
-                return Result.success(locationInfo)
+                return locationInfo
             } else {
                 Timber.w("⚠️ [LocationService] 网络定位失败或精度不够")
                 // 先快速尝试最后已知位置作为备选
                 Timber.d("📍 [LocationService] 快速尝试最后已知位置...")
                 try {
-                    val lastKnownResult = getLastKnownLocation()
-                    if (lastKnownResult.isSuccess) {
-                        val locationInfo = lastKnownResult.getOrNull()
-                        if (locationInfo != null) {
-                            Timber.d("✅ [LocationService] 最后已知位置可用，跳过GPS直接使用")
-                            updateLocationCache(locationInfo)
-                            return Result.success(locationInfo)
-                        }
+                    val locationInfo = getLastKnownLocationDirect()
+                    if (locationInfo != null) {
+                        Timber.d("✅ [LocationService] 最后已知位置可用，跳过GPS直接使用")
+                        updateLocationCache(locationInfo)
+                        return locationInfo
                     }
                 } catch (e: Exception) {
                     Timber.w(e, "最后已知位置获取失败，继续GPS定位")
@@ -169,18 +166,18 @@ class LocationServiceImpl @Inject constructor(
                 Timber.d("✅ [LocationService] GPS定位成功，精度: ${gpsLocation.accuracy}m")
                 val locationInfo = convertToLocationInfo(gpsLocation)
                 updateLocationCache(locationInfo)
-                return Result.success(locationInfo)
+                return locationInfo
             } else {
                 Timber.e("❌ [LocationService] GPS定位也失败了")
-                
+
                 // 第三步：如果都失败了，尝试获取最后已知位置
                 Timber.d("📍 [LocationService] 第三步：尝试获取最后已知位置")
-                return getLastKnownLocation()
+                return getLastKnownLocationDirect()
             }
 
         } catch (e: Exception) {
             Timber.e(e, "💥 [LocationService] 获取位置异常")
-            Result.failure(e)
+            null
         }
     }
 
@@ -243,16 +240,16 @@ class LocationServiceImpl @Inject constructor(
     /**
      * 获取最后已知位置（作为兜底方案）
      */
-    private suspend fun getLastKnownLocation(): Result<LocationInfo> = withContext(Dispatchers.IO) {
+    private suspend fun getLastKnownLocationDirect(): LocationInfo? = withContext(Dispatchers.IO) {
         try {
             Timber.d("📱 [LocationService] 尝试获取最后已知位置")
-            
+
             if (ActivityCompat.checkSelfPermission(
                     context,
                     Manifest.permission.ACCESS_FINE_LOCATION
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                return@withContext Result.failure(SecurityException("位置权限未授予"))
+                return@withContext null
             }
 
             val lastLocation = fusedLocationClient.lastLocation
@@ -268,14 +265,14 @@ class LocationServiceImpl @Inject constructor(
                 Timber.d("✅ [LocationService] 最后已知位置获取成功，精度: ${location.accuracy}m")
                 val locationInfo = convertToLocationInfo(location)
                 updateLocationCache(locationInfo)
-                Result.success(locationInfo)
+                locationInfo
             } else {
                 Timber.e("❌ [LocationService] 最后已知位置也为空")
-                Result.failure(Exception("无法获取任何位置信息，请检查设备定位设置"))
+                null
             }
         } catch (e: Exception) {
             Timber.e(e, "💥 [LocationService] 获取最后已知位置异常")
-            Result.failure(e)
+            null
         }
     }
 

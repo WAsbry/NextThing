@@ -31,7 +31,8 @@ fun TaskEntity.toDomain(): Task {
         isUrgent = isUrgent,
         estimatedDuration = estimatedDuration,
         actualDuration = actualDuration,
-        subtasks = subtasks
+        subtasks = subtasks,
+        imageUri = imageUri
     )
 }
 
@@ -53,7 +54,8 @@ fun Task.toEntity(): TaskEntity {
         isUrgent = isUrgent,
         estimatedDuration = estimatedDuration,
         actualDuration = actualDuration,
-        subtasksJson = subtasksJson
+        subtasksJson = subtasksJson,
+        imageUri = imageUri
     )
 }
 
