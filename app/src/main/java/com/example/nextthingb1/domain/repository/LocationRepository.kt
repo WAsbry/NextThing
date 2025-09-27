@@ -15,10 +15,12 @@ interface LocationRepository {
     fun getTodayLocations(): Flow<List<LocationInfo>>
     
     // 位置操作
-    suspend fun insertLocation(location: LocationInfo): String
+    suspend fun insertLocation(location: LocationInfo): Result<LocationInfo>
     suspend fun updateLocation(location: LocationInfo)
-    suspend fun deleteLocation(locationId: String)
-    suspend fun setAsCurrentLocation(locationId: String)
+    suspend fun deleteLocationById(locationId: String): Result<Unit>
+    suspend fun setAsCurrentLocation(locationId: String): Result<Unit>
+    suspend fun incrementUsageCount(locationId: String): Result<Unit>
+    suspend fun getMostUsedLocations(limit: Int = 10): List<LocationInfo>
     
     // 地理查询
     suspend fun getLocationsInArea(

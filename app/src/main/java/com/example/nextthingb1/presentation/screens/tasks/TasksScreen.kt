@@ -107,8 +107,8 @@ fun WeeklyOverviewCard(
     }
 
     // 计算按钮状态
-    val isFirstWeek = currentWeekOffset == 0
     val maxWeek = getCurrentMaxWeek(earliestTaskDate)
+    val isFirstWeek = currentWeekData.weekNumber <= 1
     val isLastWeek = currentWeekData.weekNumber >= maxWeek
 
     Log.d("switchWeek", "=== 按钮状态计算 ===")
@@ -119,6 +119,22 @@ fun WeeklyOverviewCard(
     Log.d("switchWeek", "是否为最后一周: $isLastWeek")
     Log.d("switchWeek", "上箭头enabled: ${!isFirstWeek} (不是第一周)")
     Log.d("switchWeek", "下箭头enabled: ${!isLastWeek} (不是最后一周)")
+
+    Log.d("clickEvent", "=== 按钮状态计算（clickEvent标签） ===")
+    Log.d("clickEvent", "计算输入参数:")
+    Log.d("clickEvent", "  - currentWeekOffset: $currentWeekOffset")
+    Log.d("clickEvent", "  - earliestTaskDate: $earliestTaskDate")
+    Log.d("clickEvent", "  - currentWeekData.weekNumber: ${currentWeekData.weekNumber}")
+    Log.d("clickEvent", "计算结果:")
+    Log.d("clickEvent", "  - maxWeek: $maxWeek")
+    Log.d("clickEvent", "  - isFirstWeek: $isFirstWeek (currentWeekOffset == 0)")
+    Log.d("clickEvent", "  - isLastWeek: $isLastWeek (${currentWeekData.weekNumber} >= $maxWeek)")
+    Log.d("clickEvent", "按钮状态:")
+    Log.d("clickEvent", "  - 上箭头enabled: ${!isFirstWeek}")
+    Log.d("clickEvent", "  - 下箭头enabled: ${!isLastWeek}")
+    Log.d("clickEvent", "按钮可视状态:")
+    Log.d("clickEvent", "  - 上箭头透明度: ${if (isFirstWeek) "0.3 (灰色禁用)" else "1.0 (正常)"}")
+    Log.d("clickEvent", "  - 下箭头透明度: ${if (isLastWeek) "0.3 (灰色禁用)" else "1.0 (正常)"}")
 
     Card(
         modifier = modifier
@@ -164,14 +180,27 @@ fun WeeklyOverviewCard(
                         // 向上箭头（前一周）
                         IconButton(
                             onClick = {
-                                Log.d("switchWeek", "=== 向上箭头被点击 ===")
-                                Log.d("switchWeek", "当前周偏移量: $currentWeekOffset")
-                                Log.d("switchWeek", "新的周偏移量: ${currentWeekOffset - 1}")
-                                Log.d("switchWeek", "是否为第一周: $isFirstWeek")
-                                Log.d("switchWeek", "上箭头enabled状态: ${!isFirstWeek}")
-                                Log.d("switchWeek", "开始调用 onWeekChanged()")
-                                onWeekChanged(currentWeekOffset - 1)
-                                Log.d("switchWeek", "向上箭头点击处理完成")
+                                Log.d("clickEvent", "=== 向上箭头点击事件开始 ===")
+                                Log.d("clickEvent", "事件时间: ${System.currentTimeMillis()}")
+                                Log.d("clickEvent", "点击组件: 上箭头（向前一周）")
+                                Log.d("clickEvent", "当前周偏移量: $currentWeekOffset")
+                                Log.d("clickEvent", "计算的新周偏移量: ${currentWeekOffset - 1}")
+                                Log.d("clickEvent", "按钮状态检查:")
+                                Log.d("clickEvent", "  - 是否为第一周: $isFirstWeek")
+                                Log.d("clickEvent", "  - 按钮enabled状态: ${!isFirstWeek}")
+                                Log.d("clickEvent", "  - 当前周数: ${currentWeekData.weekNumber}")
+                                Log.d("clickEvent", "  - 最大周数: $maxWeek")
+
+                                if (!isFirstWeek) {
+                                    Log.d("clickEvent", "按钮可点击，准备调用 onWeekChanged()")
+                                    Log.d("clickEvent", "回调函数参数: ${currentWeekOffset - 1}")
+                                    onWeekChanged(currentWeekOffset - 1)
+                                    Log.d("clickEvent", "onWeekChanged() 调用完成")
+                                } else {
+                                    Log.w("clickEvent", "按钮不可点击状态下被触发！这可能是个问题")
+                                }
+
+                                Log.d("clickEvent", "=== 向上箭头点击事件结束 ===")
                             },
                             enabled = !isFirstWeek, // 修复：不是第一周才能点击向上
                             modifier = Modifier
@@ -197,14 +226,27 @@ fun WeeklyOverviewCard(
                         // 向下箭头（后一周）
                         IconButton(
                             onClick = {
-                                Log.d("switchWeek", "=== 向下箭头被点击 ===")
-                                Log.d("switchWeek", "当前周偏移量: $currentWeekOffset")
-                                Log.d("switchWeek", "新的周偏移量: ${currentWeekOffset + 1}")
-                                Log.d("switchWeek", "是否为最后一周: $isLastWeek")
-                                Log.d("switchWeek", "下箭头enabled状态: ${!isLastWeek}")
-                                Log.d("switchWeek", "开始调用 onWeekChanged()")
-                                onWeekChanged(currentWeekOffset + 1)
-                                Log.d("switchWeek", "向下箭头点击处理完成")
+                                Log.d("clickEvent", "=== 向下箭头点击事件开始 ===")
+                                Log.d("clickEvent", "事件时间: ${System.currentTimeMillis()}")
+                                Log.d("clickEvent", "点击组件: 下箭头（向后一周）")
+                                Log.d("clickEvent", "当前周偏移量: $currentWeekOffset")
+                                Log.d("clickEvent", "计算的新周偏移量: ${currentWeekOffset + 1}")
+                                Log.d("clickEvent", "按钮状态检查:")
+                                Log.d("clickEvent", "  - 是否为最后一周: $isLastWeek")
+                                Log.d("clickEvent", "  - 按钮enabled状态: ${!isLastWeek}")
+                                Log.d("clickEvent", "  - 当前周数: ${currentWeekData.weekNumber}")
+                                Log.d("clickEvent", "  - 最大周数: $maxWeek")
+
+                                if (!isLastWeek) {
+                                    Log.d("clickEvent", "按钮可点击，准备调用 onWeekChanged()")
+                                    Log.d("clickEvent", "回调函数参数: ${currentWeekOffset + 1}")
+                                    onWeekChanged(currentWeekOffset + 1)
+                                    Log.d("clickEvent", "onWeekChanged() 调用完成")
+                                } else {
+                                    Log.w("clickEvent", "按钮不可点击状态下被触发！这可能是个问题")
+                                }
+
+                                Log.d("clickEvent", "=== 向下箭头点击事件结束 ===")
                             },
                             enabled = !isLastWeek, // 修复：不是最后一周才能点击向下
                             modifier = Modifier
@@ -351,6 +393,10 @@ data class WeekData(
 private fun calculateCurrentWeekData(tasks: List<Task>, earliestTaskDate: LocalDate?, weekOffset: Int = 0): WeekData {
     Log.d("calculateCurrentWeekData", "=== calculateCurrentWeekData() 开始 ===")
     Log.d("calculateCurrentWeekData", "传入参数 - 任务数量: ${tasks.size}, 最早日期: $earliestTaskDate, 周偏移: $weekOffset")
+    Log.d("clickEvent", "calculateCurrentWeekData() 计算开始:")
+    Log.d("clickEvent", "  - 输入任务数量: ${tasks.size}")
+    Log.d("clickEvent", "  - 最早任务日期: $earliestTaskDate")
+    Log.d("clickEvent", "  - 使用的周偏移: $weekOffset")
 
     val today = LocalDate.now()
     val currentWeekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -409,14 +455,21 @@ private fun calculateCurrentWeekData(tasks: List<Task>, earliestTaskDate: LocalD
 
     Log.d("calculateCurrentWeekData", "返回结果: $weekData")
     Log.d("calculateCurrentWeekData", "=== calculateCurrentWeekData() 结束 ===")
+    Log.d("clickEvent", "calculateCurrentWeekData() 计算完成:")
+    Log.d("clickEvent", "  - 返回周数: ${weekData.weekNumber}")
+    Log.d("clickEvent", "  - 返回日期范围: ${weekData.dateRange}")
+    Log.d("clickEvent", "  - 返回任务统计: 待办${weekData.pendingCount}, 完成${weekData.completedCount}, 逾期${weekData.overdueCount}, 取消${weekData.cancelledCount}")
 
     return weekData
 }
 
 private fun getCurrentMaxWeek(earliestTaskDate: LocalDate?): Int {
     Log.d("weekCount", "=== 最大周数计算调试信息 ===")
+    Log.d("clickEvent", "getCurrentMaxWeek() 计算开始:")
+    Log.d("clickEvent", "  - 输入最早任务日期: $earliestTaskDate")
     if (earliestTaskDate == null) {
         Log.d("weekCount", "没有最早任务日期，最大周数: 1")
+        Log.d("clickEvent", "  - 无最早日期，返回默认最大周数: 1")
         return 1
     }
 
@@ -433,6 +486,11 @@ private fun getCurrentMaxWeek(earliestTaskDate: LocalDate?): Int {
     // 返回从第一周到当前周的总周数
     val maxWeek = (weeksBetween + 1).toInt()
     Log.d("weekCount", "计算得出的最大周数: $maxWeek")
+    Log.d("clickEvent", "getCurrentMaxWeek() 计算完成:")
+    Log.d("clickEvent", "  - 最早任务所在周的周一: $earliestWeekStart")
+    Log.d("clickEvent", "  - 当前周的周一: $currentWeekStart")
+    Log.d("clickEvent", "  - 周数差: $weeksBetween")
+    Log.d("clickEvent", "  - 计算得出的最大周数: $maxWeek")
     return maxWeek
 }
 

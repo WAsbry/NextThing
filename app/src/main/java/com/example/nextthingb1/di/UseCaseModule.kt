@@ -1,6 +1,7 @@
 package com.example.nextthingb1.di
 
 import com.example.nextthingb1.domain.repository.TaskRepository
+import com.example.nextthingb1.domain.repository.LocationRepository
 import com.example.nextthingb1.domain.usecase.*
 import dagger.Module
 import dagger.Provides
@@ -29,5 +30,11 @@ object UseCaseModule {
             getUrgentTasks = GetUrgentTasksUseCase(repository),
             getEarliestTaskDate = GetEarliestTaskDateUseCase(repository)
         )
+    }
+
+    @Provides
+    @Singleton
+    fun provideLocationUseCases(repository: LocationRepository): LocationUseCases {
+        return LocationUseCases(repository)
     }
 } 

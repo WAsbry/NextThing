@@ -33,6 +33,10 @@ import com.example.nextthingb1.presentation.screens.focus.FocusScreen
 import com.example.nextthingb1.presentation.screens.focus.FocusViewModel
 import com.example.nextthingb1.presentation.screens.create.CreateTaskScreen
 import com.example.nextthingb1.presentation.screens.create.CreateTaskViewModel
+import com.example.nextthingb1.presentation.screens.createlocation.CreateLocationScreen
+import com.example.nextthingb1.presentation.screens.createlocation.CreateLocationViewModel
+import com.example.nextthingb1.presentation.screens.createnotificationstrategy.CreateNotificationStrategyScreen
+import com.example.nextthingb1.presentation.screens.createnotificationstrategy.CreateNotificationStrategyViewModel
 import com.example.nextthingb1.presentation.screens.taskdetail.TaskDetailScreen
 import com.example.nextthingb1.presentation.screens.taskdetail.TaskDetailViewModel
 import com.example.nextthingb1.presentation.components.BottomNavigationBar
@@ -87,6 +91,32 @@ fun NextThingNavigation(navController: NavHostController) {
                     viewModel = viewModel,
                     onBackPressed = {
                         navController.popBackStack()
+                    },
+                    onNavigateToCreateLocation = {
+                        navController.navigate(Screen.CreateLocation.route)
+                    },
+                    onNavigateToCreateNotificationStrategy = {
+                        navController.navigate(Screen.CreateNotificationStrategy.route)
+                    }
+                )
+            }
+
+            composable(Screen.CreateLocation.route) {
+                val viewModel: CreateLocationViewModel = hiltViewModel()
+                CreateLocationScreen(
+                    viewModel = viewModel,
+                    onBackPressed = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(Screen.CreateNotificationStrategy.route) {
+                val viewModel: CreateNotificationStrategyViewModel = hiltViewModel()
+                CreateNotificationStrategyScreen(
+                    viewModel = viewModel,
+                    onBackPressed = {
+                        navController.popBackStack()
                     }
                 )
             }
@@ -133,6 +163,8 @@ sealed class Screen(val route: String, val title: String, val icon: String) {
     object Today : Screen("today", "首页", "home")
     object Tasks : Screen("tasks", "任务", "list")
     object CreateTask : Screen("create_task", "创建", "add")
+    object CreateLocation : Screen("create_location", "新建地点", "location")
+    object CreateNotificationStrategy : Screen("create_notification_strategy", "新建通知策略", "notification")
     object Stats : Screen("stats", "统计", "chart-pie")
     object Settings : Screen("settings", "我的", "user")
     object Focus : Screen("focus", "专注", "clock")

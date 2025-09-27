@@ -112,7 +112,7 @@ class AmapLocationServiceImpl @Inject constructor(
         }
     }
 
-    override suspend fun getCurrentLocation(forceRefresh: Boolean): Result<LocationInfo> {
+    override suspend fun getCurrentLocation(forceRefresh: Boolean): LocationInfo? {
         val startTime = System.currentTimeMillis()
         Timber.d("============================================================")
         Timber.d("🔍 [AmapLocationService] 🚀 开始获取位置流程")
@@ -122,19 +122,19 @@ class AmapLocationServiceImpl @Inject constructor(
         // 并发控制检查
         if (isLocationInProgress && !forceRefresh) {
             Timber.d("⏳ [AmapLocationService] 🔄 已有定位请求进行中，跳过重复请求")
-            cachedLocation?.let { 
+            cachedLocation?.let {
                 Timber.d("⏳ [AmapLocationService] 📦 返回现有缓存位置: ${it.locationName}")
-                return Result.success(it)
+                return it
             }
             Timber.d("⏳ [AmapLocationService] ❌ 无缓存，等待当前请求完成")
-            return Result.failure(Exception("定位请求进行中，请稍后重试"))
+            return null
         }
         
         // 检查权限
         Timber.d("🔐 [AmapLocationService] 🔍 开始检查位置权限...")
         if (!hasLocationPermission()) {
             Timber.w("❌ [AmapLocationService] 🚫 位置权限未授予")
-            return Result.failure(SecurityException("位置权限未授予"))
+            return null
         }
         Timber.d("✅ [AmapLocationService] 🔓 位置权限检查通过")
         
@@ -142,11 +142,11 @@ class AmapLocationServiceImpl @Inject constructor(
         Timber.d("📦 [AmapLocationService] 🔍 检查缓存位置...")
         Timber.d("📦 [AmapLocationService] 📊 缓存状态 - 需要刷新: ${shouldRefreshLocation()}")
         if (!forceRefresh && !shouldRefreshLocation()) {
-            cachedLocation?.let { 
+            cachedLocation?.let {
                 val cacheAge = (System.currentTimeMillis() - lastLocationUpdateTime) / 1000
                 Timber.d("📦 [AmapLocationService] ✅ 使用缓存位置: ${it.locationName}")
                 Timber.d("📦 [AmapLocationService] ⏰ 缓存年龄: ${cacheAge}秒")
-                return Result.success(it)
+                return it
             }
         }
         Timber.d("📦 [AmapLocationService] ⏭️ 缓存无效或强制刷新，继续实时定位")
@@ -174,7 +174,7 @@ class AmapLocationServiceImpl @Inject constructor(
                         Timber.w(e, "🎯 [AmapLocationService] ⚠️ 后台精确定位失败")
                     }
                 }
-                return Result.success(quickLocation)
+                return quickLocation
             }
             Timber.d("⚡ [AmapLocationService] ❌ 快速定位无结果，进入正常定位流程")
         }
@@ -204,7 +204,7 @@ class AmapLocationServiceImpl @Inject constructor(
                     isLocationInProgress = false
                     
                     Timber.d("============================================================")
-                    return Result.success(locationInfo)
+                    return locationInfo
                 } else {
                     Timber.w("⚠️ [AmapLocationService] 💔 高德定位失败")
                     Timber.w("⚠️ [AmapLocationService] ⏱️ 尝试耗时: ${amapDuration}ms")
@@ -232,38 +232,21 @@ class AmapLocationServiceImpl @Inject constructor(
         val fallbackDuration = System.currentTimeMillis() - fallbackStartTime
         val totalTime = System.currentTimeMillis() - startTime
         
+        // 重置状态
+        isLocationInProgress = false
+
         return if (fallbackResult != null) {
-            if (fallbackResult.isSuccess) {
-                val locationInfo = fallbackResult.getOrNull()!!
-                Timber.d("🔄 [AmapLocationService] ✅ Google服务定位成功！")
-                Timber.d("🔄 [AmapLocationService] ⏱️ Google耗时: ${fallbackDuration}ms, 总耗时: ${totalTime}ms")
-                Timber.d("🔄 [AmapLocationService] 📍 位置结果: ${locationInfo.locationName}")
-                Timber.d("============================================================")
-                
-                // 重置状态
-                isLocationInProgress = false
-                
-                fallbackResult
-            } else {
-                Timber.e("🔄 [AmapLocationService] ❌ Google服务也失败了")
-                Timber.e("🔄 [AmapLocationService] ⏱️ 失败耗时: ${fallbackDuration}ms, 总耗时: ${totalTime}ms")
-                Timber.d("============================================================")
-                
-                // 重置状态
-                isLocationInProgress = false
-                
-                fallbackResult
-            }
+            Timber.d("🔄 [AmapLocationService] ✅ Google服务定位成功！")
+            Timber.d("🔄 [AmapLocationService] ⏱️ Google耗时: ${fallbackDuration}ms, 总耗时: ${totalTime}ms")
+            Timber.d("🔄 [AmapLocationService] 📍 位置结果: ${fallbackResult?.locationName}")
+            Timber.d("============================================================")
+            fallbackResult
         } else {
             Timber.e("🔄 [AmapLocationService] ⏰ Google服务超时")
             Timber.e("🔄 [AmapLocationService] ⏱️ 超时耗时: ${fallbackDuration}ms, 总耗时: ${totalTime}ms")
             Timber.e("🔄 [AmapLocationService] 💀 所有定位方案均失败")
             Timber.d("============================================================")
-            
-            // 确保重置状态
-            isLocationInProgress = false
-            
-            Result.failure(Exception("所有定位方案均失败：高德定位失败，Google服务超时"))
+            null
         }
     }
 
