@@ -7,8 +7,12 @@ import com.example.nextthingb1.data.local.dao.TaskDao
 import com.example.nextthingb1.data.local.database.TaskDatabase
 import com.example.nextthingb1.data.repository.TaskRepositoryImpl
 import com.example.nextthingb1.data.repository.LocationRepositoryImpl
+import com.example.nextthingb1.data.repository.CustomCategoryRepositoryImpl
+import com.example.nextthingb1.data.service.CategoryPreferencesManagerImpl
 import com.example.nextthingb1.domain.repository.TaskRepository
 import com.example.nextthingb1.domain.repository.LocationRepository
+import com.example.nextthingb1.domain.repository.CustomCategoryRepository
+import com.example.nextthingb1.domain.service.CategoryPreferencesManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -55,5 +59,21 @@ object DatabaseModule {
         @ApplicationContext context: Context
     ): LocationRepository {
         return LocationRepositoryImpl(locationDao, context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCustomCategoryRepository(
+        @ApplicationContext context: Context
+    ): CustomCategoryRepository {
+        return CustomCategoryRepositoryImpl(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCategoryPreferencesManager(
+        @ApplicationContext context: Context
+    ): CategoryPreferencesManager {
+        return CategoryPreferencesManagerImpl(context)
     }
 } 

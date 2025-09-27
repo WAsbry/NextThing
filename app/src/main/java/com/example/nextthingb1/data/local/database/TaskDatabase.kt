@@ -7,13 +7,15 @@ import androidx.room.TypeConverters
 import android.content.Context
 import com.example.nextthingb1.data.local.dao.TaskDao
 import com.example.nextthingb1.data.local.dao.LocationDao
+import com.example.nextthingb1.data.local.dao.NotificationStrategyDao
 import com.example.nextthingb1.data.local.entity.TaskEntity
 import com.example.nextthingb1.data.local.entity.LocationEntity
+import com.example.nextthingb1.data.local.entity.NotificationStrategyEntity
 import com.example.nextthingb1.data.local.converter.Converters
 
 @Database(
-    entities = [TaskEntity::class, LocationEntity::class],
-    version = 2,
+    entities = [TaskEntity::class, LocationEntity::class, NotificationStrategyEntity::class],
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -21,6 +23,7 @@ abstract class TaskDatabase : RoomDatabase() {
     
     abstract fun taskDao(): TaskDao
     abstract fun locationDao(): LocationDao
+    abstract fun notificationStrategyDao(): NotificationStrategyDao
     
     companion object {
         const val DATABASE_NAME = "next_thing_database"

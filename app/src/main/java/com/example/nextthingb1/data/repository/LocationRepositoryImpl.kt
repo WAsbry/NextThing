@@ -12,6 +12,7 @@ import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.LocationStatistics
 import com.example.nextthingb1.domain.model.LocationType
 import com.example.nextthingb1.domain.repository.LocationRepository
+import java.time.LocalDateTime
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -50,22 +51,49 @@ class LocationRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun insertLocation(location: LocationInfo): String {
-        locationDao.insertLocation(location.toEntity())
-        return location.id
+    override suspend fun insertLocation(location: LocationInfo): Result<LocationInfo> {
+        return try {
+            locationDao.insertLocation(location.toEntity())
+            Result.success(location)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun updateLocation(location: LocationInfo) {
         locationDao.updateLocation(location.toEntity())
     }
 
-    override suspend fun deleteLocation(locationId: String) {
-        locationDao.deleteLocationById(locationId)
+    override suspend fun deleteLocationById(locationId: String): Result<Unit> {
+        return try {
+            locationDao.deleteLocationById(locationId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
-    override suspend fun setAsCurrentLocation(locationId: String) {
-        locationDao.clearCurrentLocationFlag()
-        locationDao.setAsCurrentLocation(locationId)
+    override suspend fun setAsCurrentLocation(locationId: String): Result<Unit> {
+        return try {
+            locationDao.clearCurrentLocationFlag()
+            locationDao.setAsCurrentLocation(locationId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun incrementUsageCount(locationId: String): Result<Unit> {
+        return try {
+            locationDao.incrementUsageCount(locationId, LocalDateTime.now())
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getMostUsedLocations(limit: Int): List<LocationInfo> {
+        return locationDao.getMostUsedLocations(limit).map { it.toDomain() }
     }
 
     override suspend fun getLocationsInArea(
