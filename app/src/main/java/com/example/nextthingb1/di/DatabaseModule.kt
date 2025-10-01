@@ -27,13 +27,7 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideTaskDatabase(@ApplicationContext context: Context): TaskDatabase {
-        return Room.databaseBuilder(
-            context.applicationContext,
-            TaskDatabase::class.java,
-            TaskDatabase.DATABASE_NAME
-        )
-            .fallbackToDestructiveMigration()
-            .build()
+        return TaskDatabase.getDatabase(context)
     }
     
     @Provides

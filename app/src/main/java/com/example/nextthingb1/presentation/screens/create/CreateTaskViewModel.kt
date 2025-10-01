@@ -8,6 +8,8 @@ import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.CategoryItem
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
+import com.example.nextthingb1.domain.model.RepeatFrequency
+import com.example.nextthingb1.domain.model.RepeatFrequencyType
 import com.example.nextthingb1.domain.usecase.TaskUseCases
 import com.example.nextthingb1.domain.repository.CustomCategoryRepository
 import com.example.nextthingb1.domain.service.CategoryPreferencesManager
@@ -185,6 +187,32 @@ class CreateTaskViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedLocation = location)
     }
 
+    fun deleteLocation(locationId: String) {
+        viewModelScope.launch {
+            try {
+                locationUseCases.deleteLocation(locationId).fold(
+                    onSuccess = {
+                        // 删除成功，地点列表会自动更新（通过Flow）
+                        // 如果删除的是当前选中的地点，清除选择
+                        if (_uiState.value.selectedLocation?.id == locationId) {
+                            _uiState.value = _uiState.value.copy(selectedLocation = null)
+                        }
+                    },
+                    onFailure = { error ->
+                        // 删除失败的处理
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = "删除地点失败: ${error.message}"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "删除地点时发生错误: ${e.message}"
+                )
+            }
+        }
+    }
+
     fun updateImportanceUrgency(importanceUrgency: TaskImportanceUrgency?) {
         _uiState.value = _uiState.value.copy(importanceUrgency = importanceUrgency)
     }
@@ -195,6 +223,42 @@ class CreateTaskViewModel @Inject constructor(
 
     fun clearSelectedImage() {
         _uiState.value = _uiState.value.copy(selectedImageUri = null)
+    }
+
+    fun updateRepeatFrequency(repeatFrequency: RepeatFrequency) {
+        _uiState.value = _uiState.value.copy(repeatFrequency = repeatFrequency)
+    }
+
+    fun updateRepeatFrequencyType(type: RepeatFrequencyType) {
+        val currentRepeat = _uiState.value.repeatFrequency
+        val newRepeat = when (type) {
+            RepeatFrequencyType.NONE, RepeatFrequencyType.DAILY -> {
+                RepeatFrequency(type = type)
+            }
+            RepeatFrequencyType.WEEKLY -> {
+                RepeatFrequency(type = type, weekdays = currentRepeat.weekdays)
+            }
+            RepeatFrequencyType.MONTHLY -> {
+                RepeatFrequency(type = type, monthDays = currentRepeat.monthDays)
+            }
+        }
+        _uiState.value = _uiState.value.copy(repeatFrequency = newRepeat)
+    }
+
+    fun updateRepeatWeekdays(weekdays: Set<Int>) {
+        val currentRepeat = _uiState.value.repeatFrequency
+        if (currentRepeat.type == RepeatFrequencyType.WEEKLY) {
+            val newRepeat = currentRepeat.copy(weekdays = weekdays)
+            _uiState.value = _uiState.value.copy(repeatFrequency = newRepeat)
+        }
+    }
+
+    fun updateRepeatMonthDays(monthDays: Set<Int>) {
+        val currentRepeat = _uiState.value.repeatFrequency
+        if (currentRepeat.type == RepeatFrequencyType.MONTHLY) {
+            val newRepeat = currentRepeat.copy(monthDays = monthDays)
+            _uiState.value = _uiState.value.copy(repeatFrequency = newRepeat)
+        }
     }
 
     fun createTask() {
@@ -212,7 +276,8 @@ class CreateTaskViewModel @Inject constructor(
                     priority = currentState.priority,
                     category = currentState.category,
                     dueDate = if (currentState.dueDate.isNotBlank()) LocalDateTime.now().plusDays(1) else null,
-                    imageUri = currentState.selectedImageUri
+                    imageUri = currentState.selectedImageUri,
+                    repeatFrequency = currentState.repeatFrequency
                 )
                 
                 if (result.isSuccess) {
@@ -238,7 +303,9 @@ data class CreateTaskUiState(
     val isLoading: Boolean = false,
     val selectedLocation: LocationInfo? = null,
     val importanceUrgency: TaskImportanceUrgency? = null,
-    val selectedImageUri: String? = null
+    val selectedImageUri: String? = null,
+    val repeatFrequency: RepeatFrequency = RepeatFrequency(),
+    val errorMessage: String? = null
 ) {
     // 获取对应的TaskCategory，用于创建任务
     val category: TaskCategory

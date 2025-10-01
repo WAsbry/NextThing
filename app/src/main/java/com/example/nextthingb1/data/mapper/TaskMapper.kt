@@ -1,8 +1,7 @@
 package com.example.nextthingb1.data.mapper
 
 import com.example.nextthingb1.data.local.entity.TaskEntity
-import com.example.nextthingb1.domain.model.Task
-import com.example.nextthingb1.domain.model.Subtask
+import com.example.nextthingb1.domain.model.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -15,7 +14,29 @@ fun TaskEntity.toDomain(): Task {
     } catch (e: Exception) {
         emptyList()
     }
-    
+
+    val repeatFrequency = try {
+        gson.fromJson(repeatFrequencyJson, RepeatFrequency::class.java) ?: RepeatFrequency()
+    } catch (e: Exception) {
+        RepeatFrequency()
+    }
+
+    val locationInfo = try {
+        locationInfoJson?.let {
+            gson.fromJson(it, LocationInfo::class.java)
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    val importanceUrgency = try {
+        importanceUrgencyJson?.let {
+            gson.fromJson(it, TaskImportanceUrgency::class.java)
+        }
+    } catch (e: Exception) {
+        null
+    }
+
     return Task(
         id = id,
         title = title,
@@ -32,13 +53,19 @@ fun TaskEntity.toDomain(): Task {
         estimatedDuration = estimatedDuration,
         actualDuration = actualDuration,
         subtasks = subtasks,
-        imageUri = imageUri
+        imageUri = imageUri,
+        repeatFrequency = repeatFrequency,
+        locationInfo = locationInfo,
+        importanceUrgency = importanceUrgency
     )
 }
 
 fun Task.toEntity(): TaskEntity {
     val subtasksJson = gson.toJson(subtasks)
-    
+    val repeatFrequencyJson = gson.toJson(repeatFrequency)
+    val locationInfoJson = locationInfo?.let { gson.toJson(it) }
+    val importanceUrgencyJson = importanceUrgency?.let { gson.toJson(it) }
+
     return TaskEntity(
         id = id,
         title = title,
@@ -55,7 +82,10 @@ fun Task.toEntity(): TaskEntity {
         estimatedDuration = estimatedDuration,
         actualDuration = actualDuration,
         subtasksJson = subtasksJson,
-        imageUri = imageUri
+        imageUri = imageUri,
+        repeatFrequencyJson = repeatFrequencyJson,
+        locationInfoJson = locationInfoJson,
+        importanceUrgencyJson = importanceUrgencyJson
     )
 }
 

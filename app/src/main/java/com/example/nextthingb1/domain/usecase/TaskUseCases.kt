@@ -5,6 +5,7 @@ import com.example.nextthingb1.domain.model.TaskCategory
 import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
+import com.example.nextthingb1.domain.model.RepeatFrequency
 import com.example.nextthingb1.domain.repository.TaskRepository
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
@@ -52,7 +53,8 @@ class CreateTaskUseCase @Inject constructor(
         category: TaskCategory = TaskCategory.WORK,
         dueDate: LocalDateTime? = null,
         tags: List<String> = emptyList(),
-        imageUri: String? = null
+        imageUri: String? = null,
+        repeatFrequency: RepeatFrequency = RepeatFrequency()
     ): Result<String> {
         return try {
             if (title.isBlank()) {
@@ -66,7 +68,8 @@ class CreateTaskUseCase @Inject constructor(
                     dueDate = dueDate,
                     tags = tags,
                     isUrgent = dueDate?.let { it.isBefore(LocalDateTime.now().plusHours(2)) } ?: false,
-                    imageUri = imageUri
+                    imageUri = imageUri,
+                    repeatFrequency = repeatFrequency
                 )
                 val taskId = repository.insertTask(task)
                 Result.success(taskId)
