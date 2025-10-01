@@ -5,7 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +21,8 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.rememberAsyncImagePainter
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import com.example.nextthingb1.util.ToastHelper
 import java.io.File
 import java.io.FileOutputStream
 import android.graphics.Bitmap
@@ -97,6 +103,7 @@ fun CreateTaskScreen(
     var isImageExpanded by remember { mutableStateOf(false) }
     var isImportanceExpanded by remember { mutableStateOf(false) }
     var isReminderExpanded by remember { mutableStateOf(false) }
+    var isRepeatExpanded by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
 
     // 日期选择状态
@@ -137,12 +144,14 @@ fun CreateTaskScreen(
             isImageExpanded = isImageExpanded,
             isImportanceExpanded = isImportanceExpanded,
             isReminderExpanded = isReminderExpanded,
+            isRepeatExpanded = isRepeatExpanded,
             onTimeExpandToggle = { isTimeExpanded = !isTimeExpanded },
             onCategoryExpandToggle = { isCategoryExpanded = !isCategoryExpanded },
             onLocationExpandToggle = { isLocationExpanded = !isLocationExpanded },
             onImageExpandToggle = { isImageExpanded = !isImageExpanded },
             onImportanceExpandToggle = { isImportanceExpanded = !isImportanceExpanded },
             onReminderExpandToggle = { isReminderExpanded = !isReminderExpanded },
+            onRepeatExpandToggle = { isRepeatExpanded = !isRepeatExpanded },
             selectedCategoryItem = uiState.selectedCategoryItem,
             selectedPriority = uiState.priority,
             categories = categories,
@@ -156,12 +165,17 @@ fun CreateTaskScreen(
             onShowDatePicker = { showDatePicker = true },
             savedLocations = savedLocations,
             onNavigateToCreateLocation = onNavigateToCreateLocation,
+            onDeleteLocation = { locationId -> viewModel.deleteLocation(locationId) },
             selectedImageUri = uiState.selectedImageUri,
             onImageSelected = { viewModel.updateSelectedImage(it) },
             onImageCleared = { viewModel.clearSelectedImage() },
             selectedImportanceUrgency = uiState.importanceUrgency,
             onImportanceUrgencySelected = { viewModel.updateImportanceUrgency(it) },
-            onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy
+            onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
+            repeatFrequency = uiState.repeatFrequency,
+            onRepeatFrequencyTypeChange = { viewModel.updateRepeatFrequencyType(it) },
+            onRepeatWeekdaysChange = { viewModel.updateRepeatWeekdays(it) },
+            onRepeatMonthDaysChange = { viewModel.updateRepeatMonthDays(it) }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -352,12 +366,14 @@ private fun CollapsibleConfigSection(
     isImageExpanded: Boolean,
     isImportanceExpanded: Boolean,
     isReminderExpanded: Boolean,
+    isRepeatExpanded: Boolean,
     onTimeExpandToggle: () -> Unit,
     onCategoryExpandToggle: () -> Unit,
     onLocationExpandToggle: () -> Unit,
     onImageExpandToggle: () -> Unit,
     onImportanceExpandToggle: () -> Unit,
     onReminderExpandToggle: () -> Unit,
+    onRepeatExpandToggle: () -> Unit,
     selectedCategoryItem: CategoryItem?,
     selectedPriority: TaskPriority,
     categories: List<CategoryItem>,
@@ -371,12 +387,17 @@ private fun CollapsibleConfigSection(
     onShowDatePicker: () -> Unit,
     savedLocations: List<LocationInfo>,
     onNavigateToCreateLocation: () -> Unit,
+    onDeleteLocation: (String) -> Unit,
     selectedImageUri: String?,
     onImageSelected: (String?) -> Unit,
     onImageCleared: () -> Unit,
     selectedImportanceUrgency: TaskImportanceUrgency?,
     onImportanceUrgencySelected: (TaskImportanceUrgency?) -> Unit,
-    onNavigateToCreateNotificationStrategy: () -> Unit
+    onNavigateToCreateNotificationStrategy: () -> Unit,
+    repeatFrequency: com.example.nextthingb1.domain.model.RepeatFrequency,
+    onRepeatFrequencyTypeChange: (com.example.nextthingb1.domain.model.RepeatFrequencyType) -> Unit,
+    onRepeatWeekdaysChange: (Set<Int>) -> Unit,
+    onRepeatMonthDaysChange: (Set<Int>) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -434,6 +455,7 @@ private fun CollapsibleConfigSection(
                 selectedLocation = null,
                 onLocationSelected = { onLocationExpandToggle() },
                 onNavigateToCreateLocation = onNavigateToCreateLocation,
+                onDeleteLocation = onDeleteLocation,
                 modifier = Modifier.weight(1f)
             )
 
@@ -468,6 +490,25 @@ private fun CollapsibleConfigSection(
                 modifier = Modifier.weight(1f)
             )
 
+            // 重复频次配置卡
+            RepeatFrequencyConfigCard(
+                screenHeight = screenHeight,
+                screenWidth = screenWidth,
+                isExpanded = isRepeatExpanded,
+                onExpandToggle = onRepeatExpandToggle,
+                repeatFrequency = repeatFrequency,
+                onRepeatFrequencyTypeChange = onRepeatFrequencyTypeChange,
+                onWeekdaysChange = onRepeatWeekdaysChange,
+                onMonthDaysChange = onRepeatMonthDaysChange,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // 第四行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // 通知策略配置卡
             NotificationStrategyConfigCard(
                 screenHeight = screenHeight,
@@ -477,13 +518,16 @@ private fun CollapsibleConfigSection(
                 onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
                 modifier = Modifier.weight(1f)
             )
+
+            // 占位卡片（保持布局平衡）
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
 
 // 时间配置卡
 @Composable
-private fun TimeConfigCard(
+internal fun TimeConfigCard(
     screenHeight: androidx.compose.ui.unit.Dp,
     screenWidth: androidx.compose.ui.unit.Dp,
     isExpanded: Boolean,
@@ -491,14 +535,15 @@ private fun TimeConfigCard(
     selectedDate: LocalDate?,
     onDateSelected: (LocalDate?) -> Unit,
     onShowDatePicker: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = true
 ) {
     Column(modifier = modifier) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(80.dp)
-                .clickable { onExpandToggle() },
+                .clickable(enabled = isEditMode) { onExpandToggle() },
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
             shape = RoundedCornerShape(8.dp)
@@ -537,18 +582,20 @@ private fun TimeConfigCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = Color(0xFF9E9E9E),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
         // 展开的选项菜单
-        if (isExpanded) {
+        if (isExpanded && isEditMode) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -609,7 +656,7 @@ private fun TimeConfigCard(
 
 // 分类・优先级配置卡
 @Composable
-private fun CategoryPriorityConfigCard(
+internal fun CategoryPriorityConfigCard(
     screenHeight: androidx.compose.ui.unit.Dp,
     screenWidth: androidx.compose.ui.unit.Dp,
     isExpanded: Boolean,
@@ -622,14 +669,15 @@ private fun CategoryPriorityConfigCard(
     onCreateCategoryClicked: () -> Unit,
     onDeleteCategory: (String) -> Unit,
     onPinCategory: (String, Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = true
 ) {
     Column(modifier = modifier) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(80.dp)
-                .clickable { onExpandToggle() },
+                .clickable(enabled = isEditMode) { onExpandToggle() },
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
             shape = RoundedCornerShape(8.dp)
@@ -668,18 +716,20 @@ private fun CategoryPriorityConfigCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = Color(0xFF9E9E9E),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
         // 展开的分类选项菜单
-        if (isExpanded) {
+        if (isExpanded && isEditMode) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -722,7 +772,7 @@ private fun CategoryPriorityConfigCard(
 
 // 地点配置卡
 @Composable
-private fun LocationConfigCard(
+internal fun LocationConfigCard(
     screenHeight: androidx.compose.ui.unit.Dp,
     screenWidth: androidx.compose.ui.unit.Dp,
     isExpanded: Boolean,
@@ -731,7 +781,9 @@ private fun LocationConfigCard(
     selectedLocation: LocationInfo?,
     onLocationSelected: (LocationInfo?) -> Unit,
     onNavigateToCreateLocation: () -> Unit,
-    modifier: Modifier = Modifier
+    onDeleteLocation: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = true
 ) {
     // 内部状态管理选中的位置
     var internalSelectedLocation by remember { mutableStateOf<LocationInfo?>(null) }
@@ -740,7 +792,7 @@ private fun LocationConfigCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(80.dp)
-                .clickable { onExpandToggle() },
+                .clickable(enabled = isEditMode) { onExpandToggle() },
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
             shape = RoundedCornerShape(8.dp)
@@ -779,18 +831,20 @@ private fun LocationConfigCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = Color(0xFF9E9E9E),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
         // 展开的位置选项菜单
-        if (isExpanded) {
+        if (isExpanded && isEditMode) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -803,8 +857,7 @@ private fun LocationConfigCard(
                     modifier = Modifier.padding(8.dp)
                 ) {
                     // 实时位置选项
-                    LocationMenuItem(
-                        title = "实时位置",
+                    RealTimeLocationMenuItem(
                         onClick = {
                             internalSelectedLocation = null
                             onLocationSelected(null)
@@ -814,10 +867,13 @@ private fun LocationConfigCard(
                     // 显示已保存的地点
                     savedLocations.forEach { location ->
                         LocationMenuItem(
-                            title = location.locationName,
+                            location = location,
                             onClick = {
                                 internalSelectedLocation = location
                                 onLocationSelected(location)
+                            },
+                            onDelete = { locationId ->
+                                onDeleteLocation(locationId)
                             }
                         )
                     }
@@ -843,24 +899,66 @@ private fun LocationConfigCard(
 
 @Composable
 private fun LocationMenuItem(
-    title: String,
-    onClick: () -> Unit
+    location: LocationInfo,
+    onClick: () -> Unit,
+    onDelete: (String) -> Unit
 ) {
-    Text(
-        text = title,
-        color = Color(0xFF424242),
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Medium,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 8.dp, horizontal = 12.dp)
-    )
+            .padding(vertical = 4.dp, horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = location.locationName,
+            color = Color(0xFF424242),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+
+        // 删除按钮（只对手动添加的地点显示）
+        if (location.locationType == com.example.nextthingb1.domain.model.LocationType.MANUAL) {
+            IconButton(
+                onClick = { onDelete(location.id) },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = android.R.drawable.ic_menu_delete),
+                    contentDescription = "删除地点",
+                    tint = Color(0xFFE57373),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RealTimeLocationMenuItem(
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 4.dp, horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "实时位置",
+            color = Color(0xFF424242),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+    }
 }
 
 // 图片配置卡
 @Composable
-private fun ImageConfigCard(
+internal fun ImageConfigCard(
     screenHeight: androidx.compose.ui.unit.Dp,
     screenWidth: androidx.compose.ui.unit.Dp,
     isExpanded: Boolean,
@@ -868,7 +966,8 @@ private fun ImageConfigCard(
     selectedImageUri: String?,
     onImageSelected: (String?) -> Unit,
     onImageCleared: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = true
 ) {
     // 图片选择器launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -916,7 +1015,7 @@ private fun ImageConfigCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(80.dp)
-                .clickable { onExpandToggle() },
+                .clickable(enabled = isEditMode) { onExpandToggle() },
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
             shape = RoundedCornerShape(8.dp)
@@ -955,18 +1054,20 @@ private fun ImageConfigCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = Color(0xFF9E9E9E),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
         // 展开的内容区域
-        if (isExpanded) {
+        if (isExpanded && isEditMode) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1082,14 +1183,15 @@ private fun ImageConfigCard(
 
 // 重要性配置卡
 @Composable
-private fun ImportanceConfigCard(
+internal fun ImportanceConfigCard(
     screenHeight: androidx.compose.ui.unit.Dp,
     screenWidth: androidx.compose.ui.unit.Dp,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
     selectedImportanceUrgency: TaskImportanceUrgency?,
     onImportanceUrgencySelected: (TaskImportanceUrgency?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = true
 ) {
     // 内部状态管理选中的重要性和紧急性组合
     var internalSelectedImportanceUrgency by remember { mutableStateOf<TaskImportanceUrgency?>(null) }
@@ -1100,7 +1202,7 @@ private fun ImportanceConfigCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(80.dp)
-                .clickable { onExpandToggle() },
+                .clickable(enabled = isEditMode) { onExpandToggle() },
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
             shape = RoundedCornerShape(8.dp)
@@ -1139,18 +1241,20 @@ private fun ImportanceConfigCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = Color(0xFF9E9E9E),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
         // 展开的重要性和紧急性选项菜单
-        if (isExpanded) {
+        if (isExpanded && isEditMode) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1231,13 +1335,14 @@ private fun ImportanceUrgencyMenuItem(
 
 // 通知策略配置卡
 @Composable
-private fun NotificationStrategyConfigCard(
+internal fun NotificationStrategyConfigCard(
     screenHeight: androidx.compose.ui.unit.Dp,
     screenWidth: androidx.compose.ui.unit.Dp,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
     onNavigateToCreateNotificationStrategy: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = true
 ) {
     Column(modifier = modifier) {
         // 主卡片
@@ -1245,7 +1350,7 @@ private fun NotificationStrategyConfigCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(80.dp)
-                .clickable { onExpandToggle() },
+                .clickable(enabled = isEditMode) { onExpandToggle() },
             colors = CardDefaults.cardColors(containerColor = Color.White),
             border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
             shape = RoundedCornerShape(8.dp)
@@ -1284,18 +1389,20 @@ private fun NotificationStrategyConfigCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = Color(0xFF9E9E9E),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
         // 展开的内容区域
-        if (isExpanded) {
+        if (isExpanded && isEditMode) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1396,7 +1503,7 @@ private fun BottomActionSection(
 // Material 3 日期选择器对话框
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MaterialDatePickerDialog(
+internal fun MaterialDatePickerDialog(
     onDateSelected: (LocalDate) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1538,6 +1645,350 @@ private fun CategoryMenuItem(
                 tint = Color(0xFFE57373),
                 modifier = Modifier.size(16.dp)
             )
+        }
+    }
+}
+
+// 重复频次配置卡
+@Composable
+internal fun RepeatFrequencyConfigCard(
+    screenHeight: androidx.compose.ui.unit.Dp,
+    screenWidth: androidx.compose.ui.unit.Dp,
+    isExpanded: Boolean,
+    onExpandToggle: () -> Unit,
+    repeatFrequency: com.example.nextthingb1.domain.model.RepeatFrequency,
+    onRepeatFrequencyTypeChange: (com.example.nextthingb1.domain.model.RepeatFrequencyType) -> Unit,
+    onWeekdaysChange: (Set<Int>) -> Unit,
+    onMonthDaysChange: (Set<Int>) -> Unit,
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = true
+) {
+    val context = LocalContext.current
+    var selectedWeekdays by remember { mutableStateOf(repeatFrequency.weekdays) }
+    var selectedMonthDays by remember { mutableStateOf(repeatFrequency.monthDays) }
+    var selectedType by remember { mutableStateOf(repeatFrequency.type) }
+
+    Column(modifier = modifier) {
+        // 主卡片
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .clickable(enabled = isEditMode) { onExpandToggle() },
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+            ) {
+                // 左上角标签
+                Text(
+                    text = "重复频次",
+                    color = Color(0xFF9E9E9E),
+                    fontSize = 10.sp,
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
+
+                // 主要内容行
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.CenterStart)
+                        .padding(top = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "⏰",
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+
+                    Text(
+                        text = repeatFrequency.getDisplayText(),
+                        color = if (repeatFrequency.type == com.example.nextthingb1.domain.model.RepeatFrequencyType.NONE)
+                               Color(0xFF9E9E9E) else Color(0xFF424242),
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 展开的选项面板
+        if (isExpanded && isEditMode) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .heightIn(max = (screenHeight * 0.6f)),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // 基础选项
+                    RepeatOptionItem(
+                        text = "单次任务",
+                        isSelected = selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.NONE,
+                        onClick = {
+                            selectedType = com.example.nextthingb1.domain.model.RepeatFrequencyType.NONE
+                            onRepeatFrequencyTypeChange(com.example.nextthingb1.domain.model.RepeatFrequencyType.NONE)
+                            onExpandToggle()
+                        }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = Color(0xFFE0E0E0)
+                    )
+
+                    RepeatOptionItem(
+                        text = "每日任务",
+                        isSelected = selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.DAILY,
+                        onClick = {
+                            selectedType = com.example.nextthingb1.domain.model.RepeatFrequencyType.DAILY
+                            onRepeatFrequencyTypeChange(com.example.nextthingb1.domain.model.RepeatFrequencyType.DAILY)
+                            onExpandToggle()
+                        }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = Color(0xFFE0E0E0)
+                    )
+
+                    // 自定义每周
+                    RepeatOptionItem(
+                        text = "自定义（每周）",
+                        isSelected = selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY,
+                        onClick = {
+                            selectedType = com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY
+                            onRepeatFrequencyTypeChange(com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY)
+                        }
+                    )
+
+                    // 星期选择器
+                    if (selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY) {
+                        WeekdaySelector(
+                            selectedWeekdays = selectedWeekdays,
+                            onWeekdayToggle = { day ->
+                                selectedWeekdays = if (selectedWeekdays.contains(day)) {
+                                    selectedWeekdays - day
+                                } else {
+                                    // 限制不能全选（最多选择6天）
+                                    if (selectedWeekdays.size < 6) {
+                                        selectedWeekdays + day
+                                    } else {
+                                        ToastHelper.showDebouncedToast(context, "若全选，建议设置为每日任务")
+                                        selectedWeekdays
+                                    }
+                                }
+                                onWeekdaysChange(selectedWeekdays)
+                            }
+                        )
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        color = Color(0xFFE0E0E0)
+                    )
+
+                    // 自定义每月
+                    RepeatOptionItem(
+                        text = "自定义（每月）",
+                        isSelected = selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY,
+                        onClick = {
+                            selectedType = com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY
+                            onRepeatFrequencyTypeChange(com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY)
+                        }
+                    )
+
+                    // 月份日期选择器
+                    if (selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY) {
+                        MonthDaySelector(
+                            selectedDays = selectedMonthDays,
+                            onDayToggle = { day ->
+                                selectedMonthDays = if (selectedMonthDays.contains(day)) {
+                                    selectedMonthDays - day
+                                } else {
+                                    // 限制不能全选（最多选择27天）
+                                    if (selectedMonthDays.size < 27) {
+                                        selectedMonthDays + day
+                                    } else {
+                                        ToastHelper.showDebouncedToast(context, "若全选，建议设置为每日任务")
+                                        selectedMonthDays
+                                    }
+                                }
+                                onMonthDaysChange(selectedMonthDays)
+                            }
+                        )
+                    }
+
+                    // 确认按钮
+                    if (selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY ||
+                        selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY) {
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                if ((selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY && selectedWeekdays.isEmpty()) ||
+                                    (selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY && selectedMonthDays.isEmpty())) {
+                                    // TODO: 显示错误提示
+                                } else {
+                                    onExpandToggle()
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .align(Alignment.CenterHorizontally),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)),
+                            shape = RoundedCornerShape(5.dp)
+                        ) {
+                            Text(
+                                text = "确认",
+                                color = Color.White,
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepeatOptionItem(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = isSelected,
+            onClick = onClick,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = Color(0xFF2196F3),
+                unselectedColor = Color(0xFF9E9E9E)
+            )
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            text = text,
+            color = Color(0xFF424242),
+            fontSize = 14.sp
+        )
+    }
+}
+
+@Composable
+private fun WeekdaySelector(
+    selectedWeekdays: Set<Int>,
+    onWeekdayToggle: (Int) -> Unit
+) {
+    val weekdays = listOf("一", "二", "三", "四", "五", "六", "日")
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        weekdays.forEachIndexed { index, dayName ->
+            val dayNumber = index + 1
+            val isSelected = selectedWeekdays.contains(dayNumber)
+
+            Button(
+                onClick = { onWeekdayToggle(dayNumber) },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSelected) Color(0xFF2196F3) else Color(0xFFE0E0E0),
+                    contentColor = if (isSelected) Color.White else Color(0xFF424242)
+                ),
+                shape = RoundedCornerShape(3.dp),
+                contentPadding = PaddingValues(2.dp)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "周",
+                        fontSize = 10.sp,
+                        color = if (isSelected) Color.White else Color(0xFF424242)
+                    )
+                    Text(
+                        text = dayName,
+                        fontSize = 10.sp,
+                        color = if (isSelected) Color.White else Color(0xFF424242)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthDaySelector(
+    selectedDays: Set<Int>,
+    onDayToggle: (Int) -> Unit
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(7),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        items(28) { index ->
+            val day = index + 1
+            val isSelected = selectedDays.contains(day)
+
+            Button(
+                onClick = { onDayToggle(day) },
+                modifier = Modifier
+                    .aspectRatio(1f)
+                    .size(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSelected) Color(0xFF2196F3) else Color.Transparent,
+                    contentColor = if (isSelected) Color.White else Color(0xFF424242)
+                ),
+                border = if (!isSelected) BorderStroke(0.5.dp, Color(0xFFE0E0E0)) else null,
+                shape = CircleShape,
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = day.toString(),
+                    fontSize = 9.sp
+                )
+            }
         }
     }
 }

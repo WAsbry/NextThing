@@ -33,6 +33,7 @@ import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
 import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatus
+import com.example.nextthingb1.domain.model.TaskTab
 import com.example.nextthingb1.LocalPermissionLauncher
 import com.example.nextthingb1.presentation.components.LocationDetailDialog
 import com.example.nextthingb1.presentation.components.LocationHelpDialog
@@ -40,6 +41,7 @@ import com.example.nextthingb1.presentation.components.LocationPermissionDialog
 import com.example.nextthingb1.presentation.components.WeatherSummaryCard
 import com.example.nextthingb1.domain.model.WeatherInfo
 import com.example.nextthingb1.presentation.theme.*
+import com.example.nextthingb1.presentation.components.TaskItemCard
 import com.example.nextthingb1.util.PermissionHelper
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -594,17 +596,20 @@ private fun TaskItem(
     val actionWidth = 72.dp
     val actionWidthPx = with(LocalDensity.current) { actionWidth.toPx() }
     val maxOffset = actionWidthPx * 3 // 三个操作按钮的总宽度
-    
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp)
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
         // 背景操作按钮 - 使用圆角和更柔和的颜色
         Row(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .height(72.dp)
+                .fillMaxHeight()
                 .clip(RoundedCornerShape(12.dp))
         ) {
             // 完成按钮
@@ -710,9 +715,8 @@ private fun TaskItem(
             }
         }
         
-        // 主要内容卡片 - 使用更柔和的背景色
-        Card(
-            onClick = onClick,
+        // 主要内容卡片 - 新的简洁设计
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.roundToInt(), 0) }
@@ -730,217 +734,19 @@ private fun TaskItem(
                         val newOffset = offsetX + dragAmount
                         offsetX = newOffset.coerceIn(-maxOffset, 0f)
                     }
-                },
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = BgCard
-            ),
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = 2.dp
-            )
+                }
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(BgCard)
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 任务图标 - 更柔和的设计
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = when (task.category) {
-                                    TaskCategory.WORK -> listOf(Color(0xFF42A5F5).copy(alpha = 0.15f), Color(0xFF42A5F5).copy(alpha = 0.25f))
-                                    TaskCategory.STUDY -> listOf(Color(0xFFAB47BC).copy(alpha = 0.15f), Color(0xFFAB47BC).copy(alpha = 0.25f))
-                                    TaskCategory.LIFE -> listOf(Color(0xFF66BB6A).copy(alpha = 0.15f), Color(0xFF66BB6A).copy(alpha = 0.25f))
-                                    TaskCategory.HEALTH -> listOf(Color(0xFFE91E63).copy(alpha = 0.15f), Color(0xFFE91E63).copy(alpha = 0.25f))
-                                    TaskCategory.PERSONAL -> listOf(Color(0xFFFF9800).copy(alpha = 0.15f), Color(0xFFFF9800).copy(alpha = 0.25f))
-                                    TaskCategory.OTHER -> listOf(Color(0xFF9E9E9E).copy(alpha = 0.15f), Color(0xFF9E9E9E).copy(alpha = 0.25f))
-                                }
-                            )
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = when (task.category) {
-                                TaskCategory.WORK -> Color(0xFF42A5F5).copy(alpha = 0.3f)
-                                TaskCategory.STUDY -> Color(0xFFAB47BC).copy(alpha = 0.3f)
-                                TaskCategory.LIFE -> Color(0xFF66BB6A).copy(alpha = 0.3f)
-                                TaskCategory.HEALTH -> Color(0xFFE91E63).copy(alpha = 0.3f)
-                                TaskCategory.PERSONAL -> Color(0xFFFF9800).copy(alpha = 0.3f)
-                                TaskCategory.OTHER -> Color(0xFF9E9E9E).copy(alpha = 0.3f)
-                            },
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = when (task.category) {
-                            TaskCategory.WORK -> "💼"
-                            TaskCategory.STUDY -> "📚"
-                            TaskCategory.LIFE -> "🏠"
-                            TaskCategory.HEALTH -> "❤️"
-                            TaskCategory.PERSONAL -> "👤"
-                            TaskCategory.OTHER -> "📋"
-                        },
-                        fontSize = 18.sp
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(12.dp))
-                
-                // 任务内容
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = task.title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary,
-                        textDecoration = if (task.status == TaskStatus.COMPLETED) TextDecoration.LineThrough else null
-                    )
-                    
-                    if (task.description.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = task.description,
-                            fontSize = 13.sp,
-                            color = TextSecondary,
-                            maxLines = 1
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(6.dp))
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // 优先级标签 - 更柔和的设计
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    when (task.priority) {
-                                        TaskPriority.HIGH -> Danger.copy(alpha = 0.08f)
-                                        TaskPriority.MEDIUM -> Warning.copy(alpha = 0.08f)
-                                        TaskPriority.LOW -> Success.copy(alpha = 0.08f)
-                                    },
-                                    RoundedCornerShape(6.dp)
-                                )
-                                .border(
-                                    width = 0.5.dp,
-                                    color = when (task.priority) {
-                                        TaskPriority.HIGH -> Danger.copy(alpha = 0.2f)
-                                        TaskPriority.MEDIUM -> Warning.copy(alpha = 0.2f)
-                                        TaskPriority.LOW -> Success.copy(alpha = 0.2f)
-                                    },
-                                    shape = RoundedCornerShape(6.dp)
-                                )
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = when (task.priority) {
-                                    TaskPriority.HIGH -> "高"
-                                    TaskPriority.MEDIUM -> "中"
-                                    TaskPriority.LOW -> "低"
-                                },
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = when (task.priority) {
-                                    TaskPriority.HIGH -> Danger.copy(alpha = 0.8f)
-                                    TaskPriority.MEDIUM -> Warning.copy(alpha = 0.8f)
-                                    TaskPriority.LOW -> Success.copy(alpha = 0.8f)
-                                }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
-                        // 分类标签
-                        Text(
-                            text = task.category.displayName,
-                            fontSize = 11.sp,
-                            color = TextMuted,
-                            modifier = Modifier
-                                .background(
-                                    BgSecondary,
-                                    RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                        
-                        task.dueDate?.let {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (task.isUrgent) "距截止 1:20" else "14:00",
-                                fontSize = 11.sp,
-                                color = if (task.isUrgent) Danger else TextSecondary,
-                                modifier = Modifier
-                                    .background(
-                                        if (task.isUrgent) Danger.copy(alpha = 0.1f) else BgSecondary,
-                                        RoundedCornerShape(4.dp)
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.width(12.dp))
-                
-                // 任务状态 - 更精致的设计
-                Column(
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                brush = Brush.horizontalGradient(
-                                    colors = when (task.status) {
-                                        TaskStatus.COMPLETED -> listOf(Success.copy(alpha = 0.1f), Success.copy(alpha = 0.15f))
-                                        TaskStatus.IN_PROGRESS -> listOf(Primary.copy(alpha = 0.1f), Primary.copy(alpha = 0.15f))
-                                        TaskStatus.CANCELLED -> listOf(TextMuted.copy(alpha = 0.1f), TextMuted.copy(alpha = 0.15f))
-                                        TaskStatus.OVERDUE -> listOf(Danger.copy(alpha = 0.1f), Danger.copy(alpha = 0.15f))
-                                        TaskStatus.PENDING -> if (task.isUrgent) 
-                                            listOf(Danger.copy(alpha = 0.1f), Danger.copy(alpha = 0.15f)) 
-                                            else listOf(Primary.copy(alpha = 0.08f), Primary.copy(alpha = 0.12f))
-                                    }
-                                ),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .border(
-                                width = 0.5.dp,
-                                color = when (task.status) {
-                                    TaskStatus.COMPLETED -> Success.copy(alpha = 0.3f)
-                                    TaskStatus.IN_PROGRESS -> Primary.copy(alpha = 0.3f)
-                                    TaskStatus.CANCELLED -> TextMuted.copy(alpha = 0.3f)
-                                    TaskStatus.OVERDUE -> Danger.copy(alpha = 0.3f)
-                                    TaskStatus.PENDING -> if (task.isUrgent) Danger.copy(alpha = 0.3f) else Primary.copy(alpha = 0.2f)
-                                },
-                                RoundedCornerShape(8.dp)
-                            )
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = when (task.status) {
-                                TaskStatus.COMPLETED -> "已完成"
-                                TaskStatus.IN_PROGRESS -> "进行中"
-                                TaskStatus.CANCELLED -> "已取消"
-                                TaskStatus.OVERDUE -> "已过期"
-                                TaskStatus.PENDING -> if (task.isUrgent) "紧急" else "待办"
-                            },
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = when (task.status) {
-                                TaskStatus.COMPLETED -> Success
-                                TaskStatus.IN_PROGRESS -> Primary
-                                TaskStatus.CANCELLED -> TextMuted
-                                TaskStatus.OVERDUE -> Danger
-                                TaskStatus.PENDING -> if (task.isUrgent) Danger else Primary
-                            }
-                        )
-                    }
-                }
-            }
+            TaskItemCard(
+                task = task,
+                onClick = onClick
+            )
         }
+        }
+
+        // 分割线
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = Color(0xFFE0E0E0)
+        )
     }
 } 

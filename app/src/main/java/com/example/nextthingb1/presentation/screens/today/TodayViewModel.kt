@@ -19,11 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
-
-enum class TaskTab(val title: String) {
-    PENDING("待办"),
-    COMPLETED("已完成")
-}
+import com.example.nextthingb1.domain.model.TaskTab
 
 data class TodayUiState(
     val allTasks: List<Task> = emptyList(),

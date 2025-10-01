@@ -1,33 +1,55 @@
 package com.example.nextthingb1.presentation.screens.taskdetail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
 import com.example.nextthingb1.domain.model.TaskPriority
-import com.example.nextthingb1.domain.model.TaskStatus
+import com.example.nextthingb1.domain.model.TaskImportanceUrgency
+import com.example.nextthingb1.domain.model.RepeatFrequency
 import com.example.nextthingb1.domain.model.Subtask
+import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.presentation.theme.*
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskDetailScreen(
     taskId: String,
@@ -36,38 +58,230 @@ fun TaskDetailScreen(
     viewModel: TaskDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
+    val categories by viewModel.categories.collectAsState()
+    val savedLocations by viewModel.savedLocations.collectAsState()
+    val configuration = LocalConfiguration.current
+    val screenHeight = configuration.screenHeightDp.dp
+    val screenWidth = configuration.screenWidthDp.dp
+
+    // 卡片展开状态
+    var isTimeExpanded by remember { mutableStateOf(false) }
+    var isCategoryExpanded by remember { mutableStateOf(false) }
+    var isLocationExpanded by remember { mutableStateOf(false) }
+    var isImportanceExpanded by remember { mutableStateOf(false) }
+    var isImageExpanded by remember { mutableStateOf(false) }
+    var isRepeatExpanded by remember { mutableStateOf(false) }
+    var isNotificationExpanded by remember { mutableStateOf(false) }
+
+    // 日期选择器状态
+    var showDatePicker by remember { mutableStateOf(false) }
+
     LaunchedEffect(taskId) {
         viewModel.loadTask(taskId)
     }
-    
-    Column(
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgPrimary)
+            .background(Color(0xFFF5F5F5))
     ) {
-        // 头部导航
-        TaskDetailTopHeader(
-            onBackPressed = onBackPressed,
-            onEditTask = onEditTask,
-            onDeleteTask = { viewModel.deleteTask() }
-        )
-        
         when {
             uiState.isLoading -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = Color(0xFF71CBF4))
                 }
             }
             uiState.task != null -> {
-                TaskDetailContent(
-                    task = uiState.task!!,
-                    onToggleStatus = { viewModel.toggleTaskStatus() },
-                    onToggleSubtask = { subtaskId -> viewModel.toggleSubtaskStatus(subtaskId) }
-                )
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // 顶部导航区
+                    TaskDetailTopNavigation(
+                        isEditMode = uiState.isEditMode,
+                        onBackPressed = onBackPressed,
+                        onEditClick = { viewModel.enterEditMode() },
+                        onDeleteClick = { viewModel.showDeleteConfirmDialog() }
+                    )
+
+                    // 内容区域
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // 任务标题和描述卡片
+                        TaskTitleDescriptionCard(
+                            task = uiState.task!!,
+                            isEditMode = uiState.isEditMode,
+                            editedTitle = uiState.editedTitle,
+                            editedDescription = uiState.editedDescription,
+                            onTitleChange = viewModel::updateEditedTitle,
+                            onDescriptionChange = viewModel::updateEditedDescription
+                        )
+
+                        // 第一行：时间 + 分类·优先级
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            com.example.nextthingb1.presentation.screens.create.TimeConfigCard(
+                                screenHeight = screenHeight,
+                                screenWidth = screenWidth,
+                                isExpanded = isTimeExpanded,
+                                onExpandToggle = { isTimeExpanded = !isTimeExpanded },
+                                selectedDate = if (uiState.isEditMode) uiState.editedDueDate?.toLocalDate() else uiState.task!!.dueDate?.toLocalDate(),
+                                onDateSelected = { date ->
+                                    viewModel.updateEditedDueDate(date?.atStartOfDay())
+                                },
+                                onShowDatePicker = { showDatePicker = true },
+                                modifier = Modifier.weight(1f),
+                                isEditMode = uiState.isEditMode
+                            )
+
+                            com.example.nextthingb1.presentation.screens.create.CategoryPriorityConfigCard(
+                                screenHeight = screenHeight,
+                                screenWidth = screenWidth,
+                                isExpanded = isCategoryExpanded,
+                                onExpandToggle = { isCategoryExpanded = !isCategoryExpanded },
+                                selectedCategoryItem = if (uiState.isEditMode) uiState.editedCategoryItem else null,
+                                selectedPriority = if (uiState.isEditMode) uiState.editedPriority else uiState.task!!.priority,
+                                categories = categories,
+                                onCategorySelected = { categoryItem ->
+                                    viewModel.updateSelectedCategory(categoryItem)
+                                },
+                                onPrioritySelected = { priority ->
+                                    viewModel.updateEditedPriority(priority)
+                                },
+                                onCreateCategoryClicked = { /* TODO: 打开创建分类对话框 */ },
+                                onDeleteCategory = { categoryId ->
+                                    viewModel.deleteCategory(categoryId)
+                                },
+                                onPinCategory = { categoryId, isPinned ->
+                                    viewModel.pinCategory(categoryId, isPinned)
+                                },
+                                modifier = Modifier.weight(1f),
+                                isEditMode = uiState.isEditMode
+                            )
+                        }
+
+                        // 第二行：位置 + 重要性
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            com.example.nextthingb1.presentation.screens.create.LocationConfigCard(
+                                screenHeight = screenHeight,
+                                screenWidth = screenWidth,
+                                isExpanded = isLocationExpanded,
+                                onExpandToggle = { isLocationExpanded = !isLocationExpanded },
+                                savedLocations = savedLocations,
+                                selectedLocation = if (uiState.isEditMode) uiState.editedLocation else uiState.task!!.locationInfo,
+                                onLocationSelected = { location ->
+                                    viewModel.updateEditedLocation(location)
+                                },
+                                onNavigateToCreateLocation = { /* TODO: 导航到创建位置页面 */ },
+                                onDeleteLocation = { locationId ->
+                                    viewModel.deleteLocation(locationId)
+                                },
+                                modifier = Modifier.weight(1f),
+                                isEditMode = uiState.isEditMode
+                            )
+
+                            com.example.nextthingb1.presentation.screens.create.ImportanceConfigCard(
+                                screenHeight = screenHeight,
+                                screenWidth = screenWidth,
+                                isExpanded = isImportanceExpanded,
+                                onExpandToggle = { isImportanceExpanded = !isImportanceExpanded },
+                                selectedImportanceUrgency = if (uiState.isEditMode) uiState.editedImportanceUrgency else uiState.task!!.importanceUrgency,
+                                onImportanceUrgencySelected = { importance ->
+                                    viewModel.updateEditedImportanceUrgency(importance)
+                                },
+                                modifier = Modifier.weight(1f),
+                                isEditMode = uiState.isEditMode
+                            )
+                        }
+
+                        // 第三行：图片 + 重复频次
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            com.example.nextthingb1.presentation.screens.create.ImageConfigCard(
+                                screenHeight = screenHeight,
+                                screenWidth = screenWidth,
+                                isExpanded = isImageExpanded,
+                                onExpandToggle = { isImageExpanded = !isImageExpanded },
+                                selectedImageUri = if (uiState.isEditMode) uiState.editedImageUri else uiState.task!!.imageUri,
+                                onImageSelected = { uri ->
+                                    viewModel.updateEditedImagePath(uri)
+                                },
+                                onImageCleared = {
+                                    viewModel.updateEditedImagePath(null)
+                                },
+                                modifier = Modifier.weight(1f),
+                                isEditMode = uiState.isEditMode
+                            )
+
+                            com.example.nextthingb1.presentation.screens.create.RepeatFrequencyConfigCard(
+                                screenHeight = screenHeight,
+                                screenWidth = screenWidth,
+                                isExpanded = isRepeatExpanded,
+                                onExpandToggle = { isRepeatExpanded = !isRepeatExpanded },
+                                repeatFrequency = if (uiState.isEditMode) uiState.editedRepeatFrequency else uiState.task!!.repeatFrequency,
+                                onRepeatFrequencyTypeChange = { type ->
+                                    viewModel.updateEditedRepeatFrequency(
+                                        uiState.editedRepeatFrequency.copy(type = type)
+                                    )
+                                },
+                                onWeekdaysChange = { weekdays ->
+                                    viewModel.updateEditedRepeatFrequency(
+                                        uiState.editedRepeatFrequency.copy(weekdays = weekdays)
+                                    )
+                                },
+                                onMonthDaysChange = { monthDays ->
+                                    viewModel.updateEditedRepeatFrequency(
+                                        uiState.editedRepeatFrequency.copy(monthDays = monthDays)
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                isEditMode = uiState.isEditMode
+                            )
+                        }
+
+                        // 第四行：通知策略 + 占位
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            com.example.nextthingb1.presentation.screens.create.NotificationStrategyConfigCard(
+                                screenHeight = screenHeight,
+                                screenWidth = screenWidth,
+                                isExpanded = isNotificationExpanded,
+                                onExpandToggle = { isNotificationExpanded = !isNotificationExpanded },
+                                onNavigateToCreateNotificationStrategy = { /* TODO: 导航到创建通知策略页面 */ },
+                                modifier = Modifier.weight(1f),
+                                isEditMode = uiState.isEditMode
+                            )
+
+                            // 占位卡片（保持布局平衡）
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+
+                    // 编辑模式底部按钮
+                    if (uiState.isEditMode) {
+                        EditModeBottomButtons(
+                            onCancel = { viewModel.exitEditMode() },
+                            onSave = { viewModel.saveChanges() }
+                        )
+                    }
+                }
             }
             else -> {
                 Box(
@@ -76,515 +290,326 @@ fun TaskDetailScreen(
                 ) {
                     Text(
                         text = uiState.errorMessage ?: "任务不存在",
-                        color = TextSecondary
+                        color = Color(0xFF9E9E9E)
                     )
                 }
             }
         }
+
+        // 删除确认弹窗
+        if (uiState.showDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.hideDeleteConfirmDialog() },
+                title = { Text("确认删除") },
+                text = { Text("确定要删除这个任务吗？此操作无法撤销。") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteTask()
+                            viewModel.hideDeleteConfirmDialog()
+                            onBackPressed()
+                        }
+                    ) {
+                        Text("删除", color = Color(0xFFEF5350))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.hideDeleteConfirmDialog() }) {
+                        Text("取消")
+                    }
+                }
+            )
+        }
+
+        // 日期选择器对话框
+        if (showDatePicker) {
+            com.example.nextthingb1.presentation.screens.create.MaterialDatePickerDialog(
+                onDateSelected = { date ->
+                    viewModel.updateEditedDueDate(date.atStartOfDay())
+                    showDatePicker = false
+                },
+                onDismiss = { showDatePicker = false }
+            )
+        }
+
     }
 }
 
 @Composable
-private fun TaskDetailTopHeader(
+private fun TaskDetailTopNavigation(
+    isEditMode: Boolean,
     onBackPressed: () -> Unit,
-    onEditTask: () -> Unit,
-    onDeleteTask: () -> Unit
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(BgCard)
-            .padding(12.dp),
+            .height(56.dp)
+            .background(Color.White)
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onBackPressed) {
+        // 左侧返回按钮
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF71CBF4))
+                .clickable { onBackPressed() },
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_revert),
+                imageVector = Icons.Default.ArrowBack,
                 contentDescription = "返回",
-                tint = TextPrimary
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
             )
         }
-        
+
+        // 中间标题
         Text(
             text = "任务详情",
+            color = Color(0xFF424242),
             fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextPrimary
+            fontWeight = FontWeight.Bold
         )
-        
-        Row {
-            IconButton(onClick = onEditTask) {
-                Icon(
-                    painter = painterResource(id = android.R.drawable.ic_menu_edit),
-                    contentDescription = "编辑",
-                    tint = TextPrimary
-                )
+
+        // 右侧操作按钮
+        if (!isEditMode) {
+            Row {
+                TextButton(onClick = onEditClick) {
+                    Text(
+                        text = "编辑",
+                        color = Color(0xFF2196F3),
+                        fontSize = 16.sp
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(onClick = onDeleteClick) {
+                    Text(
+                        text = "删除",
+                        color = Color(0xFFEF5350),
+                        fontSize = 16.sp
+                    )
+                }
             }
-            IconButton(onClick = onDeleteTask) {
-                Icon(
-                    painter = painterResource(id = android.R.drawable.ic_menu_delete),
-                    contentDescription = "删除",
-                    tint = Danger
-                )
-            }
+        } else {
+            Spacer(modifier = Modifier.width(80.dp))
         }
     }
 }
 
-@Composable
-private fun TaskDetailContent(
-    task: Task,
-    onToggleStatus: () -> Unit,
-    onToggleSubtask: (String) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // 任务基本信息卡片
-        item {
-            TaskBasicInfoCard(
-                task = task,
-                onToggleStatus = onToggleStatus
-            )
-        }
-        
-        // 任务详细信息卡片
-        item {
-            TaskDetailsCard(task = task)
-        }
-        
-        // 时间信息卡片
-        item {
-            TaskTimeInfoCard(task = task)
-        }
-        
-        // 子任务卡片
-        if (task.subtasks.isNotEmpty()) {
-            item {
-                SubtasksCard(
-                    subtasks = task.subtasks,
-                    onToggleSubtask = onToggleSubtask
-                )
-            }
-        }
-        
-        // 标签卡片
-        if (task.tags.isNotEmpty()) {
-            item {
-                TaskTagsCard(tags = task.tags)
-            }
-        }
-        
-        // 时长统计卡片
-        item {
-            TaskDurationCard(
-                estimatedDuration = task.estimatedDuration,
-                actualDuration = task.actualDuration
-            )
-        }
-    }
-}
 
+// 新的卡片组件
 @Composable
-private fun TaskBasicInfoCard(
+private fun TaskTitleDescriptionCard(
     task: Task,
-    onToggleStatus: () -> Unit
+    isEditMode: Boolean,
+    editedTitle: String,
+    editedDescription: String,
+    onTitleChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 分类图标
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.horizontalGradient(
-                                colors = when (task.category) {
-                                    TaskCategory.WORK -> listOf(Color(0xFF42A5F5), Color(0xFF1E88E5))
-                                    TaskCategory.STUDY -> listOf(Color(0xFFAB47BC), Color(0xFF8E24AA))
-                                    TaskCategory.LIFE -> listOf(Color(0xFF66BB6A), Color(0xFF4CAF50))
-                                    TaskCategory.HEALTH -> listOf(Color(0xFFE91E63), Color(0xFFC2185B))
-                                    TaskCategory.PERSONAL -> listOf(Color(0xFFFF9800), Color(0xFFF57C00))
-                                    TaskCategory.OTHER -> listOf(Color(0xFF9E9E9E), Color(0xFF757575))
-                                }
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = when (task.category) {
-                            TaskCategory.WORK -> "💼"
-                            TaskCategory.STUDY -> "📚"
-                            TaskCategory.LIFE -> "🏠"
-                            TaskCategory.HEALTH -> "❤️"
-                            TaskCategory.PERSONAL -> "👤"
-                            TaskCategory.OTHER -> "📋"
-                        },
-                        fontSize = 20.sp
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(16.dp))
-                
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = task.title,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        textDecoration = if (task.status == TaskStatus.COMPLETED) TextDecoration.LineThrough else null
-                    )
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // 优先级标签
+            // 标题
+            if (isEditMode) {
+                BasicTextField(
+                    value = editedTitle,
+                    onValueChange = onTitleChange,
+                    textStyle = TextStyle(
+                        color = Color(0xFF424242),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { innerTextField ->
                         Box(
                             modifier = Modifier
+                                .fillMaxWidth()
                                 .background(
-                                    when (task.priority) {
-                                        TaskPriority.HIGH -> Danger.copy(alpha = 0.1f)
-                                        TaskPriority.MEDIUM -> Warning.copy(alpha = 0.1f)
-                                        TaskPriority.LOW -> Success.copy(alpha = 0.1f)
-                                    },
-                                    RoundedCornerShape(6.dp)
+                                    color = Color(0xFFF8F9FA),
+                                    shape = RoundedCornerShape(8.dp)
                                 )
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = when (task.priority) {
-                                    TaskPriority.HIGH -> "高优先级"
-                                    TaskPriority.MEDIUM -> "中优先级"
-                                    TaskPriority.LOW -> "低优先级"
-                                },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = when (task.priority) {
-                                    TaskPriority.HIGH -> Danger
-                                    TaskPriority.MEDIUM -> Warning
-                                    TaskPriority.LOW -> Success
-                                }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
-                        // 状态标签
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    when (task.status) {
-                                        TaskStatus.COMPLETED -> Success.copy(alpha = 0.1f)
-                                        TaskStatus.IN_PROGRESS -> Primary.copy(alpha = 0.1f)
-                                        TaskStatus.CANCELLED -> TextMuted.copy(alpha = 0.1f)
-                                        TaskStatus.OVERDUE -> Danger.copy(alpha = 0.1f)
-                                        TaskStatus.PENDING -> if (task.isUrgent) Danger.copy(alpha = 0.1f) else TextMuted.copy(alpha = 0.1f)
-                                    },
-                                    RoundedCornerShape(6.dp)
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFF71CBF4),
+                                    shape = RoundedCornerShape(8.dp)
                                 )
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .padding(12.dp)
                         ) {
-                            Text(
-                                text = when (task.status) {
-                                    TaskStatus.COMPLETED -> "已完成"
-                                    TaskStatus.IN_PROGRESS -> "进行中"
-                                    TaskStatus.CANCELLED -> "已取消"
-                                    TaskStatus.OVERDUE -> "已过期"
-                                    TaskStatus.PENDING -> if (task.isUrgent) "紧急" else "待办"
-                                },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = when (task.status) {
-                                    TaskStatus.COMPLETED -> Success
-                                    TaskStatus.IN_PROGRESS -> Primary
-                                    TaskStatus.CANCELLED -> TextMuted
-                                    TaskStatus.OVERDUE -> Danger
-                                    TaskStatus.PENDING -> if (task.isUrgent) Danger else TextSecondary
-                                }
-                            )
+                            if (editedTitle.isEmpty()) {
+                                Text(
+                                    text = "请输入任务标题...",
+                                    color = Color(0xFF9E9E9E),
+                                    fontSize = 18.sp
+                                )
+                            }
+                            innerTextField()
                         }
                     }
-                }
-                
-                // 完成按钮
-                Button(
-                    onClick = onToggleStatus,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (task.status == TaskStatus.COMPLETED) Success else Primary
-                    )
-                ) {
-                    Text(
-                        text = if (task.status == TaskStatus.COMPLETED) "标记未完成" else "标记完成"
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TaskDetailsCard(task: Task) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            Text(
-                text = "任务详情",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            if (task.description.isNotBlank()) {
-                Text(
-                    text = task.description,
-                    fontSize = 16.sp,
-                    color = TextSecondary,
-                    lineHeight = 24.sp
                 )
             } else {
                 Text(
-                    text = "暂无描述",
-                    fontSize = 16.sp,
-                    color = TextMuted,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                    )
+                    text = task.title,
+                    color = Color(0xFF424242),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+
+            // 描述
+            if (isEditMode) {
+                BasicTextField(
+                    value = editedDescription,
+                    onValueChange = onDescriptionChange,
+                    textStyle = TextStyle(
+                        color = Color(0xFF666666),
+                        fontSize = 14.sp
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = Color(0xFFF8F9FA),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFFE0E0E0),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(12.dp)
+                                .height(80.dp)
+                        ) {
+                            if (editedDescription.isEmpty()) {
+                                Text(
+                                    text = "请输入任务描述...",
+                                    color = Color(0xFF9E9E9E),
+                                    fontSize = 14.sp
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+            } else if (task.description.isNotEmpty()) {
+                Text(
+                    text = task.description,
+                    color = Color(0xFF666666),
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskCategoryCard(
+    task: Task,
+    isEditMode: Boolean,
+    editedCategory: TaskCategory,
+    editedPriority: TaskPriority,
+    onCategoryChange: (TaskCategory) -> Unit,
+    onPriorityChange: (TaskPriority) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier) {
+        // 主卡片
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .clickable { if (isEditMode) isExpanded = !isExpanded },
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = BorderStroke(0.5.dp, Color(0xFFE0E0E0))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
             ) {
-                Column {
+                // 左上角标签
+                Text(
+                    text = "分类",
+                    color = Color(0xFF9E9E9E),
+                    fontSize = 10.sp,
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
+
+                // 主要内容行
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.CenterStart)
+                        .padding(top = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "分类",
-                        fontSize = 14.sp,
-                        color = TextMuted,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = task.category.displayName,
+                        text = "📁",
                         fontSize = 16.sp,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Medium
+                        modifier = Modifier.padding(end = 8.dp)
                     )
-                }
-                
-                Column {
+
                     Text(
-                        text = "紧急程度",
+                        text = (if (isEditMode) editedCategory else task.category).displayName,
+                        color = Color(0xFF424242),
                         fontSize = 14.sp,
-                        color = TextMuted,
-                        fontWeight = FontWeight.Medium
+                        modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = if (task.isUrgent) "紧急" else "普通",
-                        fontSize = 16.sp,
-                        color = if (task.isUrgent) Danger else TextPrimary,
-                        fontWeight = FontWeight.Medium
-                    )
+
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun TaskTimeInfoCard(task: Task) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            Text(
-                text = "时间信息",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            val dateFormatter = DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH:mm")
-            
-            TimeInfoItem(
-                label = "创建时间",
-                value = task.createdAt.format(dateFormatter)
-            )
-            
-            TimeInfoItem(
-                label = "更新时间",
-                value = task.updatedAt.format(dateFormatter)
-            )
-            
-            task.dueDate?.let { dueDate ->
-                TimeInfoItem(
-                    label = "截止时间",
-                    value = dueDate.format(dateFormatter),
-                    isHighlight = task.isUrgent
-                )
-            }
-            
-            task.completedAt?.let { completedAt ->
-                TimeInfoItem(
-                    label = "完成时间",
-                    value = completedAt.format(dateFormatter),
-                    isSuccess = true
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimeInfoItem(
-    label: String,
-    value: String,
-    isHighlight: Boolean = false,
-    isSuccess: Boolean = false
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            color = TextMuted,
-            fontWeight = FontWeight.Medium
-        )
-        Text(
-            text = value,
-            fontSize = 14.sp,
-            color = when {
-                isSuccess -> Success
-                isHighlight -> Danger
-                else -> TextSecondary
-            },
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-private fun SubtasksCard(
-    subtasks: List<Subtask>,
-    onToggleSubtask: (String) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            Text(
-                text = "子任务 (${subtasks.count { it.isCompleted }}/${subtasks.size})",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            subtasks.forEach { subtask ->
-                SubtaskItem(
-                    subtask = subtask,
-                    onToggle = { onToggleSubtask(subtask.id) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun SubtaskItem(
-    subtask: Subtask,
-    onToggle: () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Checkbox(
-            checked = subtask.isCompleted,
-            onCheckedChange = { onToggle() }
-        )
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        Text(
-            text = subtask.title,
-            fontSize = 16.sp,
-            color = if (subtask.isCompleted) TextMuted else TextPrimary,
-            textDecoration = if (subtask.isCompleted) TextDecoration.LineThrough else null,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
-private fun TaskTagsCard(tags: List<String>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            Text(
-                text = "标签",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // 展开的分类选项菜单
+        if (isExpanded && isEditMode) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                items(tags) { tag ->
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                Primary.copy(alpha = 0.1f),
-                                RoundedCornerShape(16.dp)
-                            )
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
+                Column(
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    TaskCategory.values().forEach { category ->
                         Text(
-                            text = tag,
-                            fontSize = 14.sp,
-                            color = Primary,
-                            fontWeight = FontWeight.Medium
+                            text = category.displayName,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onCategoryChange(category)
+                                    isExpanded = false
+                                }
+                                .padding(vertical = 8.dp, horizontal = 12.dp),
+                            color = Color(0xFF424242),
+                            fontSize = 14.sp
                         )
                     }
                 }
@@ -594,79 +619,512 @@ private fun TaskTagsCard(tags: List<String>) {
 }
 
 @Composable
+private fun TaskImportanceCard(
+    task: Task,
+    isEditMode: Boolean,
+    editedImportanceUrgency: TaskImportanceUrgency?,
+    onImportanceUrgencyChange: (TaskImportanceUrgency?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier) {
+        // 主卡片
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .clickable { if (isEditMode) isExpanded = !isExpanded },
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = BorderStroke(0.5.dp, Color(0xFFE0E0E0))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+            ) {
+                // 左上角标签
+                Text(
+                    text = "重要程度",
+                    color = Color(0xFF9E9E9E),
+                    fontSize = 10.sp,
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
+
+                // 主要内容行
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.CenterStart)
+                        .padding(top = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = getImportanceIcon(if (isEditMode) editedImportanceUrgency else task.importanceUrgency),
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+
+                    Text(
+                        text = (if (isEditMode) editedImportanceUrgency else task.importanceUrgency)?.displayName ?: "未设置",
+                        color = if ((if (isEditMode) editedImportanceUrgency else task.importanceUrgency) != null)
+                               Color(0xFF424242) else Color(0xFF9E9E9E),
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 展开的重要程度选项菜单
+        if (isExpanded && isEditMode) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    TaskImportanceUrgency.values().forEach { importanceUrgency ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onImportanceUrgencyChange(importanceUrgency)
+                                    isExpanded = false
+                                }
+                                .padding(vertical = 8.dp, horizontal = 12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = getImportanceIcon(importanceUrgency),
+                                    fontSize = 16.sp,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
+
+                                Text(
+                                    text = importanceUrgency.displayName,
+                                    color = Color(0xFF424242),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            if (importanceUrgency.description.isNotBlank()) {
+                                Text(
+                                    text = importanceUrgency.description,
+                                    color = Color(0xFF666666),
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(top = 2.dp, start = 24.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TaskDurationCard(
-    estimatedDuration: Int,
-    actualDuration: Int
+    task: Task,
+    isEditMode: Boolean,
+    editedEstimatedDuration: Int,
+    editedActualDuration: Int,
+    onEstimatedDurationChange: (Int) -> Unit,
+    onActualDurationChange: (Int) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(0.5.dp, Color(0xFFE0E0E0))
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = "时长统计",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                color = Color(0xFF9E9E9E),
+                fontSize = 10.sp
             )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column {
-                    Text(
-                        text = "预估时长",
-                        fontSize = 14.sp,
-                        color = TextMuted,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = if (estimatedDuration > 0) "${estimatedDuration}分钟" else "未设置",
-                        fontSize = 16.sp,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Medium
-                    )
+                // 预估时长
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "⏱️", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "预估: ${if (isEditMode) editedEstimatedDuration else task.estimatedDuration}分钟",
+                            color = Color(0xFF424242),
+                            fontSize = 12.sp
+                        )
+                    }
                 }
-                
-                Column {
+
+                // 实际时长
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "📊", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "实际: ${if (isEditMode) editedActualDuration else task.actualDuration}分钟",
+                            color = Color(0xFF424242),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskTagsCard(
+    task: Task,
+    isEditMode: Boolean,
+    editedTags: List<String>,
+    onTagsChange: (List<String>) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(0.5.dp, Color(0xFFE0E0E0))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = "标签",
+                color = Color(0xFF9E9E9E),
+                fontSize = 10.sp
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "🏷️", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+
+                val tags = if (isEditMode) editedTags else task.tags
+                if (tags.isNotEmpty()) {
                     Text(
-                        text = "实际时长",
-                        fontSize = 14.sp,
-                        color = TextMuted,
-                        fontWeight = FontWeight.Medium
+                        text = tags.joinToString(", "),
+                        color = Color(0xFF424242),
+                        fontSize = 14.sp
                     )
+                } else {
                     Text(
-                        text = if (actualDuration > 0) "${actualDuration}分钟" else "未记录",
-                        fontSize = 16.sp,
-                        color = when {
-                            actualDuration == 0 -> TextMuted
-                            estimatedDuration > 0 && actualDuration > estimatedDuration -> Danger
-                            else -> Success
-                        },
-                        fontWeight = FontWeight.Medium
+                        text = "无标签",
+                        color = Color(0xFF9E9E9E),
+                        fontSize = 14.sp
                     )
                 }
             }
-            
-            if (estimatedDuration > 0 && actualDuration > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                val efficiency = (estimatedDuration.toFloat() / actualDuration * 100).toInt()
+        }
+    }
+}
+
+@Composable
+private fun TaskSubtasksCard(
+    task: Task,
+    isEditMode: Boolean,
+    editedSubtasks: List<Subtask>,
+    onSubtasksChange: (List<Subtask>) -> Unit,
+    onSubtaskStatusToggle: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(0.5.dp, Color(0xFFE0E0E0))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(
-                    text = "效率: ${efficiency}%",
-                    fontSize = 14.sp,
-                    color = when {
-                        efficiency >= 100 -> Success
-                        efficiency >= 80 -> Primary
-                        else -> Warning
-                    },
-                    fontWeight = FontWeight.Medium
+                    text = "子任务",
+                    color = Color(0xFF9E9E9E),
+                    fontSize = 10.sp
+                )
+
+                val subtasks = if (isEditMode) editedSubtasks else task.subtasks
+                Text(
+                    text = "${subtasks.count { it.isCompleted }}/${subtasks.size}",
+                    color = Color(0xFF9E9E9E),
+                    fontSize = 10.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val subtasks = if (isEditMode) editedSubtasks else task.subtasks
+            if (subtasks.isNotEmpty()) {
+                subtasks.forEach { subtask ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (subtask.isCompleted) "✅" else "⭕",
+                            fontSize = 16.sp,
+                            modifier = if (!isEditMode)
+                                      Modifier.clickable { onSubtaskStatusToggle(subtask.id) }
+                                      else Modifier
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Text(
+                            text = subtask.title,
+                            color = if (subtask.isCompleted) Color(0xFF9E9E9E) else Color(0xFF424242),
+                            fontSize = 14.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "📝", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "无子任务",
+                        color = Color(0xFF9E9E9E),
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+// 重复频次选择组件
+@Composable
+private fun RepeatOptionItem(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 4.dp) // 进一步降低高度
+            .height(18.dp), // 固定高度
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = isSelected,
+            onClick = onClick,
+            modifier = Modifier.size(20.dp), // 缩小RadioButton
+            colors = RadioButtonDefaults.colors(
+                selectedColor = Color(0xFF2196F3),
+                unselectedColor = Color(0xFF9E9E9E)
+            )
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            text = text,
+            color = Color(0xFF424242),
+            fontSize = 14.sp
+        )
+    }
+}
+
+@Composable
+private fun WeekdaySelector(
+    selectedWeekdays: Set<Int>,
+    onWeekdayToggle: (Int) -> Unit
+) {
+    val weekdays = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        weekdays.forEachIndexed { index, dayName ->
+            val dayNumber = index + 1
+            val isSelected = selectedWeekdays.contains(dayNumber)
+
+            Button(
+                onClick = { onWeekdayToggle(dayNumber) },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSelected) Color(0xFF2196F3) else Color(0xFFE0E0E0),
+                    contentColor = if (isSelected) Color.White else Color(0xFF424242)
+                ),
+                shape = RoundedCornerShape(4.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp)
+            ) {
+                Text(
+                    text = dayName,
+                    fontSize = 10.sp,
+                    maxLines = 1
                 )
             }
         }
     }
-} 
+}
+
+@Composable
+private fun MonthDaySelector(
+    selectedDays: Set<Int>,
+    onDayToggle: (Int) -> Unit
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(7),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        items(31) { index ->
+            val day = index + 1
+            val isSelected = selectedDays.contains(day)
+
+            Button(
+                onClick = { onDayToggle(day) },
+                modifier = Modifier
+                    .aspectRatio(1f)
+                    .size(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSelected) Color(0xFF2196F3) else Color.Transparent,
+                    contentColor = if (isSelected) Color.White else Color(0xFF424242)
+                ),
+                border = if (!isSelected) BorderStroke(0.5.dp, Color(0xFFE0E0E0)) else null,
+                shape = CircleShape,
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = day.toString(),
+                    fontSize = 9.sp
+                )
+            }
+        }
+    }
+}
+
+// 辅助函数
+private fun getImportanceIcon(importanceUrgency: TaskImportanceUrgency?): String {
+    return when (importanceUrgency) {
+        TaskImportanceUrgency.IMPORTANT_URGENT -> "🔥"
+        TaskImportanceUrgency.IMPORTANT_NOT_URGENT -> "⭐"
+        TaskImportanceUrgency.NOT_IMPORTANT_URGENT -> "⚡"
+        TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT -> "🔵"
+        null -> "⚠️"
+    }
+}
+
+@Composable
+private fun EditModeBottomButtons(
+    onCancel: () -> Unit,
+    onSave: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White)
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 取消按钮
+        OutlinedButton(
+            onClick = onCancel,
+            modifier = Modifier
+                .weight(1f)
+                .height(48.dp),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF424242))
+        ) {
+            Text(
+                text = "取消",
+                fontSize = 16.sp
+            )
+        }
+
+        // 保存按钮
+        Button(
+            onClick = onSave,
+            modifier = Modifier
+                .weight(1f)
+                .height(48.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF71CBF4))
+        ) {
+            Text(
+                text = "保存修改",
+                color = Color.White,
+                fontSize = 16.sp
+            )
+        }
+    }
+}
+
+
+// 辅助函数
+private fun formatDueDate(dueDate: LocalDateTime?): String {
+    return if (dueDate != null) {
+        val today = LocalDate.now()
+        val dueDateLocal = dueDate.toLocalDate()
+        when {
+            dueDateLocal == today -> "今天 (${dueDateLocal.dayOfMonth}号)"
+            dueDateLocal == today.plusDays(1) -> "明天 (${dueDateLocal.dayOfMonth}号)"
+            else -> dueDate.format(DateTimeFormatter.ofPattern("MM月dd日"))
+        }
+    } else {
+        "无截止"
+    }
+}
+
+private fun formatLocation(location: LocationInfo?): String {
+    return location?.locationName?.takeIf { it.isNotEmpty() } ?: "实时位置"
+}
+
+private fun formatPriority(priority: TaskPriority): String {
+    return when (priority) {
+        TaskPriority.HIGH -> "高"
+        TaskPriority.MEDIUM -> "中"
+        TaskPriority.LOW -> "低"
+    }
+}
