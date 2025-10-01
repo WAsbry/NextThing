@@ -388,7 +388,7 @@ class LocationServiceImpl @Inject constructor(
                 val featureName = addr.featureName ?: ""
                 val premises = addr.premises ?: ""
                 
-                // 构建精细的位置名称，参考手机天气预报格式
+                // 构建精细的位置名称，从区县开始显示，不包含省市信息
                 locationName = when {
                     // 优先显示详细地址
                     district.isNotBlank() && subLocality.isNotBlank() -> {
@@ -398,10 +398,35 @@ class LocationServiceImpl @Inject constructor(
                     district.isNotBlank() -> district
                     // 再次显示城市
                     city.isNotBlank() -> city
-                    // 最后显示省份
+                    // 如果有完整地址，尝试从区县开始截取
+                    address.isNotBlank() -> {
+                        // 查找区县关键字的位置，从区县开始截取
+                        val districtKeywords = listOf("区", "县", "市", "旗", "镇")
+                        var result = address
+                        for (keyword in districtKeywords) {
+                            val index = address.indexOf(keyword)
+                            if (index > 0) {
+                                // 找到区县关键字，从其前面的字符开始截取
+                                val possibleStart = maxOf(0, index - 10) // 往前取最多10个字符
+                                val beforeKeyword = address.substring(possibleStart, index + 1)
+                                // 查找省市分隔符，从区县开始
+                                val separators = listOf("省", "市", "自治区")
+                                var actualStart = possibleStart
+                                for (separator in separators) {
+                                    val sepIndex = beforeKeyword.lastIndexOf(separator)
+                                    if (sepIndex >= 0) {
+                                        actualStart = possibleStart + sepIndex + 1
+                                        break
+                                    }
+                                }
+                                result = address.substring(actualStart)
+                                break
+                            }
+                        }
+                        result
+                    }
+                    // 最后显示省份（作为最后的备用方案）
                     province.isNotBlank() -> province
-                    // 兜底显示完整地址
-                    address.isNotBlank() -> address
                     // 无法解析时显示坐标
                     else -> "位置(${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)})"
                 }

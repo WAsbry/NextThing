@@ -4,30 +4,115 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskStatus
+import com.example.nextthingb1.domain.model.TaskCategory
+import com.example.nextthingb1.domain.model.TaskPriority
+import com.example.nextthingb1.domain.model.LocationInfo
+import com.example.nextthingb1.domain.model.TaskImportanceUrgency
+import com.example.nextthingb1.domain.model.RepeatFrequency
+import com.example.nextthingb1.domain.model.Subtask
+import com.example.nextthingb1.domain.model.CategoryItem
 import com.example.nextthingb1.domain.usecase.TaskUseCases
+import com.example.nextthingb1.domain.repository.CustomCategoryRepository
+import com.example.nextthingb1.domain.service.CategoryPreferencesManager
+import com.example.nextthingb1.domain.usecase.LocationUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.time.LocalDate
+import java.time.LocalDateTime
 import javax.inject.Inject
 
 data class TaskDetailUiState(
     val task: Task? = null,
     val isLoading: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isEditMode: Boolean = false,
+
+    // 基础信息编辑
+    val editedTitle: String = "",
+    val editedDescription: String = "",
+
+    // 时间信息编辑
+    val editedDueDate: LocalDateTime? = null,
+    val editedRepeatFrequency: RepeatFrequency = RepeatFrequency(),
+    val editedEstimatedDuration: Int = 0,
+    val editedActualDuration: Int = 0,
+
+    // 分类和重要性编辑
+    val editedCategory: TaskCategory = TaskCategory.OTHER,
+    val editedCategoryItem: CategoryItem? = null,
+    val editedPriority: TaskPriority = TaskPriority.LOW,
+    val editedImportanceUrgency: TaskImportanceUrgency? = null,
+
+    // 位置和附件编辑
+    val editedLocation: LocationInfo? = null,
+    val editedImageUri: String? = null,
+
+    // 标签和子任务编辑
+    val editedTags: List<String> = emptyList(),
+    val editedSubtasks: List<Subtask> = emptyList(),
+
+    // 状态编辑
+    val editedStatus: TaskStatus = TaskStatus.PENDING,
+
+    // UI 状态
+    val showDeleteConfirmDialog: Boolean = false,
+    val showDatePicker: Boolean = false,
+    val showRepeatFrequencyDialog: Boolean = false
 )
 
 @HiltViewModel
 class TaskDetailViewModel @Inject constructor(
-    private val taskUseCases: TaskUseCases
+    private val taskUseCases: TaskUseCases,
+    private val customCategoryRepository: CustomCategoryRepository,
+    private val categoryPreferencesManager: CategoryPreferencesManager,
+    private val locationUseCases: LocationUseCases
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TaskDetailUiState())
     val uiState: StateFlow<TaskDetailUiState> = _uiState.asStateFlow()
 
+    private val _categories = MutableStateFlow<List<CategoryItem>>(emptyList())
+    val categories: StateFlow<List<CategoryItem>> = _categories.asStateFlow()
+
+    private val _savedLocations = MutableStateFlow<List<LocationInfo>>(emptyList())
+    val savedLocations: StateFlow<List<LocationInfo>> = _savedLocations.asStateFlow()
+
     private var currentTaskId: String? = null
+
+    init {
+        loadCategories()
+        loadSavedLocations()
+    }
+
+    private fun loadCategories() {
+        viewModelScope.launch {
+            try {
+                customCategoryRepository.initializeSystemCategories()
+                customCategoryRepository.getAllCategories().collect { categoryList ->
+                    val sortedCategories = categoryPreferencesManager.sortCategoriesByUsage(categoryList)
+                    _categories.value = sortedCategories
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load categories")
+            }
+        }
+    }
+
+    private fun loadSavedLocations() {
+        viewModelScope.launch {
+            try {
+                locationUseCases.getAllSavedLocations().collect { locations ->
+                    _savedLocations.value = locations
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load saved locations")
+            }
+        }
+    }
 
     fun loadTask(taskId: String) {
         currentTaskId = taskId
@@ -144,5 +229,235 @@ class TaskDetailViewModel @Inject constructor(
 
     fun clearErrorMessage() {
         _uiState.value = _uiState.value.copy(errorMessage = null)
+    }
+
+    fun enterEditMode() {
+        val task = _uiState.value.task ?: return
+
+        // 将任务的category转换为CategoryItem
+        val categoryItem = _categories.value.find { it.id == task.category.name }
+            ?: CategoryItem.fromTaskCategory(task.category)
+
+        _uiState.value = _uiState.value.copy(
+            isEditMode = true,
+            editedTitle = task.title,
+            editedDescription = task.description,
+            editedDueDate = task.dueDate,
+            editedRepeatFrequency = task.repeatFrequency,
+            editedEstimatedDuration = task.estimatedDuration,
+            editedActualDuration = task.actualDuration,
+            editedCategory = task.category,
+            editedCategoryItem = categoryItem,
+            editedPriority = task.priority,
+            editedImportanceUrgency = task.importanceUrgency,
+            editedLocation = task.locationInfo,
+            editedImageUri = task.imageUri,
+            editedTags = task.tags,
+            editedSubtasks = task.subtasks,
+            editedStatus = task.status
+        )
+    }
+
+    fun exitEditMode() {
+        _uiState.value = _uiState.value.copy(
+            isEditMode = false,
+            editedTitle = "",
+            editedDescription = "",
+            editedDueDate = null,
+            editedRepeatFrequency = RepeatFrequency(),
+            editedEstimatedDuration = 0,
+            editedActualDuration = 0,
+            editedCategory = TaskCategory.OTHER,
+            editedCategoryItem = null,
+            editedPriority = TaskPriority.LOW,
+            editedImportanceUrgency = null,
+            editedLocation = null,
+            editedImageUri = null,
+            editedTags = emptyList(),
+            editedSubtasks = emptyList(),
+            editedStatus = TaskStatus.PENDING
+        )
+    }
+
+    fun updateEditedTitle(title: String) {
+        _uiState.value = _uiState.value.copy(editedTitle = title)
+    }
+
+    fun updateEditedDescription(description: String) {
+        _uiState.value = _uiState.value.copy(editedDescription = description)
+    }
+
+    fun updateEditedDueDate(dueDate: LocalDateTime?) {
+        _uiState.value = _uiState.value.copy(editedDueDate = dueDate)
+    }
+
+    fun updateEditedCategory(category: TaskCategory) {
+        _uiState.value = _uiState.value.copy(editedCategory = category)
+    }
+
+    fun updateSelectedCategory(categoryItem: CategoryItem) {
+        viewModelScope.launch {
+            try {
+                categoryPreferencesManager.recordCategoryUsage(categoryItem.id)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to record category usage")
+            }
+        }
+        _uiState.value = _uiState.value.copy(editedCategoryItem = categoryItem)
+    }
+
+    fun deleteCategory(categoryId: String) {
+        viewModelScope.launch {
+            try {
+                customCategoryRepository.deleteCategory(categoryId)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to delete category")
+            }
+        }
+    }
+
+    fun pinCategory(categoryId: String, isPinned: Boolean) {
+        viewModelScope.launch {
+            try {
+                customCategoryRepository.pinCategory(categoryId, isPinned)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to pin category")
+            }
+        }
+    }
+
+    fun deleteLocation(locationId: String) {
+        viewModelScope.launch {
+            try {
+                locationUseCases.deleteLocation(locationId).fold(
+                    onSuccess = {
+                        if (_uiState.value.editedLocation?.id == locationId) {
+                            _uiState.value = _uiState.value.copy(editedLocation = null)
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.value = _uiState.value.copy(errorMessage = "删除地点失败: ${error.message}")
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(errorMessage = "删除地点时发生错误: ${e.message}")
+            }
+        }
+    }
+
+    fun updateEditedPriority(priority: TaskPriority) {
+        _uiState.value = _uiState.value.copy(editedPriority = priority)
+    }
+
+    fun updateEditedLocation(location: LocationInfo?) {
+        _uiState.value = _uiState.value.copy(editedLocation = location)
+    }
+
+    fun updateEditedImagePath(imagePath: String?) {
+        _uiState.value = _uiState.value.copy(editedImageUri = imagePath)
+    }
+
+    // 新增的更新函数
+    fun updateEditedRepeatFrequency(repeatFrequency: RepeatFrequency) {
+        _uiState.value = _uiState.value.copy(editedRepeatFrequency = repeatFrequency)
+    }
+
+    fun updateEditedEstimatedDuration(duration: Int) {
+        _uiState.value = _uiState.value.copy(editedEstimatedDuration = duration)
+    }
+
+    fun updateEditedActualDuration(duration: Int) {
+        _uiState.value = _uiState.value.copy(editedActualDuration = duration)
+    }
+
+    fun updateEditedImportanceUrgency(importanceUrgency: TaskImportanceUrgency?) {
+        _uiState.value = _uiState.value.copy(editedImportanceUrgency = importanceUrgency)
+    }
+
+    fun updateEditedTags(tags: List<String>) {
+        _uiState.value = _uiState.value.copy(editedTags = tags)
+    }
+
+    fun updateEditedSubtasks(subtasks: List<Subtask>) {
+        _uiState.value = _uiState.value.copy(editedSubtasks = subtasks)
+    }
+
+    fun updateEditedStatus(status: TaskStatus) {
+        _uiState.value = _uiState.value.copy(editedStatus = status)
+    }
+
+    fun showDeleteConfirmDialog() {
+        _uiState.value = _uiState.value.copy(showDeleteConfirmDialog = true)
+    }
+
+    fun hideDeleteConfirmDialog() {
+        _uiState.value = _uiState.value.copy(showDeleteConfirmDialog = false)
+    }
+
+    fun showDatePicker() {
+        _uiState.value = _uiState.value.copy(showDatePicker = true)
+    }
+
+    fun hideDatePicker() {
+        _uiState.value = _uiState.value.copy(showDatePicker = false)
+    }
+
+    fun showRepeatFrequencyDialog() {
+        _uiState.value = _uiState.value.copy(showRepeatFrequencyDialog = true)
+    }
+
+    fun hideRepeatFrequencyDialog() {
+        _uiState.value = _uiState.value.copy(showRepeatFrequencyDialog = false)
+    }
+
+    fun saveChanges() {
+        val task = _uiState.value.task ?: return
+        val state = _uiState.value
+
+        if (state.editedTitle.isBlank()) {
+            _uiState.value = _uiState.value.copy(errorMessage = "任务标题不能为空")
+            return
+        }
+
+        val updatedTask = task.copy(
+            title = state.editedTitle,
+            description = state.editedDescription,
+            dueDate = state.editedDueDate,
+            repeatFrequency = state.editedRepeatFrequency,
+            estimatedDuration = state.editedEstimatedDuration,
+            actualDuration = state.editedActualDuration,
+            category = state.editedCategory,
+            priority = state.editedPriority,
+            imageUri = state.editedImageUri,
+            tags = state.editedTags,
+            subtasks = state.editedSubtasks,
+            status = state.editedStatus,
+            updatedAt = LocalDateTime.now()
+        )
+
+        viewModelScope.launch {
+            try {
+                taskUseCases.updateTask(updatedTask).fold(
+                    onSuccess = {
+                        Timber.d("Task updated successfully")
+                        _uiState.value = _uiState.value.copy(
+                            task = updatedTask,
+                            isEditMode = false
+                        )
+                    },
+                    onFailure = { error ->
+                        Timber.e("Failed to update task: ${error.message}")
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = error.message
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "Exception while updating task")
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = e.message
+                )
+            }
+        }
     }
 } 

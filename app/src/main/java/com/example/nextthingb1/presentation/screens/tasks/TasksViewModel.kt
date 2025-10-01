@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskStatus
+import com.example.nextthingb1.domain.model.TaskTab
 import com.example.nextthingb1.domain.usecase.TaskUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +42,7 @@ data class CalendarDay(
 
 data class TasksUiState(
     val selectedView: TaskView = TaskView.LIST,
+    val selectedTab: TaskTab = TaskTab.PENDING,
     val currentMonth: String = "",
     val totalTasks: Int = 0,
     val completedTasks: Int = 0,
@@ -169,11 +171,23 @@ class TasksViewModel @Inject constructor(
     private fun createTaskGroups(tasks: List<Task>): List<TaskGroup> {
         Log.d("TasksViewModel", "=== createTaskGroups() 开始 ===")
         Log.d("TasksViewModel", "当前周偏移量: ${_uiState.value.currentWeekOffset}")
+        Log.d("TasksViewModel", "当前选择的标签页: ${_uiState.value.selectedTab}")
 
         val currentWeekTasks = filterTasksByWeek(tasks, _uiState.value.currentWeekOffset)
         Log.d("TasksViewModel", "过滤后的当前周任务数量: ${currentWeekTasks.size}")
 
-        val groups = currentWeekTasks.groupBy { task ->
+        // 根据selectedTab过滤任务
+        val filteredTasks = when (_uiState.value.selectedTab) {
+            TaskTab.PENDING -> currentWeekTasks.filter {
+                it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS || it.status == TaskStatus.OVERDUE
+            }
+            TaskTab.COMPLETED -> currentWeekTasks.filter {
+                it.status == TaskStatus.COMPLETED
+            }
+        }
+        Log.d("TasksViewModel", "根据标签页过滤后的任务数量: ${filteredTasks.size}")
+
+        val groups = filteredTasks.groupBy { task ->
             task.createdAt.toLocalDate().toString()
         }.map { (date, tasksForDate) ->
             val completedCount = tasksForDate.count { it.status == TaskStatus.COMPLETED }
@@ -297,6 +311,13 @@ class TasksViewModel @Inject constructor(
     fun selectView(view: TaskView) {
         Log.d("TasksViewModel", "selectView() 被调用: $view")
         _uiState.value = _uiState.value.copy(selectedView = view)
+    }
+
+    fun selectTab(tab: TaskTab) {
+        Log.d("TasksViewModel", "selectTab() 被调用: $tab")
+        _uiState.value = _uiState.value.copy(selectedTab = tab)
+        // 重新加载任务数据以应用新的过滤
+        loadTasks()
     }
     fun previousMonth() {
         currentMonthDate = currentMonthDate.minusMonths(1)

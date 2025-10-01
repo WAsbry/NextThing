@@ -350,15 +350,49 @@ class AmapLocationServiceImpl @Inject constructor(
 
     private suspend fun convertAmapLocationToLocationInfo(location: AMapLocation): LocationInfo = withContext(Dispatchers.IO) {
         val locationName = buildString {
-            // 优先使用高德的详细地址
-            if (!location.address.isNullOrBlank()) {
-                append(location.address)
-            } else {
-                // 回退到逆地理编码
-                if (!location.district.isNullOrBlank()) append(location.district)
+            // 优先从区县开始显示，不包含省市信息
+            if (!location.district.isNullOrBlank()) {
+                append(location.district)
                 if (!location.street.isNullOrBlank()) {
-                    if (isNotEmpty()) append(" ")
                     append(location.street)
+                }
+            } else if (!location.address.isNullOrBlank()) {
+                // 如果没有区县信息，尝试从完整地址中提取区县部分
+                val address = location.address
+                // 查找区县关键字的位置，从区县开始截取
+                val districtKeywords = listOf("区", "县", "市", "旗", "镇")
+                var startIndex = -1
+                for (keyword in districtKeywords) {
+                    val index = address.indexOf(keyword)
+                    if (index > 0) {
+                        // 找到区县关键字，从其前面的字符开始截取
+                        val possibleStart = maxOf(0, index - 10) // 往前取最多10个字符
+                        val beforeKeyword = address.substring(possibleStart, index + 1)
+                        // 查找省市分隔符，从区县开始
+                        val separators = listOf("省", "市", "自治区")
+                        var actualStart = possibleStart
+                        for (separator in separators) {
+                            val sepIndex = beforeKeyword.lastIndexOf(separator)
+                            if (sepIndex >= 0) {
+                                actualStart = possibleStart + sepIndex + 1
+                                break
+                            }
+                        }
+                        startIndex = actualStart
+                        break
+                    }
+                }
+
+                if (startIndex >= 0) {
+                    append(address.substring(startIndex))
+                } else {
+                    // 没找到区县关键字，使用完整地址
+                    append(address)
+                }
+            } else {
+                // 完全没有地址信息时的备用方案
+                if (!location.city.isNullOrBlank()) {
+                    append(location.city)
                 }
             }
         }.takeIf { it.isNotBlank() } ?: "未知位置"
