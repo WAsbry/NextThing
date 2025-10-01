@@ -82,7 +82,12 @@ fun NextThingNavigation(navController: NavHostController) {
             
             composable(Screen.Tasks.route) {
                 val viewModel: TasksViewModel = hiltViewModel()
-                TasksScreen(viewModel = viewModel)
+                TasksScreen(
+                    viewModel = viewModel,
+                    onNavigateToTaskDetail = { taskId ->
+                        navController.navigate("task_detail/$taskId")
+                    }
+                )
             }
             
             composable(Screen.CreateTask.route) {

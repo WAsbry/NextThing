@@ -32,7 +32,9 @@ import android.util.Log
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
 import com.example.nextthingb1.domain.model.TaskStatus
+import com.example.nextthingb1.domain.model.TaskTab
 import com.example.nextthingb1.presentation.theme.*
+import com.example.nextthingb1.presentation.components.TaskItemCard
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -42,7 +44,8 @@ import kotlin.math.roundToInt
 
 @Composable
 fun TasksScreen(
-    viewModel: TasksViewModel = hiltViewModel()
+    viewModel: TasksViewModel = hiltViewModel(),
+    onNavigateToTaskDetail: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -64,10 +67,21 @@ fun TasksScreen(
         // 内容区域
         when (uiState.selectedView) {
             TaskView.LIST -> {
-                TasksListView(
-                    taskGroups = uiState.taskGroups,
-                    onTaskClick = { /* TODO */ }
-                )
+                Column {
+                    // 任务标签页
+                    TaskTabs(
+                        selectedTab = uiState.selectedTab,
+                        onTabSelected = { viewModel.selectTab(it) }
+                    )
+
+                    // 任务列表
+                    TasksListView(
+                        taskGroups = uiState.taskGroups,
+                        onTaskClick = { task ->
+                            onNavigateToTaskDetail(task.id)
+                        }
+                    )
+                }
             }
             TaskView.CALENDAR -> {
                 TasksCalendarView(
@@ -96,13 +110,7 @@ fun WeeklyOverviewCard(
 
     // 计算当前周的任务数据
     val currentWeekData = remember(tasks, currentWeekOffset, earliestTaskDate) {
-        Log.d("switchWeek", "=== 重新计算当前周数据 ===")
-        Log.d("switchWeek", "传入的任务数量: ${tasks.size}")
-        Log.d("switchWeek", "当前周偏移量: $currentWeekOffset")
-        Log.d("switchWeek", "最早任务日期: $earliestTaskDate")
         val data = calculateCurrentWeekData(tasks, earliestTaskDate, currentWeekOffset)
-        Log.d("switchWeek", "计算结果 - 周数: ${data.weekNumber}, 日期范围: ${data.dateRange}")
-        Log.d("switchWeek", "任务统计 - 待办: ${data.pendingCount}, 完成: ${data.completedCount}")
         data
     }
 
@@ -773,7 +781,6 @@ private fun TasksListView(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         items(taskGroups) { group ->
             TaskGroupItem(
@@ -789,14 +796,12 @@ private fun TaskGroupItem(
     group: TaskGroup,
     onTaskClick: (Task) -> Unit
 ) {
-    Column(
-        modifier = Modifier.padding(horizontal = 16.dp)
-    ) {
+    Column {
         // 日期标题 - 更简洁的设计
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -821,32 +826,12 @@ private fun TaskGroupItem(
             }
         }
 
-        // 任务卡片 - 统一样式
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = 2.dp
-            )
-        ) {
-            Column {
-                group.tasks.forEachIndexed { index, task ->
-                    TaskListItem(
-                        task = task,
-                        onClick = { onTaskClick(task) }
-                    )
-
-                    if (index < group.tasks.size - 1) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
-                            thickness = 0.5.dp
-                        )
-                    }
-                }
+        Column {
+            group.tasks.forEach { task ->
+                TaskListItem(
+                    task = task,
+                    onClick = { onTaskClick(task) }
+                )
             }
         }
     }
@@ -881,107 +866,19 @@ private fun TaskListItem(
     task: Task,
     onClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp)
     ) {
-        // 状态指示器
-        Box(
-            modifier = Modifier
-                .width(4.dp)
-                .height(32.dp)
-                .background(
-                    color = when (task.status) {
-                        TaskStatus.COMPLETED -> Success
-                        TaskStatus.IN_PROGRESS -> Primary
-                        TaskStatus.OVERDUE -> Danger
-                        TaskStatus.CANCELLED -> TextMuted
-                        TaskStatus.PENDING -> if (task.isUrgent) Danger else Primary.copy(alpha = 0.3f)
-                    },
-                    shape = RoundedCornerShape(2.dp)
-                )
+        TaskItemCard(
+            task = task,
+            onClick = onClick
         )
 
-        Spacer(modifier = Modifier.width(12.dp))
-
-        // 任务内容
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = task.title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (task.status == TaskStatus.COMPLETED)
-                    TextMuted
-                else
-                    TextPrimary,
-                maxLines = 1
-            )
-
-            if (task.description.isNotBlank()) {
-                Text(
-                    text = task.description,
-                    fontSize = 14.sp,
-                    color = TextSecondary,
-                    maxLines = 2,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-
-            // 类别标签
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = when (task.category) {
-                    TaskCategory.WORK -> Color(0xFF42A5F5).copy(alpha = 0.1f)
-                    TaskCategory.STUDY -> Color(0xFFAB47BC).copy(alpha = 0.1f)
-                    TaskCategory.LIFE -> Color(0xFF66BB6A).copy(alpha = 0.1f)
-                    TaskCategory.HEALTH -> Color(0xFFE91E63).copy(alpha = 0.1f)
-                    TaskCategory.PERSONAL -> Color(0xFFFF9800).copy(alpha = 0.1f)
-                    TaskCategory.OTHER -> Color(0xFF9E9E9E).copy(alpha = 0.1f)
-                },
-                modifier = Modifier.padding(top = 8.dp)
-            ) {
-                Text(
-                    text = task.category.displayName,
-                    fontSize = 11.sp,
-                    color = when (task.category) {
-                        TaskCategory.WORK -> Color(0xFF42A5F5)
-                        TaskCategory.STUDY -> Color(0xFFAB47BC)
-                        TaskCategory.LIFE -> Color(0xFF66BB6A)
-                        TaskCategory.HEALTH -> Color(0xFFE91E63)
-                        TaskCategory.PERSONAL -> Color(0xFFFF9800)
-                        TaskCategory.OTHER -> Color(0xFF9E9E9E)
-                    },
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
-
-        // 状态徽章
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = when (task.status) {
-                TaskStatus.COMPLETED -> Success.copy(alpha = 0.1f)
-                TaskStatus.IN_PROGRESS -> Primary.copy(alpha = 0.1f)
-                TaskStatus.OVERDUE -> Danger.copy(alpha = 0.1f)
-                TaskStatus.CANCELLED -> TextMuted.copy(alpha = 0.1f)
-                TaskStatus.PENDING -> if (task.isUrgent) Danger.copy(alpha = 0.1f) else BgCard
-            }
-        ) {
-            Text(
-                text = when (task.status) {
-                    TaskStatus.COMPLETED -> "✓"
-                    TaskStatus.IN_PROGRESS -> "⏳"
-                    TaskStatus.OVERDUE -> "⚠️"
-                    TaskStatus.CANCELLED -> "❌"
-                    TaskStatus.PENDING -> if (task.isUrgent) "🔥" else "📝"
-                },
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-            )
-        }
+        // 分割线
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = Color(0xFFE0E0E0)
+        )
     }
 }
 
@@ -1225,6 +1122,42 @@ private fun TodayDetailCard(selectedDate: String) {
                     color = TextMuted,
                     fontSize = 14.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskTabs(selectedTab: TaskTab, onTabSelected: (TaskTab) -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(BgPrimary)
+        ) {
+            TaskTab.values().forEach { tab ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onTabSelected(tab) }
+                        .background(
+                            if (selectedTab == tab) BgCard else Color.Transparent
+                        )
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = tab.title,
+                        color = if (selectedTab == tab) Primary else TextSecondary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }

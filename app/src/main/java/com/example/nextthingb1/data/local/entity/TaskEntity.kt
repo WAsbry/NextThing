@@ -25,5 +25,8 @@ data class TaskEntity(
     val estimatedDuration: Int,
     val actualDuration: Int,
     val subtasksJson: String, // JSON string for subtasks
-    val imageUri: String? = null // 任务图片URI
+    val imageUri: String? = null, // 任务图片URI
+    val repeatFrequencyJson: String = "{}", // JSON string for repeat frequency
+    val locationInfoJson: String? = null, // JSON string for location info
+    val importanceUrgencyJson: String? = null // JSON string for importance urgency
 ) 
