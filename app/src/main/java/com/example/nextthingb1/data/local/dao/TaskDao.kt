@@ -3,7 +3,6 @@ package com.example.nextthingb1.data.local.dao
 import androidx.room.*
 import com.example.nextthingb1.data.local.entity.TaskEntity
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatus
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDateTime
@@ -29,13 +28,11 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE category = :category ORDER BY createdAt DESC")
     fun getTasksByCategory(category: TaskCategory): Flow<List<TaskEntity>>
     
-    @Query("SELECT * FROM tasks WHERE priority = :priority ORDER BY createdAt DESC")
-    fun getTasksByPriority(priority: TaskPriority): Flow<List<TaskEntity>>
     
     @Query("""
-        SELECT * FROM tasks 
-        WHERE date(createdAt) = date('now', 'localtime') 
-        ORDER BY priority DESC, createdAt ASC
+        SELECT * FROM tasks
+        WHERE date(dueDate) = date('now', 'localtime')
+        ORDER BY dueDate ASC
     """)
     fun getTodayTasks(): Flow<List<TaskEntity>>
     

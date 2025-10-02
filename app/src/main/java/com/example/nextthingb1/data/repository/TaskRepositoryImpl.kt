@@ -5,7 +5,6 @@ import com.example.nextthingb1.data.mapper.toDomain
 import com.example.nextthingb1.data.mapper.toEntity
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.repository.TaskRepository
@@ -55,9 +54,6 @@ class TaskRepositoryImpl @Inject constructor(
         return taskDao.getTasksByCategory(category).map { entities -> entities.toDomain() }
     }
     
-    override fun getTasksByPriority(priority: TaskPriority): Flow<List<Task>> {
-        return taskDao.getTasksByPriority(priority).map { entities -> entities.toDomain() }
-    }
     
     override fun getTasksByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<Task>> {
         return taskDao.getTasksByDateRange(startDate, endDate).map { entities -> entities.toDomain() }

@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.example.nextthingb1.domain.repository.TaskRepository
 import com.example.nextthingb1.util.SyncScheduler
+import com.example.nextthingb1.work.TaskWorkScheduler
 
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
@@ -43,7 +44,25 @@ class NextThingApplication : Application(), Configuration.Provider {
         } catch (e: Exception) {
             Timber.e(e, "❌ [Application] SyncScheduler 初始化失败")
         }
-        
+
+        // 定时逾期检测调度
+        try {
+            TaskWorkScheduler.scheduleOverdueCheck(this)
+            TaskWorkScheduler.triggerImmediateOverdueCheck(this)
+            Timber.d("✅ [Application] 逾期检测 TaskWorkScheduler 初始化成功")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ [Application] 逾期检测 TaskWorkScheduler 初始化失败")
+        }
+
+        // 定时延期转待办调度
+        try {
+            TaskWorkScheduler.scheduleDelayedConversion(this)
+            TaskWorkScheduler.triggerImmediateDelayedConversion(this)
+            Timber.d("✅ [Application] 延期转待办 TaskWorkScheduler 初始化成功")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ [Application] 延期转待办 TaskWorkScheduler 初始化失败")
+        }
+
         Timber.d("🎉 [Application] NextThingApplication 初始化完成")
     }
 

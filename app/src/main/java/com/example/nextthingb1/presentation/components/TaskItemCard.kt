@@ -224,37 +224,21 @@ private fun getCategoryEmoji(category: TaskCategory): String {
 
 private fun getStatusEmoji(status: TaskStatus): String {
     return when (status) {
+        TaskStatus.PENDING -> "📝"
         TaskStatus.COMPLETED -> "✓"
-        TaskStatus.IN_PROGRESS -> "⏳"
+        TaskStatus.DELAYED -> "⏱️"
         TaskStatus.OVERDUE -> "⚠️"
         TaskStatus.CANCELLED -> "❌"
-        TaskStatus.PENDING -> "📝"
     }
 }
 
 private fun getStatusBackgroundColor(status: TaskStatus): Color {
     return when (status) {
+        TaskStatus.PENDING -> Color(0xFFF5F5F5)
         TaskStatus.COMPLETED -> Success.copy(alpha = 0.1f)
-        TaskStatus.IN_PROGRESS -> Primary.copy(alpha = 0.1f)
+        TaskStatus.DELAYED -> Color(0xFFFFA726).copy(alpha = 0.1f)  // 橙黄色
         TaskStatus.OVERDUE -> Danger.copy(alpha = 0.1f)
         TaskStatus.CANCELLED -> TextMuted.copy(alpha = 0.1f)
-        TaskStatus.PENDING -> Color(0xFFF5F5F5)
-    }
-}
-
-private fun getPriorityBackgroundColor(priority: TaskPriority): Color {
-    return when (priority) {
-        TaskPriority.HIGH -> Danger.copy(alpha = 0.08f)
-        TaskPriority.MEDIUM -> Warning.copy(alpha = 0.08f)
-        TaskPriority.LOW -> Success.copy(alpha = 0.08f)
-    }
-}
-
-private fun getPriorityTextColor(priority: TaskPriority): Color {
-    return when (priority) {
-        TaskPriority.HIGH -> Danger.copy(alpha = 0.8f)
-        TaskPriority.MEDIUM -> Warning.copy(alpha = 0.8f)
-        TaskPriority.LOW -> Success.copy(alpha = 0.8f)
     }
 }
 

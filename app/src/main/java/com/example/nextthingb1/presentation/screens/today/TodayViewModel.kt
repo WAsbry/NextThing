@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.WeatherInfo
 import com.example.nextthingb1.domain.service.LocationService
@@ -71,10 +70,8 @@ class TodayViewModel @Inject constructor(
             try {
                 taskUseCases.getTodayTasks().collect { tasks ->
                     val completed = tasks.filter { it.status == TaskStatus.COMPLETED }
-                    val pending = tasks.filter { 
-                    it.status == TaskStatus.PENDING || 
-                    it.status == TaskStatus.IN_PROGRESS || 
-                    it.status == TaskStatus.OVERDUE 
+                    val pending = tasks.filter {
+                    it.status == TaskStatus.PENDING
                 }
                     
                     _uiState.value = _uiState.value.copy(
@@ -98,13 +95,11 @@ class TodayViewModel @Inject constructor(
     
     fun selectTab(tab: TaskTab) {
         val displayTasks = when (tab) {
-            TaskTab.PENDING -> _uiState.value.allTasks.filter { 
-                it.status == TaskStatus.PENDING || 
-                it.status == TaskStatus.IN_PROGRESS || 
-                it.status == TaskStatus.OVERDUE 
+            TaskTab.PENDING -> _uiState.value.allTasks.filter {
+                it.status == TaskStatus.PENDING
             }
-            TaskTab.COMPLETED -> _uiState.value.allTasks.filter { 
-                it.status == TaskStatus.COMPLETED 
+            TaskTab.COMPLETED -> _uiState.value.allTasks.filter {
+                it.status == TaskStatus.COMPLETED
             }
         }
         
@@ -140,25 +135,17 @@ class TodayViewModel @Inject constructor(
     fun postponeTask(taskId: String) {
         viewModelScope.launch {
             try {
-                // 延期任务：将截止日期推迟一天
-                val task = _uiState.value.allTasks.find { it.id == taskId }
-                task?.let {
-                    val newDueDate = it.dueDate?.plusDays(1) 
-                        ?: java.time.LocalDateTime.now().plusDays(1)
-                    
-                    taskUseCases.updateTask(
-                        it.copy(dueDate = newDueDate)
-                    ).fold(
-                        onSuccess = {
-                            loadTodayTasks()
-                        },
-                        onFailure = { error ->
-                            _uiState.value = _uiState.value.copy(
-                                errorMessage = error.message
-                            )
-                        }
-                    )
-                }
+                // 延期任务：使用 DeferTaskUseCase 将截止日期推迟一天并更新状态为 DEFERRED
+                taskUseCases.deferTask(taskId).fold(
+                    onSuccess = {
+                        loadTodayTasks()
+                    },
+                    onFailure = { error ->
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = error.message
+                        )
+                    }
+                )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     errorMessage = e.message

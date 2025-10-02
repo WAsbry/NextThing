@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.CategoryItem
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
@@ -105,10 +104,6 @@ class CreateTaskViewModel @Inject constructor(
 
     fun updateDescription(description: String) {
         _uiState.value = _uiState.value.copy(description = description)
-    }
-
-    fun updatePriority(priority: TaskPriority) {
-        _uiState.value = _uiState.value.copy(priority = priority)
     }
 
     fun updateSelectedCategory(categoryItem: CategoryItem) {
@@ -273,7 +268,6 @@ class CreateTaskViewModel @Inject constructor(
                 val result = taskUseCases.createTask(
                     title = currentState.title,
                     description = currentState.description,
-                    priority = currentState.priority,
                     category = currentState.category,
                     dueDate = if (currentState.dueDate.isNotBlank()) LocalDateTime.now().plusDays(1) else null,
                     imageUri = currentState.selectedImageUri,
@@ -297,7 +291,6 @@ class CreateTaskViewModel @Inject constructor(
 data class CreateTaskUiState(
     val title: String = "",
     val description: String = "",
-    val priority: TaskPriority = TaskPriority.MEDIUM,
     val selectedCategoryItem: CategoryItem? = null,
     val dueDate: String = "",
     val isLoading: Boolean = false,

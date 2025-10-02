@@ -2,8 +2,10 @@ package com.example.nextthingb1.presentation.navigation
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,6 +23,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.example.nextthingb1.presentation.theme.BgPrimary
+import com.example.nextthingb1.presentation.theme.Primary
 import com.example.nextthingb1.presentation.screens.today.TodayScreen
 import com.example.nextthingb1.presentation.screens.today.TodayViewModel
 import com.example.nextthingb1.presentation.screens.tasks.TasksScreen
@@ -39,16 +43,51 @@ import com.example.nextthingb1.presentation.screens.createnotificationstrategy.C
 import com.example.nextthingb1.presentation.screens.createnotificationstrategy.CreateNotificationStrategyViewModel
 import com.example.nextthingb1.presentation.screens.taskdetail.TaskDetailScreen
 import com.example.nextthingb1.presentation.screens.taskdetail.TaskDetailViewModel
+import com.example.nextthingb1.presentation.screens.userinfo.UserInfoScreen
+import com.example.nextthingb1.presentation.screens.login.LoginScreen
 import com.example.nextthingb1.presentation.components.BottomNavigationBar
+import androidx.compose.runtime.LaunchedEffect
+import com.example.nextthingb1.domain.usecase.UserUseCases
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.first
 
 @Composable
-fun NextThingNavigation(navController: NavHostController) {
+fun NextThingNavigation(
+    navController: NavHostController,
+    userUseCases: UserUseCases
+) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    
+
+    // 检查是否有用户登录
+    var startDestination by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val currentUser = userUseCases.getCurrentUser().first()
+        startDestination = if (currentUser == null) {
+            Screen.Login.route
+        } else {
+            Screen.Today.route
+        }
+    }
+
+    // 等待确定起始目的地
+    if (startDestination == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BgPrimary),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = Primary)
+        }
+        return
+    }
+
     Scaffold(
         bottomBar = {
-            if (currentRoute != Screen.Focus.route) {
+            if (currentRoute != Screen.Focus.route && currentRoute != Screen.Login.route) {
                 BottomNavigationBar(
                     currentRoute = currentRoute,
                     onNavigate = { route ->
@@ -64,9 +103,19 @@ fun NextThingNavigation(navController: NavHostController) {
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Today.route,
+            startDestination = startDestination!!,
             modifier = Modifier.padding(paddingValues)
         ) {
+            composable(Screen.Login.route) {
+                LoginScreen(
+                    onLoginSuccess = {
+                        navController.navigate(Screen.Today.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
             composable(Screen.Today.route) {
                 val viewModel: TodayViewModel = hiltViewModel()
                 TodayScreen(
@@ -133,7 +182,20 @@ fun NextThingNavigation(navController: NavHostController) {
             
             composable(Screen.Settings.route) {
                 val viewModel: SettingsViewModel = hiltViewModel()
-                SettingsScreen(viewModel = viewModel)
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onNavigateToUserInfo = {
+                        navController.navigate(Screen.UserInfo.route)
+                    }
+                )
+            }
+
+            composable(Screen.UserInfo.route) {
+                UserInfoScreen(
+                    onBackPressed = {
+                        navController.popBackStack()
+                    }
+                )
             }
             
             composable(Screen.Focus.route) {
@@ -165,6 +227,7 @@ fun NextThingNavigation(navController: NavHostController) {
 }
 
 sealed class Screen(val route: String, val title: String, val icon: String) {
+    object Login : Screen("login", "登录", "login")
     object Today : Screen("today", "首页", "home")
     object Tasks : Screen("tasks", "任务", "list")
     object CreateTask : Screen("create_task", "创建", "add")
@@ -172,6 +235,7 @@ sealed class Screen(val route: String, val title: String, val icon: String) {
     object CreateNotificationStrategy : Screen("create_notification_strategy", "新建通知策略", "notification")
     object Stats : Screen("stats", "统计", "chart-pie")
     object Settings : Screen("settings", "我的", "user")
+    object UserInfo : Screen("user_info", "用户信息", "user-info")
     object Focus : Screen("focus", "专注", "clock")
     object TaskDetail : Screen("task_detail/{taskId}", "任务详情", "detail")
 } 
