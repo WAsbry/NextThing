@@ -54,7 +54,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.*
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.CategoryItem
 import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
@@ -153,10 +152,8 @@ fun CreateTaskScreen(
             onReminderExpandToggle = { isReminderExpanded = !isReminderExpanded },
             onRepeatExpandToggle = { isRepeatExpanded = !isRepeatExpanded },
             selectedCategoryItem = uiState.selectedCategoryItem,
-            selectedPriority = uiState.priority,
             categories = categories,
             onCategorySelected = { viewModel.updateSelectedCategory(it) },
-            onPrioritySelected = { viewModel.updatePriority(it) },
             onCreateCategoryClicked = { viewModel.showCreateCategoryDialog() },
             onDeleteCategory = { viewModel.deleteCategory(it) },
             onPinCategory = { categoryId, isPinned -> viewModel.pinCategory(categoryId, isPinned) },
@@ -375,10 +372,8 @@ private fun CollapsibleConfigSection(
     onReminderExpandToggle: () -> Unit,
     onRepeatExpandToggle: () -> Unit,
     selectedCategoryItem: CategoryItem?,
-    selectedPriority: TaskPriority,
     categories: List<CategoryItem>,
     onCategorySelected: (CategoryItem) -> Unit,
-    onPrioritySelected: (TaskPriority) -> Unit,
     onCreateCategoryClicked: () -> Unit,
     onDeleteCategory: (String) -> Unit,
     onPinCategory: (String, Boolean) -> Unit,
@@ -422,17 +417,15 @@ private fun CollapsibleConfigSection(
                 modifier = Modifier.weight(1f)
             )
 
-            // 分类・优先级配置卡
+            // 分类配置卡
             CategoryPriorityConfigCard(
                 screenHeight = screenHeight,
                 screenWidth = screenWidth,
                 isExpanded = isCategoryExpanded,
                 onExpandToggle = onCategoryExpandToggle,
                 selectedCategoryItem = selectedCategoryItem,
-                selectedPriority = selectedPriority,
                 categories = categories,
                 onCategorySelected = onCategorySelected,
-                onPrioritySelected = onPrioritySelected,
                 onCreateCategoryClicked = onCreateCategoryClicked,
                 onDeleteCategory = onDeleteCategory,
                 onPinCategory = onPinCategory,
@@ -654,7 +647,7 @@ internal fun TimeConfigCard(
     }
 }
 
-// 分类・优先级配置卡
+// 分类配置卡
 @Composable
 internal fun CategoryPriorityConfigCard(
     screenHeight: androidx.compose.ui.unit.Dp,
@@ -662,10 +655,8 @@ internal fun CategoryPriorityConfigCard(
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
     selectedCategoryItem: CategoryItem?,
-    selectedPriority: TaskPriority,
     categories: List<CategoryItem>,
     onCategorySelected: (CategoryItem) -> Unit,
-    onPrioritySelected: (TaskPriority) -> Unit,
     onCreateCategoryClicked: () -> Unit,
     onDeleteCategory: (String) -> Unit,
     onPinCategory: (String, Boolean) -> Unit,

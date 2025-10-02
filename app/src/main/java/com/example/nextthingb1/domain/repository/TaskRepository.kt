@@ -2,7 +2,6 @@ package com.example.nextthingb1.domain.repository
 
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import kotlinx.coroutines.flow.Flow
@@ -10,19 +9,18 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 interface TaskRepository {
-    
+
     // 基础CRUD操作
     suspend fun insertTask(task: Task): String
     suspend fun updateTask(task: Task)
     suspend fun deleteTask(taskId: String)
     suspend fun deleteAllTasks()
     suspend fun getTaskById(taskId: String): Task?
-    
+
     // 查询操作
     fun getAllTasks(): Flow<List<Task>>
     fun getTasksByStatus(status: TaskStatus): Flow<List<Task>>
     fun getTasksByCategory(category: TaskCategory): Flow<List<Task>>
-    fun getTasksByPriority(priority: TaskPriority): Flow<List<Task>>
     fun getTasksByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<Task>>
     fun getTodayTasks(): Flow<List<Task>>
     fun getOverdueTasks(): Flow<List<Task>>

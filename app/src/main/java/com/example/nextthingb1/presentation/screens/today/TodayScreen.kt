@@ -31,7 +31,6 @@ import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.TaskTab
 import com.example.nextthingb1.LocalPermissionLauncher

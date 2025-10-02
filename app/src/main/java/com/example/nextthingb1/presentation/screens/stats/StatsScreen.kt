@@ -1,11 +1,11 @@
 package com.example.nextthingb1.presentation.screens.stats
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -13,88 +13,77 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-
+import com.example.nextthingb1.domain.model.TaskCategory
 import com.example.nextthingb1.presentation.theme.*
-import kotlin.math.cos
-import kotlin.math.sin
+import java.time.format.DateTimeFormatter
+import kotlin.math.*
 
 @Composable
 fun StatsScreen(
     viewModel: StatsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgPrimary)
+            .background(BgPrimary),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
+        // Tab 切换
         item {
-            // 统计类型切换
-            StatsTabs(
+            StatsTabRow(
                 selectedTab = uiState.selectedTab,
                 onTabSelected = { viewModel.selectTab(it) }
             )
         }
-        
+
+        // 根据选中的 Tab 显示不同内容
+        when (uiState.selectedTab) {
+            StatsTab.OVERVIEW -> {
+                item { OverviewContent(uiState) }
+            }
+            StatsTab.CATEGORY -> {
+                item { CategoryContent(uiState) }
+            }
+            StatsTab.TREND -> {
+                item { TrendContent(uiState, viewModel) }
+            }
+            StatsTab.EFFICIENCY -> {
+                item { EfficiencyContent(uiState) }
+            }
+        }
+
+        // 最后更新时间
         item {
-            // 月份导航
-            StatsMonthNavigation(
-                currentMonth = uiState.currentMonth,
-                onPreviousMonth = { viewModel.previousMonth() },
-                onNextMonth = { viewModel.nextMonth() }
+            Text(
+                text = "最后更新于: ${uiState.lastUpdateTime.format(DateTimeFormatter.ofPattern("HH:mm:ss"))}",
+                fontSize = 12.sp,
+                color = TextMuted,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                textAlign = TextAlign.Center
             )
-        }
-        
-        item {
-            // 任务概览
-            TaskStatsOverviewGrid(
-                totalTasks = uiState.totalTasks,
-                completedTasks = uiState.completedTasks,
-                completionRate = uiState.completionRate,
-                averageCompletionTime = uiState.averageCompletionTime
-            )
-        }
-        
-        item {
-            // 任务完成趋势图
-            TaskCompletionTrendChart()
-        }
-        
-        item {
-            // 分类排行
-            CategoryRankingCard(
-                categories = uiState.categories
-            )
-        }
-        
-        item {
-            // 明细排行
-            DetailRankingCard(
-                details = uiState.details
-            )
-        }
-        
-        item {
-            // 精选图片
-            FeaturedImageCard()
         }
     }
 }
 
 @Composable
-private fun StatsTabs(
+private fun StatsTabRow(
     selectedTab: StatsTab,
     onTabSelected: (StatsTab) -> Unit
 ) {
@@ -102,31 +91,33 @@ private fun StatsTabs(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(BgCard)
-                .padding(8.dp)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             StatsTab.values().forEach { tab ->
+                val isSelected = selectedTab == tab
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(
-                            if (selectedTab == tab) Success else Color.Transparent
+                            if (isSelected) Primary else Color.Transparent
                         )
                         .clickable { onTabSelected(tab) }
-                        .padding(vertical = 8.dp, horizontal = 16.dp),
+                        .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tab.title,
-                        color = if (selectedTab == tab) Color.White else TextSecondary,
+                        color = if (isSelected) Color.White else TextSecondary,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                     )
                 }
             }
@@ -134,109 +125,86 @@ private fun StatsTabs(
     }
 }
 
+// ==================== 概览页面 ====================
 @Composable
-private fun StatsMonthNavigation(
-    currentMonth: String,
-    onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp)
+private fun OverviewContent(uiState: StatsUiState) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onPreviousMonth,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(BgPrimary)
-            ) {
-                Icon(
-                    painter = painterResource(id = android.R.drawable.ic_media_previous),
-                    contentDescription = "上个月",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            
-            Text(
-                text = currentMonth,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary
-            )
-            
-            IconButton(
-                onClick = onNextMonth,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(BgPrimary)
-            ) {
-                Icon(
-                    painter = painterResource(id = android.R.drawable.ic_media_next),
-                    contentDescription = "下个月",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
+        // 核心指标卡片
+        CoreMetricsCards(uiState)
+
+        // 完成率进度条
+        CompletionProgressCard(uiState)
+
+        // 重要程度分布环形图
+        ImportanceDistributionCard(uiState)
     }
 }
 
 @Composable
-private fun TaskStatsOverviewGrid(
-    totalTasks: String,
-    completedTasks: String,
-    completionRate: String,
-    averageCompletionTime: String
-) {
-    val overviewItems = listOf(
-        OverviewItem("总任务数", totalTasks, Primary, android.R.drawable.ic_menu_agenda),
-        OverviewItem("已完成", completedTasks, Success, android.R.drawable.checkbox_on_background),
-        OverviewItem("完成率", completionRate, Color(0xFFAB47BC), android.R.drawable.stat_notify_sync),
-        OverviewItem("平均完成", averageCompletionTime, Color(0xFF4CAF50), android.R.drawable.ic_menu_recent_history)
-    )
-    
+private fun CoreMetricsCards(uiState: StatsUiState) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        overviewItems.chunked(2).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                rowItems.forEach { item ->
-                    OverviewCard(
-                        item = item,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MetricCard(
+                title = "总任务数",
+                value = uiState.totalTasks.toString(),
+                icon = "📋",
+                color = Primary,
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                title = "已完成",
+                value = uiState.completedTasks.toString(),
+                icon = "✅",
+                color = Success,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MetricCard(
+                title = "完成率",
+                value = "${String.format("%.1f", uiState.completionRate)}%",
+                icon = "📈",
+                color = Color(0xFFAB47BC),
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                title = "放弃任务",
+                value = uiState.cancelledTasks.toString(),
+                icon = "🚫",
+                color = Color(0xFFFFA726),
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
 
 @Composable
-private fun OverviewCard(
-    item: OverviewItem,
+private fun MetricCard(
+    title: String,
+    value: String,
+    icon: String,
+    color: Color,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
     ) {
         Column(
             modifier = Modifier
@@ -246,37 +214,35 @@ private fun OverviewCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(item.color, item.color.copy(alpha = 0.8f))
+                        brush = Brush.linearGradient(
+                            colors = listOf(color, color.copy(alpha = 0.7f))
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    painter = painterResource(id = item.iconRes),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                Text(
+                    text = icon,
+                    fontSize = 24.sp
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             Text(
-                text = item.title,
+                text = title,
                 fontSize = 12.sp,
                 color = TextSecondary,
                 textAlign = TextAlign.Center
             )
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             Text(
-                text = item.value,
-                fontSize = 18.sp,
+                text = value,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary,
                 textAlign = TextAlign.Center
@@ -286,543 +252,1057 @@ private fun OverviewCard(
 }
 
 @Composable
-private fun TaskCompletionTrendChart() {
+private fun CompletionProgressCard(uiState: StatsUiState) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(16.dp)
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
     ) {
-        Column {
-            // 图表头部
-            Row(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "任务状态分布",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 未完成进度条
+            ProgressBarItem(
+                label = "未完成",
+                count = uiState.pendingTasks,
+                total = uiState.totalTasks,
+                color = Color(0xFF2196F3)  // 蓝色
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 已完成进度条
+            ProgressBarItem(
+                label = "已完成",
+                count = uiState.completedTasks,
+                total = uiState.totalTasks,
+                color = Success  // 绿色 #66BB6A
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 延期进度条
+            ProgressBarItem(
+                label = "延期",
+                count = uiState.deferredTasks,
+                total = uiState.totalTasks,
+                color = Color(0xFFFFA726)  // 橙黄色
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 逾期进度条
+            ProgressBarItem(
+                label = "逾期",
+                count = uiState.overdueTasks,
+                total = uiState.totalTasks,
+                color = Danger  // 红色 #F44336
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 放弃进度条
+            ProgressBarItem(
+                label = "放弃",
+                count = uiState.cancelledTasks,
+                total = uiState.totalTasks,
+                color = Color(0xFF9E9E9E)  // 灰色
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProgressBarItem(
+    label: String,
+    count: Int,
+    total: Int,
+    color: Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = TextSecondary,
+            modifier = Modifier.width(60.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFFE0E0E0))
+        ) {
+            val progress = if (total > 0) count.toFloat() / total else 0f
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxHeight()
+                    .fillMaxWidth(progress)
+                    .background(color, RoundedCornerShape(4.dp))
+            )
+        }
+
+        Text(
+            text = "$count",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary,
+            modifier = Modifier
+                .width(40.dp)
+                .padding(start = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun ImportanceDistributionCard(uiState: StatsUiState) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "重要程度分布",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 环形图
+            ImportanceDonutChart(
+                importantUrgentCount = uiState.importantUrgentCount,
+                importantNotUrgentCount = uiState.importantNotUrgentCount,
+                notImportantUrgentCount = uiState.notImportantUrgentCount,
+                notImportantNotUrgentCount = uiState.notImportantNotUrgentCount,
+                modifier = Modifier.size(180.dp)
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 图例
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    LegendItem("重要紧急", uiState.importantUrgentCount, Color(0xFFF44336))
+                    LegendItem("重要不紧急", uiState.importantNotUrgentCount, Color(0xFFFF9800))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    LegendItem("不重要紧急", uiState.notImportantUrgentCount, Color(0xFF42A5F5))
+                    LegendItem("不重要不紧急", uiState.notImportantNotUrgentCount, Color(0xFF66BB6A))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportanceDonutChart(
+    importantUrgentCount: Int,
+    importantNotUrgentCount: Int,
+    notImportantUrgentCount: Int,
+    notImportantNotUrgentCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val total = importantUrgentCount + importantNotUrgentCount + notImportantUrgentCount + notImportantNotUrgentCount
+    if (total == 0) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text("暂无数据", color = TextMuted, fontSize = 14.sp)
+        }
+        return
+    }
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val centerX = size.width / 2
+            val centerY = size.height / 2
+            val radius = minOf(centerX, centerY) * 0.8f
+            val strokeWidth = radius * 0.35f
+
+            var startAngle = -90f
+
+            // 重要且紧急 (红色)
+            if (importantUrgentCount > 0) {
+                val sweepAngle = (importantUrgentCount.toFloat() / total) * 360f
+                drawArc(
+                    color = Color(0xFFF44336),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    topLeft = Offset(centerX - radius, centerY - radius),
+                    size = Size(radius * 2, radius * 2)
+                )
+                startAngle += sweepAngle
+            }
+
+            // 重要但不紧急 (橙色)
+            if (importantNotUrgentCount > 0) {
+                val sweepAngle = (importantNotUrgentCount.toFloat() / total) * 360f
+                drawArc(
+                    color = Color(0xFFFF9800),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    topLeft = Offset(centerX - radius, centerY - radius),
+                    size = Size(radius * 2, radius * 2)
+                )
+                startAngle += sweepAngle
+            }
+
+            // 不重要但紧急 (蓝色)
+            if (notImportantUrgentCount > 0) {
+                val sweepAngle = (notImportantUrgentCount.toFloat() / total) * 360f
+                drawArc(
+                    color = Color(0xFF42A5F5),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    topLeft = Offset(centerX - radius, centerY - radius),
+                    size = Size(radius * 2, radius * 2)
+                )
+                startAngle += sweepAngle
+            }
+
+            // 不重要且不紧急 (绿色)
+            if (notImportantNotUrgentCount > 0) {
+                val sweepAngle = (notImportantNotUrgentCount.toFloat() / total) * 360f
+                drawArc(
+                    color = Color(0xFF66BB6A),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    topLeft = Offset(centerX - radius, centerY - radius),
+                    size = Size(radius * 2, radius * 2)
+                )
+            }
+        }
+
+        // 中心文字
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "总计",
+                fontSize = 12.sp,
+                color = TextSecondary
+            )
+            Text(
+                text = "$total",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegendItem(
+    label: String,
+    count: Int,
+    color: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            text = "$label: $count",
+            fontSize = 13.sp,
+            color = TextSecondary
+        )
+    }
+}
+
+// ==================== 分类统计页面 ====================
+@Composable
+private fun CategoryContent(uiState: StatsUiState) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 分类任务分布柱状图
+        CategoryDistributionChart(uiState)
+
+        // 分类完成时长对比
+        CategoryDurationChart(uiState)
+    }
+}
+
+@Composable
+private fun CategoryDistributionChart(uiState: StatsUiState) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "分类任务分布",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            uiState.categoryStats.forEach { (category, stats) ->
+                CategoryStatItem(
+                    category = category,
+                    stats = stats
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryStatItem(
+    category: TaskCategory,
+    stats: CategoryStatsData
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color(android.graphics.Color.parseColor(category.colorHex))),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = "完成趋势",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
+                        text = category.icon,
+                        fontSize = 16.sp
+                    )
+                }
+                Text(
+                    text = category.displayName,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextPrimary
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = "${stats.totalCount} 个",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "${String.format("%.1f", stats.completionRate)}% 完成",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 完成率进度条
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFFE0E0E0))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(stats.completionRate / 100f)
+                    .background(
+                        Color(android.graphics.Color.parseColor(category.colorHex)),
+                        RoundedCornerShape(4.dp)
+                    )
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryDurationChart(uiState: StatsUiState) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "分类平均完成时长",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            val maxDuration = uiState.completionTimeByCategory.values.maxOrNull() ?: 1.0
+
+            uiState.completionTimeByCategory.forEach { (category, duration) ->
+                if (duration > 0) {
+                    CategoryDurationItem(
+                        category = category,
+                        duration = duration,
+                        maxDuration = maxDuration
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryDurationItem(
+    category: TaskCategory,
+    duration: Double,
+    maxDuration: Double
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = category.displayName,
+            fontSize = 13.sp,
+            color = TextSecondary,
+            modifier = Modifier.width(50.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(24.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFE0E0E0))
+        ) {
+            val widthFraction = (duration / maxDuration).toFloat()
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(widthFraction)
+                    .background(
+                        Color(android.graphics.Color.parseColor(category.colorHex)),
+                        RoundedCornerShape(12.dp)
+                    )
+            )
+        }
+
+        Text(
+            text = "${duration.toInt()}分",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = TextPrimary,
+            modifier = Modifier
+                .width(50.dp)
+                .padding(start = 8.dp)
+        )
+    }
+}
+
+// ==================== 趋势统计页面 ====================
+@Composable
+private fun TrendContent(
+    uiState: StatsUiState,
+    viewModel: StatsViewModel
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 周趋势折线图
+        WeeklyTrendChart(uiState)
+
+        // 创建 vs 完成对比
+        CreateVsCompleteTrendCard(uiState)
+    }
+}
+
+@Composable
+private fun WeeklyTrendChart(uiState: StatsUiState) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "任务完成趋势（最近7天）",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            if (uiState.weeklyTrend.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("暂无趋势数据", color = TextMuted)
+                }
+            } else {
+                LineChart(
+                    data = uiState.weeklyTrend,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LineChart(
+    data: List<DailyTrendData>,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        if (data.isEmpty()) return@Canvas
+
+        val maxValue = data.maxOf { maxOf(it.createdCount, it.completedCount) }.toFloat()
+        if (maxValue == 0f) return@Canvas
+
+        val pointSpacing = size.width / (data.size - 1).coerceAtLeast(1)
+        val heightScale = size.height / maxValue * 0.8f
+
+        // 绘制网格线
+        for (i in 0..4) {
+            val y = size.height - (size.height / 4 * i)
+            drawLine(
+                color = Color(0xFFE0E0E0),
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = 1f
+            )
+        }
+
+        // 绘制创建任务折线（蓝色）
+        val createdPath = Path()
+        data.forEachIndexed { index, dayData ->
+            val x = index * pointSpacing
+            val y = size.height - (dayData.createdCount * heightScale)
+            if (index == 0) {
+                createdPath.moveTo(x, y)
+            } else {
+                createdPath.lineTo(x, y)
+            }
+        }
+        drawPath(
+            path = createdPath,
+            color = Primary,
+            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+        )
+
+        // 绘制完成任务折线（绿色）
+        val completedPath = Path()
+        data.forEachIndexed { index, dayData ->
+            val x = index * pointSpacing
+            val y = size.height - (dayData.completedCount * heightScale)
+            if (index == 0) {
+                completedPath.moveTo(x, y)
+            } else {
+                completedPath.lineTo(x, y)
+            }
+        }
+        drawPath(
+            path = completedPath,
+            color = Success,
+            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+        )
+
+        // 绘制数据点
+        data.forEachIndexed { index, dayData ->
+            val x = index * pointSpacing
+
+            // 创建点
+            val createdY = size.height - (dayData.createdCount * heightScale)
+            drawCircle(
+                color = Primary,
+                radius = 4.dp.toPx(),
+                center = Offset(x, createdY)
+            )
+
+            // 完成点
+            val completedY = size.height - (dayData.completedCount * heightScale)
+            drawCircle(
+                color = Success,
+                radius = 4.dp.toPx(),
+                center = Offset(x, completedY)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CreateVsCompleteTrendCard(uiState: StatsUiState) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "创建 vs 完成对比",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                TrendLegendItem("创建", Primary)
+                TrendLegendItem("完成", Success)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            val totalCreated = uiState.weeklyTrend.sumOf { it.createdCount }
+            val totalCompleted = uiState.weeklyTrend.sumOf { it.completedCount }
+            val avgCompletionRate = if (uiState.weeklyTrend.isNotEmpty())
+                uiState.weeklyTrend.map { it.completionRate }.average()
+            else 0.0
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$totalCreated",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Primary
                     )
                     Text(
-                        text = "2025-08-02",
+                        text = "总创建",
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
                 }
-                
-                Row(
-                    modifier = Modifier
-                        .background(BgPrimary, RoundedCornerShape(16.dp))
-                        .padding(2.dp)
-                ) {
-                    Button(
-                        onClick = { },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Success,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "大类",
-                            fontSize = 12.sp
-                        )
-                    }
-                    
-                    Button(
-                        onClick = { },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = TextSecondary
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "小类",
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-            
-            // 图表内容
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .padding(16.dp)
-                    .background(BgPrimary, RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                // 简单的线性图表背景
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                ) {
-                    drawTrendLine(this)
-                }
-                
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        painter = painterResource(id = android.R.drawable.ic_menu_info_details),
-                        contentDescription = null,
-                        tint = TextMuted,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "累计完成：18个任务",
-                        color = TextMuted,
-                        fontSize = 14.sp
+                        text = "$totalCompleted",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Success
+                    )
+                    Text(
+                        text = "总完成",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${String.format("%.1f", avgCompletionRate)}%",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFAB47BC)
+                    )
+                    Text(
+                        text = "平均完成率",
+                        fontSize = 12.sp,
+                        color = TextSecondary
                     )
                 }
             }
-            
-            // 日期标签
-            Text(
-                text = "01     05     10     15     20     25     30",
-                fontSize = 12.sp,
-                color = TextSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            )
         }
     }
 }
 
-private fun drawTrendLine(drawScope: DrawScope) {
-    val path = Path()
-    val width = drawScope.size.width
-    val height = drawScope.size.height
-    
-    // 绘制简单的趋势线
-    path.moveTo(0f, height * 0.8f)
-    path.lineTo(width * 0.2f, height * 0.6f)
-    path.lineTo(width * 0.4f, height * 0.4f)
-    path.lineTo(width * 0.6f, height * 0.5f)
-    path.lineTo(width * 0.8f, height * 0.3f)
-    path.lineTo(width, height * 0.2f)
-    
-    drawScope.drawPath(
-        path = path,
-        color = Color(0xFF4CAF50),
-        style = Stroke(width = with(drawScope) { 3.dp.toPx() })
-    )
+@Composable
+private fun TrendLegendItem(label: String, color: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(24.dp)
+                .height(3.dp)
+                .clip(RoundedCornerShape(1.5.dp))
+                .background(color)
+        )
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = TextSecondary
+        )
+    }
+}
+
+// ==================== 效率统计页面 ====================
+@Composable
+private fun EfficiencyContent(uiState: StatsUiState) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 准时完成率双环图
+        OnTimeCompletionCard(uiState)
+
+        // 重要程度完成时长对比
+        ImportanceDurationCard(uiState)
+    }
 }
 
 @Composable
-private fun CategoryRankingCard(
-    categories: List<CategoryItem>
-) {
+private fun OnTimeCompletionCard(uiState: StatsUiState) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(16.dp)
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
     ) {
-        Column {
-            // 卡片头部
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "分类排行",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
-                
-                Row(
-                    modifier = Modifier
-                        .background(BgPrimary, RoundedCornerShape(16.dp))
-                        .padding(2.dp)
-                ) {
-                    Button(
-                        onClick = { },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = TextPrimary,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "大类",
-                            fontSize = 12.sp
-                        )
-                    }
-                    
-                    Button(
-                        onClick = { },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = TextSecondary
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "小类",
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-            
-            // 饼图
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                PieChart(
-                    modifier = Modifier.size(200.dp)
-                )
-            }
-            
-            // 分类列表
-            categories.forEach { category ->
-                CategoryRankingItem(category = category)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PieChart(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawPieChart(this)
-        }
-        
         Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "本期",
+                text = "完成及时率",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 双环图
+            DualRingChart(
+                onTimeRate = uiState.onTimeCompletionRate,
+                overdueRate = uiState.overdueCompletionRate,
+                modifier = Modifier.size(180.dp)
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(Success)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "准时完成",
+                            fontSize = 13.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    Text(
+                        text = "${String.format("%.1f", uiState.onTimeCompletionRate)}%",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Success
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(Danger)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "逾期完成",
+                            fontSize = 13.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    Text(
+                        text = "${String.format("%.1f", uiState.overdueCompletionRate)}%",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Danger
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DualRingChart(
+    onTimeRate: Float,
+    overdueRate: Float,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val centerX = size.width / 2
+            val centerY = size.height / 2
+            val outerRadius = minOf(centerX, centerY) * 0.8f
+            val innerRadius = outerRadius * 0.6f
+            val strokeWidth = (outerRadius - innerRadius) / 2
+
+            // 外环 (准时完成)
+            drawArc(
+                color = Color(0xFFE0E0E0),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = Stroke(width = strokeWidth * 1.5f),
+                topLeft = Offset(centerX - outerRadius, centerY - outerRadius),
+                size = Size(outerRadius * 2, outerRadius * 2)
+            )
+
+            val onTimeSweep = (onTimeRate / 100f) * 360f
+            drawArc(
+                color = Color(0xFF66BB6A),
+                startAngle = -90f,
+                sweepAngle = onTimeSweep,
+                useCenter = false,
+                style = Stroke(width = strokeWidth * 1.5f, cap = StrokeCap.Round),
+                topLeft = Offset(centerX - outerRadius, centerY - outerRadius),
+                size = Size(outerRadius * 2, outerRadius * 2)
+            )
+
+            // 内环 (逾期完成)
+            drawArc(
+                color = Color(0xFFE0E0E0),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                style = Stroke(width = strokeWidth),
+                topLeft = Offset(centerX - innerRadius, centerY - innerRadius),
+                size = Size(innerRadius * 2, innerRadius * 2)
+            )
+
+            val overdueSweep = (overdueRate / 100f) * 360f
+            drawArc(
+                color = Color(0xFFFFA726),
+                startAngle = -90f,
+                sweepAngle = overdueSweep,
+                useCenter = false,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                topLeft = Offset(centerX - innerRadius, centerY - innerRadius),
+                size = Size(innerRadius * 2, innerRadius * 2)
+            )
+        }
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "效率",
                 fontSize = 12.sp,
                 color = TextSecondary
             )
             Text(
-                text = "¥ 235.00",
-                fontSize = 18.sp,
+                text = if (onTimeRate > 70) "优秀" else if (onTimeRate > 50) "良好" else "待提升",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (onTimeRate > 70) Success else if (onTimeRate > 50) Primary else Danger
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImportanceDurationCard(uiState: StatsUiState) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "重要程度完成时长分析",
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
-            Text(
-                text = "日用 14%",
-                fontSize = 12.sp,
-                color = TextSecondary
-            )
-        }
-    }
-}
 
-private fun drawPieChart(drawScope: DrawScope) {
-    val colors = listOf(
-        Color(0xFF4FC3F7),
-        Color(0xFF66BB6A),
-        Color(0xFFFFA726),
-        Color(0xFFEF5350),
-        Color(0xFFAB47BC)
-    )
-    
-    val percentages = listOf(27.83f, 23.58f, 17.23f, 15.64f, 15.72f)
-    val center = drawScope.center
-    val radius = minOf(drawScope.size.width, drawScope.size.height) / 2f * 0.8f
-    
-    var startAngle = -90f
-    
-    percentages.forEachIndexed { index, percentage ->
-        val sweepAngle = percentage / 100f * 360f
-        
-        drawScope.drawArc(
-            color = colors[index],
-            startAngle = startAngle,
-            sweepAngle = sweepAngle,
-            useCenter = true,
-            topLeft = androidx.compose.ui.geometry.Offset(
-                center.x - radius,
-                center.y - radius
-            ),
-            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2)
-        )
-        
-        startAngle += sweepAngle
+            Spacer(modifier = Modifier.height(20.dp))
+
+            val maxDuration = uiState.completionTimeByImportance.values.maxOrNull() ?: 1.0
+
+            // 显示四个象限的完成时长
+            val importanceData = listOf(
+                Triple("重要紧急", uiState.completionTimeByImportance[com.example.nextthingb1.domain.model.TaskImportanceUrgency.IMPORTANT_URGENT] ?: 0.0, Color(0xFFF44336)),
+                Triple("重要不紧急", uiState.completionTimeByImportance[com.example.nextthingb1.domain.model.TaskImportanceUrgency.IMPORTANT_NOT_URGENT] ?: 0.0, Color(0xFFFF9800)),
+                Triple("不重要紧急", uiState.completionTimeByImportance[com.example.nextthingb1.domain.model.TaskImportanceUrgency.NOT_IMPORTANT_URGENT] ?: 0.0, Color(0xFF42A5F5)),
+                Triple("不重要不紧急", uiState.completionTimeByImportance[com.example.nextthingb1.domain.model.TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT] ?: 0.0, Color(0xFF66BB6A))
+            )
+
+            importanceData.forEach { (label, duration, color) ->
+                if (duration > 0) {
+                    ImportanceDurationItem(
+                        label = label,
+                        duration = duration,
+                        maxDuration = maxDuration,
+                        color = color
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun CategoryRankingItem(category: CategoryItem) {
+private fun ImportanceDurationItem(
+    label: String,
+    duration: Double,
+    maxDuration: Double,
+    color: Color
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 分类图标
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = TextSecondary,
+            modifier = Modifier.width(80.dp)
+        )
+
         Box(
             modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(category.color),
-            contentAlignment = Alignment.Center
+                .weight(1f)
+                .height(32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFE0E0E0))
         ) {
-            Text(
-                text = category.icon,
-                fontSize = 14.sp
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // 分类内容
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = category.name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary
-            )
-            
-            Text(
-                text = "${category.percentage}%",
-                fontSize = 12.sp,
-                color = TextSecondary
-            )
-            
-            // 进度条
+            val widthFraction = (duration / maxDuration).toFloat()
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .background(BgPrimary, RoundedCornerShape(2.dp))
+                    .fillMaxHeight()
+                    .fillMaxWidth(widthFraction)
+                    .background(color, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(category.percentage / 100f)
-                        .background(category.color, RoundedCornerShape(2.dp))
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // 数量
-        Text(
-            text = category.amount,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextPrimary
-        )
-    }
-}
-
-@Composable
-private fun DetailRankingCard(
-    details: List<DetailItem>
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column {
-            // 卡片头部
-            Text(
-                text = "明细排行",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary,
-                modifier = Modifier.padding(16.dp)
-            )
-            
-            // 明细列表
-            details.forEach { detail ->
-                DetailRankingItem(detail = detail)
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailRankingItem(detail: DetailItem) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 明细图标
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(detail.color),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = detail.icon,
-                fontSize = 14.sp
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // 明细内容
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = detail.name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary
-            )
-            
-            Text(
-                text = detail.description,
-                fontSize = 12.sp,
-                color = TextSecondary
-            )
-        }
-        
-        // 状态
-        Text(
-            text = detail.amount,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Danger
-        )
-    }
-}
-
-@Composable
-private fun FeaturedImageCard() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column {
-            // 卡片头部
-            Text(
-                text = "精选图片",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary,
-                modifier = Modifier.padding(16.dp)
-            )
-            
-            // 内容
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "📸",
-                    fontSize = 48.sp
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(
-                    text = "为原创添加图片，记录更多精彩~",
-                    color = TextMuted,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(
-                    text = "¥ 0.00",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // 操作按钮
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("分享报告", "导出数据", "任务分析", "效率统计").forEach { text ->
-                        OutlinedButton(
-                            onClick = { },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = TextSecondary
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Border)
-                        ) {
-                            Text(
-                                text = text,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
+                if (widthFraction > 0.3f) {
+                    Text(
+                        text = "${duration.toInt()}分",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
                 }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Text(
-                    text = "数据备份中 ↑",
-                    fontSize = 12.sp,
-                    color = Primary
-                )
             }
+        }
+
+        if ((duration / maxDuration).toFloat() <= 0.3f) {
+            Text(
+                text = "${duration.toInt()}分",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = TextPrimary,
+                modifier = Modifier
+                    .width(50.dp)
+                    .padding(start = 8.dp)
+            )
+        } else {
+            Spacer(modifier = Modifier.width(50.dp))
         }
     }
 }
-
-// 数据类
-data class OverviewItem(
-    val title: String,
-    val value: String,
-    val color: Color,
-    val iconRes: Int
-)
-
-data class CategoryItem(
-    val name: String,
-    val percentage: Float,
-    val amount: String,
-    val color: Color,
-    val icon: String
-)
-
-data class DetailItem(
-    val name: String,
-    val description: String,
-    val amount: String,
-    val color: Color,
-    val icon: String
-) 
