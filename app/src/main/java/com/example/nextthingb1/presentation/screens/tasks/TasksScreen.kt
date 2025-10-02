@@ -79,7 +79,10 @@ fun TasksScreen(
                         taskGroups = uiState.taskGroups,
                         onTaskClick = { task ->
                             onNavigateToTaskDetail(task.id)
-                        }
+                        },
+                        onToggleStatus = { taskId -> viewModel.toggleTaskStatus(taskId) },
+                        onDefer = { taskId -> viewModel.deferTask(taskId) },
+                        onCancel = { taskId -> viewModel.cancelTask(taskId) }
                     )
                 }
             }
@@ -444,11 +447,10 @@ private fun calculateCurrentWeekData(tasks: List<Task>, earliestTaskDate: LocalD
 
     Log.d("calculateCurrentWeekData", "过滤后的任务数量: ${currentWeekTasks.size}")
 
-    // 统计各状态任务数量
-    val pendingCount = currentWeekTasks.count {
-        it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS
-    }
+    // 统计各状态任务数量（5种状态）
+    val pendingCount = currentWeekTasks.count { it.status == TaskStatus.PENDING }
     val completedCount = currentWeekTasks.count { it.status == TaskStatus.COMPLETED }
+    val deferredCount = currentWeekTasks.count { it.status == TaskStatus.DELAYED }
     val overdueCount = currentWeekTasks.count { it.status == TaskStatus.OVERDUE }
     val cancelledCount = currentWeekTasks.count { it.status == TaskStatus.CANCELLED }
 
@@ -776,7 +778,10 @@ private fun UnifiedTopSection(
 @Composable
 private fun TasksListView(
     taskGroups: List<TaskGroup>,
-    onTaskClick: (Task) -> Unit
+    onTaskClick: (Task) -> Unit,
+    onToggleStatus: ((String) -> Unit)? = null,
+    onDefer: ((String) -> Unit)? = null,
+    onCancel: ((String) -> Unit)? = null
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -785,7 +790,10 @@ private fun TasksListView(
         items(taskGroups) { group ->
             TaskGroupItem(
                 group = group,
-                onTaskClick = onTaskClick
+                onTaskClick = onTaskClick,
+                onToggleStatus = onToggleStatus,
+                onDefer = onDefer,
+                onCancel = onCancel
             )
         }
     }
@@ -794,7 +802,10 @@ private fun TasksListView(
 @Composable
 private fun TaskGroupItem(
     group: TaskGroup,
-    onTaskClick: (Task) -> Unit
+    onTaskClick: (Task) -> Unit,
+    onToggleStatus: ((String) -> Unit)? = null,
+    onDefer: ((String) -> Unit)? = null,
+    onCancel: ((String) -> Unit)? = null
 ) {
     Column {
         // 日期标题 - 更简洁的设计
@@ -830,7 +841,10 @@ private fun TaskGroupItem(
             group.tasks.forEach { task ->
                 TaskListItem(
                     task = task,
-                    onClick = { onTaskClick(task) }
+                    onClick = { onTaskClick(task) },
+                    onToggleStatus = onToggleStatus?.let { { it(task.id) } },
+                    onDefer = onDefer?.let { { it(task.id) } },
+                    onCancel = onCancel?.let { { it(task.id) } }
                 )
             }
         }
@@ -864,14 +878,21 @@ private fun formatDateDisplay(dateString: String): String {
 @Composable
 private fun TaskListItem(
     task: Task,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onToggleStatus: (() -> Unit)? = null,
+    onDefer: (() -> Unit)? = null,
+    onCancel: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.padding(horizontal = 16.dp)
     ) {
         TaskItemCard(
             task = task,
-            onClick = onClick
+            onClick = onClick,
+            showSwipeActions = true,
+            onToggleStatus = onToggleStatus,
+            onPostpone = onDefer,
+            onCancel = onCancel
         )
 
         // 分割线

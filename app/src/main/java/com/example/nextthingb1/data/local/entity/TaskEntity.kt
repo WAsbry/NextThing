@@ -3,7 +3,6 @@ package com.example.nextthingb1.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskStatus
 import java.time.LocalDateTime
 
@@ -13,7 +12,6 @@ data class TaskEntity(
     val id: String,
     val title: String,
     val description: String,
-    val priority: TaskPriority,
     val category: TaskCategory,
     val status: TaskStatus,
     val createdAt: LocalDateTime,

@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
 import com.example.nextthingb1.domain.model.RepeatFrequency
@@ -44,7 +43,6 @@ data class TaskDetailUiState(
     // 分类和重要性编辑
     val editedCategory: TaskCategory = TaskCategory.OTHER,
     val editedCategoryItem: CategoryItem? = null,
-    val editedPriority: TaskPriority = TaskPriority.LOW,
     val editedImportanceUrgency: TaskImportanceUrgency? = null,
 
     // 位置和附件编辑
@@ -248,7 +246,6 @@ class TaskDetailViewModel @Inject constructor(
             editedActualDuration = task.actualDuration,
             editedCategory = task.category,
             editedCategoryItem = categoryItem,
-            editedPriority = task.priority,
             editedImportanceUrgency = task.importanceUrgency,
             editedLocation = task.locationInfo,
             editedImageUri = task.imageUri,
@@ -269,7 +266,6 @@ class TaskDetailViewModel @Inject constructor(
             editedActualDuration = 0,
             editedCategory = TaskCategory.OTHER,
             editedCategoryItem = null,
-            editedPriority = TaskPriority.LOW,
             editedImportanceUrgency = null,
             editedLocation = null,
             editedImageUri = null,
@@ -343,10 +339,6 @@ class TaskDetailViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(errorMessage = "删除地点时发生错误: ${e.message}")
             }
         }
-    }
-
-    fun updateEditedPriority(priority: TaskPriority) {
-        _uiState.value = _uiState.value.copy(editedPriority = priority)
     }
 
     fun updateEditedLocation(location: LocationInfo?) {
@@ -427,7 +419,6 @@ class TaskDetailViewModel @Inject constructor(
             estimatedDuration = state.editedEstimatedDuration,
             actualDuration = state.editedActualDuration,
             category = state.editedCategory,
-            priority = state.editedPriority,
             imageUri = state.editedImageUri,
             tags = state.editedTags,
             subtasks = state.editedSubtasks,

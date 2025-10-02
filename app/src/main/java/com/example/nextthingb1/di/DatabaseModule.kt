@@ -4,14 +4,17 @@ import android.content.Context
 import androidx.room.Room
 import com.example.nextthingb1.data.local.dao.LocationDao
 import com.example.nextthingb1.data.local.dao.TaskDao
+import com.example.nextthingb1.data.local.dao.UserDao
 import com.example.nextthingb1.data.local.database.TaskDatabase
 import com.example.nextthingb1.data.repository.TaskRepositoryImpl
 import com.example.nextthingb1.data.repository.LocationRepositoryImpl
 import com.example.nextthingb1.data.repository.CustomCategoryRepositoryImpl
+import com.example.nextthingb1.data.repository.UserRepositoryImpl
 import com.example.nextthingb1.data.service.CategoryPreferencesManagerImpl
 import com.example.nextthingb1.domain.repository.TaskRepository
 import com.example.nextthingb1.domain.repository.LocationRepository
 import com.example.nextthingb1.domain.repository.CustomCategoryRepository
+import com.example.nextthingb1.domain.repository.UserRepository
 import com.example.nextthingb1.domain.service.CategoryPreferencesManager
 import dagger.Module
 import dagger.Provides
@@ -39,11 +42,22 @@ object DatabaseModule {
     fun provideLocationDao(database: TaskDatabase): LocationDao {
         return database.locationDao()
     }
-    
+
+    @Provides
+    fun provideUserDao(database: TaskDatabase): UserDao {
+        return database.userDao()
+    }
+
     @Provides
     @Singleton
     fun provideTaskRepository(taskDao: TaskDao): TaskRepository {
         return TaskRepositoryImpl(taskDao)
+    }
+
+    @Provides
+    @Singleton
+    fun provideUserRepository(userDao: UserDao): UserRepository {
+        return UserRepositoryImpl(userDao)
     }
     
     @Provides

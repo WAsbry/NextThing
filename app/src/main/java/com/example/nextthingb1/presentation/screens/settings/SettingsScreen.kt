@@ -4,9 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,11 +12,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -28,43 +23,32 @@ import com.example.nextthingb1.presentation.theme.*
 
 @Composable
 fun SettingsScreen(
-    viewModel: SettingsViewModel = hiltViewModel()
+    viewModel: SettingsViewModel = hiltViewModel(),
+    onNavigateToUserInfo: () -> Unit = {}
 ) {
     val uiState: SettingsUiState by viewModel.uiState.collectAsState()
-    
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgPrimary)
+            .background(BgPrimary),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         item {
             // 用户信息卡片
             UserInfoCard(
                 username = uiState.username,
                 usageDays = uiState.usageDays,
-                isPro = uiState.isPro
+                onClick = onNavigateToUserInfo
             )
         }
-        
-        item {
-            // 功能网格
-            FeaturesGrid(
-                features = uiState.features,
-                onFeatureClick = { feature -> viewModel.onFeatureClick(feature) }
-            )
-        }
-        
+
         items(uiState.settingSections) { section ->
             SettingsSection(
                 section = section,
                 uiState = uiState,
                 onSettingClick = { setting -> viewModel.onSettingClick(setting) }
             )
-        }
-        
-        item {
-            // 版本信息
-            VersionInfo(version = uiState.version)
         }
     }
 }
@@ -73,173 +57,62 @@ fun SettingsScreen(
 private fun UserInfoCard(
     username: String,
     usageDays: Int,
-    isPro: Boolean
+    onClick: () -> Unit
 ) {
     Card(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent
-        )
+        colors = CardDefaults.cardColors(containerColor = BgCard)
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(Color(0xFF667eea), Color(0xFF764ba2))
-                    ),
-                    shape = RoundedCornerShape(16.dp)
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 头像
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+                    .background(Primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "👤",
+                    fontSize = 30.sp
                 )
-                .padding(20.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 用户头像
-                Box(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "👤",
-                        fontSize = 24.sp
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(16.dp))
-                
-                // 用户信息
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = username,
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
-                        if (isPro) {
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        Color.White.copy(alpha = 0.2f),
-                                        RoundedCornerShape(12.dp)
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = "PRO",
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Text(
-                        text = "使用天数：$usageDays 天",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 14.sp
-                    )
-                }
-                
-                // 设置按钮
-                IconButton(
-                    onClick = { /* TODO: 设置功能 */ },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.2f))
-                ) {
-                    Icon(
-                        painter = painterResource(id = android.R.drawable.ic_menu_preferences),
-                        contentDescription = "设置",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
             }
-        }
-    }
-}
 
-@Composable
-private fun FeaturesGrid(
-    features: List<FeatureItem>,
-    onFeatureClick: (FeatureItem) -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(4),
-                modifier = Modifier.height(240.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(features) { feature ->
-                    FeatureItem(
-                        feature = feature,
-                        onClick = { onFeatureClick(feature) }
-                    )
-                }
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // 用户信息
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = username,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "使用天数：$usageDays 天",
+                    fontSize = 14.sp,
+                    color = TextSecondary
+                )
             }
-        }
-    }
-}
 
-@Composable
-private fun FeatureItem(
-    feature: FeatureItem,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .clickable { onClick() },
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(feature.color.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
-        ) {
+            // 右箭头
             Text(
-                text = feature.icon,
-                fontSize = 20.sp
+                text = "›",
+                fontSize = 24.sp,
+                color = TextMuted,
+                fontWeight = FontWeight.Light
             )
         }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        Text(
-            text = feature.title,
-            fontSize = 12.sp,
-            color = TextPrimary,
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
     }
 }
 
@@ -253,7 +126,13 @@ private fun SettingsSection(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
     ) {
         Column {
             section.items.forEachIndexed { index, item ->
@@ -279,66 +158,73 @@ private fun SettingItemRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 图标
         Box(
             modifier = Modifier
-                .size(32.dp)
+                .size(40.dp)
                 .clip(CircleShape)
-                .background(item.color.copy(alpha = 0.1f)),
+                .background(item.color.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = item.icon,
-                fontSize = 16.sp
+                fontSize = 18.sp
             )
         }
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
+
+        Spacer(modifier = Modifier.width(14.dp))
+
         // 标题和描述
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = item.title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = TextPrimary
             )
-            
+
             item.subtitle?.let { subtitle ->
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     color = TextSecondary
                 )
             }
         }
-        
+
+        Spacer(modifier = Modifier.width(12.dp))
+
         // 右侧内容
         when (item.type) {
             SettingType.SWITCH -> {
                 Switch(
                     checked = when (item.id) {
                         "location_enhancement" -> uiState.locationEnhancementEnabled
+                        "geofence" -> uiState.geofenceEnabled
                         else -> item.isEnabled
                     },
-                    onCheckedChange = { 
+                    onCheckedChange = {
                         onClick()
                     },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Primary,
-                        checkedTrackColor = Primary.copy(alpha = 0.5f)
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Primary,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0),
+                        uncheckedBorderColor = Color(0xFFE0E0E0)
                     )
                 )
             }
             SettingType.ARROW -> {
-                Icon(
-                    painter = painterResource(id = android.R.drawable.ic_media_next),
-                    contentDescription = null,
-                    tint = TextMuted,
-                    modifier = Modifier.size(16.dp)
+                Text(
+                    text = "›",
+                    fontSize = 24.sp,
+                    color = TextMuted,
+                    fontWeight = FontWeight.Light
                 )
             }
             SettingType.TEXT -> {
@@ -352,40 +238,17 @@ private fun SettingItemRow(
             }
         }
     }
-    
-    if (showDivider) {
-        Divider(
-            modifier = Modifier.padding(start = 60.dp, end = 16.dp),
-            color = Border,
-            thickness = 0.5.dp
-        )
-    }
-}
 
-@Composable
-private fun VersionInfo(version: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "版本 $version",
-            fontSize = 12.sp,
-            color = TextMuted
+    if (showDivider) {
+        HorizontalDivider(
+            modifier = Modifier.padding(start = 70.dp, end = 16.dp),
+            color = Color(0xFFF0F0F0),
+            thickness = 1.dp
         )
     }
 }
 
 // 数据类
-data class FeatureItem(
-    val id: String,
-    val title: String,
-    val icon: String,
-    val color: Color
-)
-
 data class SettingSection(
     val title: String? = null,
     val items: List<SettingItem>
