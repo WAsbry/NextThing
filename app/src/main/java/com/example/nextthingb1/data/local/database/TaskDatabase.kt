@@ -10,22 +10,25 @@ import android.content.Context
 import com.example.nextthingb1.data.local.dao.TaskDao
 import com.example.nextthingb1.data.local.dao.LocationDao
 import com.example.nextthingb1.data.local.dao.NotificationStrategyDao
+import com.example.nextthingb1.data.local.dao.UserDao
 import com.example.nextthingb1.data.local.entity.TaskEntity
 import com.example.nextthingb1.data.local.entity.LocationEntity
 import com.example.nextthingb1.data.local.entity.NotificationStrategyEntity
+import com.example.nextthingb1.data.local.entity.UserEntity
 import com.example.nextthingb1.data.local.converter.Converters
 
 @Database(
-    entities = [TaskEntity::class, LocationEntity::class, NotificationStrategyEntity::class],
-    version = 6,
+    entities = [TaskEntity::class, LocationEntity::class, NotificationStrategyEntity::class, UserEntity::class],
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class TaskDatabase : RoomDatabase() {
-    
+
     abstract fun taskDao(): TaskDao
     abstract fun locationDao(): LocationDao
     abstract fun notificationStrategyDao(): NotificationStrategyDao
+    abstract fun userDao(): UserDao
     
     companion object {
         const val DATABASE_NAME = "next_thing_database"
@@ -43,6 +46,25 @@ abstract class TaskDatabase : RoomDatabase() {
             }
         }
 
+        // 数据库迁移脚本：从版本6到版本7
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // 创建users表
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        nickname TEXT NOT NULL,
+                        avatarUri TEXT,
+                        phoneNumber TEXT,
+                        wechatId TEXT,
+                        qqId TEXT,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun getDatabase(context: Context): TaskDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -50,7 +72,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_5_6)
+                    .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

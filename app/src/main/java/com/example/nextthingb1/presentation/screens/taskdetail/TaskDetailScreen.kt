@@ -39,7 +39,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskCategory
-import com.example.nextthingb1.domain.model.TaskPriority
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
 import com.example.nextthingb1.domain.model.RepeatFrequency
 import com.example.nextthingb1.domain.model.Subtask
@@ -150,13 +149,9 @@ fun TaskDetailScreen(
                                 isExpanded = isCategoryExpanded,
                                 onExpandToggle = { isCategoryExpanded = !isCategoryExpanded },
                                 selectedCategoryItem = if (uiState.isEditMode) uiState.editedCategoryItem else null,
-                                selectedPriority = if (uiState.isEditMode) uiState.editedPriority else uiState.task!!.priority,
                                 categories = categories,
                                 onCategorySelected = { categoryItem ->
                                     viewModel.updateSelectedCategory(categoryItem)
-                                },
-                                onPrioritySelected = { priority ->
-                                    viewModel.updateEditedPriority(priority)
                                 },
                                 onCreateCategoryClicked = { /* TODO: 打开创建分类对话框 */ },
                                 onDeleteCategory = { categoryId ->
@@ -521,9 +516,7 @@ private fun TaskCategoryCard(
     task: Task,
     isEditMode: Boolean,
     editedCategory: TaskCategory,
-    editedPriority: TaskPriority,
     onCategoryChange: (TaskCategory) -> Unit,
-    onPriorityChange: (TaskPriority) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(false) }
@@ -1119,12 +1112,4 @@ private fun formatDueDate(dueDate: LocalDateTime?): String {
 
 private fun formatLocation(location: LocationInfo?): String {
     return location?.locationName?.takeIf { it.isNotEmpty() } ?: "实时位置"
-}
-
-private fun formatPriority(priority: TaskPriority): String {
-    return when (priority) {
-        TaskPriority.HIGH -> "高"
-        TaskPriority.MEDIUM -> "中"
-        TaskPriority.LOW -> "低"
-    }
 }

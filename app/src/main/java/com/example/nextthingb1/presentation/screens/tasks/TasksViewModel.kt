@@ -113,7 +113,7 @@ class TasksViewModel @Inject constructor(
 
                     val completedTasks = tasks.count { it.status == TaskStatus.COMPLETED }
                     val pendingTasks = tasks.count {
-                        it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS
+                        it.status == TaskStatus.PENDING
                     }
                     val overdueTasks = tasks.count { it.status == TaskStatus.OVERDUE }
                     val completionRate = if (tasks.isNotEmpty()) {
@@ -122,7 +122,7 @@ class TasksViewModel @Inject constructor(
 
                     val weekCompletedTasks = currentWeekTasks.count { it.status == TaskStatus.COMPLETED }
                     val weekPendingTasks = currentWeekTasks.count {
-                        it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS
+                        it.status == TaskStatus.PENDING
                     }
                     val weekOverdueTasks = currentWeekTasks.count { it.status == TaskStatus.OVERDUE }
                     val weekCompletionRate = if (currentWeekTasks.isNotEmpty()) {
@@ -179,7 +179,7 @@ class TasksViewModel @Inject constructor(
         // 根据selectedTab过滤任务
         val filteredTasks = when (_uiState.value.selectedTab) {
             TaskTab.PENDING -> currentWeekTasks.filter {
-                it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS || it.status == TaskStatus.OVERDUE
+                it.status == TaskStatus.PENDING
             }
             TaskTab.COMPLETED -> currentWeekTasks.filter {
                 it.status == TaskStatus.COMPLETED
@@ -344,7 +344,7 @@ class TasksViewModel @Inject constructor(
                         }
 
                         val pendingCount = dayTasks.count {
-                            it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS
+                            it.status == TaskStatus.PENDING
                         }
                         val completedCount = dayTasks.count { it.status == TaskStatus.COMPLETED }
                         val overdueCount = dayTasks.count { it.status == TaskStatus.OVERDUE }
@@ -407,6 +407,97 @@ class TasksViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e("weekCount", "获取最早任务日期失败: ${e.message}", e)
                 // If no tasks exist, earliest date remains null
+            }
+        }
+    }
+
+    // Task action functions for swipe gestures
+
+    fun toggleTaskStatus(taskId: String) {
+        viewModelScope.launch {
+            try {
+                taskUseCases.toggleTaskStatus(taskId).fold(
+                    onSuccess = {
+                        loadTasks()
+                    },
+                    onFailure = { error ->
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = error.message
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = e.message
+                )
+            }
+        }
+    }
+
+    fun deferTask(taskId: String) {
+        viewModelScope.launch {
+            try {
+                taskUseCases.deferTask(taskId).fold(
+                    onSuccess = {
+                        loadTasks()
+                    },
+                    onFailure = { error ->
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = error.message
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = e.message
+                )
+            }
+        }
+    }
+
+    fun cancelTask(taskId: String) {
+        viewModelScope.launch {
+            try {
+                val task = _uiState.value.allTasks.find { it.id == taskId }
+                task?.let {
+                    taskUseCases.updateTask(
+                        it.copy(status = TaskStatus.CANCELLED)
+                    ).fold(
+                        onSuccess = {
+                            loadTasks()
+                        },
+                        onFailure = { error ->
+                            _uiState.value = _uiState.value.copy(
+                                errorMessage = error.message
+                            )
+                        }
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = e.message
+                )
+            }
+        }
+    }
+
+    fun deleteTask(taskId: String) {
+        viewModelScope.launch {
+            try {
+                taskUseCases.deleteTask(taskId).fold(
+                    onSuccess = {
+                        loadTasks()
+                    },
+                    onFailure = { error ->
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = error.message
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = e.message
+                )
             }
         }
     }

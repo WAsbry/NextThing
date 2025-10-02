@@ -7,7 +7,6 @@ data class Task(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val description: String = "",
-    val priority: TaskPriority = TaskPriority.MEDIUM,
     val category: TaskCategory = TaskCategory.WORK,
     val status: TaskStatus = TaskStatus.PENDING,
     val createdAt: LocalDateTime = LocalDateTime.now(),
@@ -32,13 +31,7 @@ data class Subtask(
     val createdAt: LocalDateTime = LocalDateTime.now()
 )
 
-enum class TaskPriority(val displayName: String, val colorHex: String) {
-    LOW("低", "#4CAF50"),
-    MEDIUM("中", "#FF9800"),
-    HIGH("高", "#F44336")
-}
-
-// 重要性和紧急性组合（艾森豪威尔矩阵）
+// 重要性和闪电紧急性组合（艾森豪威尔矩阵）
 enum class TaskImportanceUrgency(
     val displayName: String,
     val description: String,
@@ -102,11 +95,11 @@ enum class TaskCategory(val displayName: String, val icon: String, val colorHex:
 }
 
 enum class TaskStatus {
-    PENDING,    // 待办
-    IN_PROGRESS, // 进行中
-    COMPLETED,   // 已完成
-    CANCELLED,   // 已取消
-    OVERDUE     // 已过期
+    PENDING,     // 未完成：当天需处理但未完成的任务
+    COMPLETED,   // 已完成：用户主动标记完成的任务（终态）
+    DELAYED,     // 延期：当天未完成手动延期至次日的过渡状态（次日自动转为 PENDING）
+    OVERDUE,     // 逾期：截止时间在昨天及以前且未完成的任务
+    CANCELLED    // 放弃：用户主动放弃的任务（终态）
 }
 
 data class TaskStatistics(

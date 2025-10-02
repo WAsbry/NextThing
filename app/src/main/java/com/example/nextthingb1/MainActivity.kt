@@ -20,15 +20,20 @@ import androidx.navigation.compose.rememberNavController
 import com.example.nextthingb1.presentation.navigation.NextThingNavigation
 import com.example.nextthingb1.presentation.theme.NextThingB1Theme
 import com.example.nextthingb1.util.PermissionHelper
+import com.example.nextthingb1.domain.usecase.UserUseCases
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
+import javax.inject.Inject
 
 // 用于在Compose中访问权限请求器的CompositionLocal
 val LocalPermissionLauncher = staticCompositionLocalOf<ActivityResultLauncher<Array<String>>?> { null }
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    
+
+    @Inject
+    lateinit var userUseCases: UserUseCases
+
     private lateinit var locationPermissionLauncher: ActivityResultLauncher<Array<String>>
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,7 +58,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        NextThingApp()
+                        NextThingApp(userUseCases = userUseCases)
                     }
                 }
             }
@@ -62,16 +67,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun NextThingApp() {
+fun NextThingApp(userUseCases: UserUseCases) {
     val navController = rememberNavController()
-    
-    NextThingNavigation(navController = navController)
+
+    NextThingNavigation(
+        navController = navController,
+        userUseCases = userUseCases
+    )
 }
 
-@Preview(showBackground = true)
-@Composable
-fun NextThingAppPreview() {
-    NextThingB1Theme {
-        NextThingApp()
-    }
-} 
+// Preview removed as it requires dependency injection 
