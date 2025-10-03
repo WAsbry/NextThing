@@ -63,6 +63,14 @@ class NextThingApplication : Application(), Configuration.Provider {
             Timber.e(e, "❌ [Application] 延期转待办 TaskWorkScheduler 初始化失败")
         }
 
+        // 任务通知调度
+        try {
+            TaskWorkScheduler.scheduleTaskNotifications(this)
+            Timber.d("✅ [Application] 任务通知 TaskWorkScheduler 初始化成功")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ [Application] 任务通知 TaskWorkScheduler 初始化失败")
+        }
+
         Timber.d("🎉 [Application] NextThingApplication 初始化完成")
     }
 

@@ -21,7 +21,8 @@ data class Task(
     val imageUri: String? = null, // 任务相关的图片URI
     val repeatFrequency: RepeatFrequency = RepeatFrequency(), // 重复频次
     val locationInfo: LocationInfo? = null, // 地理位置信息
-    val importanceUrgency: TaskImportanceUrgency? = null // 重要程度
+    val importanceUrgency: TaskImportanceUrgency? = null, // 重要程度
+    val notificationStrategyId: String? = null // 通知策略ID
 )
 
 data class Subtask(

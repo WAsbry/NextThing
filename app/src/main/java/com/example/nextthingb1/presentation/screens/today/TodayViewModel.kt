@@ -306,7 +306,7 @@ class TodayViewModel @Inject constructor(
             checkLocationPermissionAndStatus()
             // 检查权限状态，如果有权限则进行静默更新
             if (_uiState.value.hasLocationPermission && _uiState.value.isLocationEnabled) {
-                if (_uiState.value.currentLocationName == "需要位置权限" || 
+                if (_uiState.value.currentLocationName == "需要位置权限" ||
                     _uiState.value.currentLocationName == "请开启位置服务") {
                     // 更新状态为可点击
                     _uiState.value = _uiState.value.copy(
@@ -319,7 +319,29 @@ class TodayViewModel @Inject constructor(
             }
         }
     }
-    
+
+    /**
+     * 当权限被授予后调用
+     */
+    fun onPermissionGranted() {
+        viewModelScope.launch {
+            Timber.d("权限已授予，开始获取位置")
+            checkLocationPermissionAndStatus()
+
+            // 确认有权限且位置服务已启用
+            if (_uiState.value.hasLocationPermission && _uiState.value.isLocationEnabled) {
+                // 立即开始位置获取
+                startLocationAcquisition()
+            } else if (_uiState.value.hasLocationPermission && !_uiState.value.isLocationEnabled) {
+                // 有权限但位置服务未启用
+                _uiState.value = _uiState.value.copy(
+                    currentLocationName = "请开启位置服务",
+                    isLocationLoading = false
+                )
+            }
+        }
+    }
+
     /**
      * 隐藏权限对话框
      */
