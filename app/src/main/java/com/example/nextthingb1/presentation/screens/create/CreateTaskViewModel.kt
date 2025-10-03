@@ -11,15 +11,18 @@ import com.example.nextthingb1.domain.model.RepeatFrequency
 import com.example.nextthingb1.domain.model.RepeatFrequencyType
 import com.example.nextthingb1.domain.usecase.TaskUseCases
 import com.example.nextthingb1.domain.repository.CustomCategoryRepository
+import com.example.nextthingb1.domain.repository.NotificationStrategyRepository
 import com.example.nextthingb1.domain.service.CategoryPreferencesManager
 import com.example.nextthingb1.domain.usecase.LocationUseCases
 import com.example.nextthingb1.domain.model.LocationInfo
+import com.example.nextthingb1.domain.model.NotificationStrategy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.time.LocalDate
 import java.time.LocalDateTime
 import javax.inject.Inject
 
@@ -28,7 +31,8 @@ class CreateTaskViewModel @Inject constructor(
     private val taskUseCases: TaskUseCases,
     private val customCategoryRepository: CustomCategoryRepository,
     private val categoryPreferencesManager: CategoryPreferencesManager,
-    private val locationUseCases: LocationUseCases
+    private val locationUseCases: LocationUseCases,
+    private val notificationStrategyRepository: NotificationStrategyRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateTaskUiState())
@@ -46,6 +50,7 @@ class CreateTaskViewModel @Inject constructor(
     init {
         initializeCategories()
         loadSavedLocations()
+        loadNotificationStrategies()
     }
 
     private fun initializeCategories() {
@@ -94,6 +99,18 @@ class CreateTaskViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load saved locations")
+            }
+        }
+    }
+
+    private fun loadNotificationStrategies() {
+        viewModelScope.launch {
+            try {
+                notificationStrategyRepository.getAllStrategies().collect { strategies ->
+                    _uiState.value = _uiState.value.copy(availableNotificationStrategies = strategies)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load notification strategies")
             }
         }
     }
@@ -256,6 +273,26 @@ class CreateTaskViewModel @Inject constructor(
         }
     }
 
+    fun updatePreciseTime(preciseTime: Pair<Int, Int>?) {
+        Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Timber.tag("NotificationTask").d("【ViewModel】updatePreciseTime 被调用")
+        Timber.tag("NotificationTask").d("  传入的值: $preciseTime")
+        Timber.tag("NotificationTask").d("  当前值: ${_uiState.value.preciseTime}")
+
+        _uiState.value = _uiState.value.copy(preciseTime = preciseTime)
+
+        Timber.tag("NotificationTask").d("  更新后的值: ${_uiState.value.preciseTime}")
+        Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    }
+
+    fun updateSelectedDate(date: LocalDate?) {
+        _uiState.value = _uiState.value.copy(selectedDate = date)
+    }
+
+    fun updateNotificationStrategy(strategyId: String?) {
+        _uiState.value = _uiState.value.copy(notificationStrategyId = strategyId)
+    }
+
     fun createTask() {
         val currentState = _uiState.value
         if (currentState.title.isBlank()) {
@@ -265,21 +302,79 @@ class CreateTaskViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
+                Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                Timber.tag("NotificationTask").d("【ViewModel】createTask 被调用")
+                Timber.tag("NotificationTask").d("任务信息：")
+                Timber.tag("NotificationTask").d("  标题: ${currentState.title}")
+                Timber.tag("NotificationTask").d("  描述: ${currentState.description}")
+                Timber.tag("NotificationTask").d("  分类: ${currentState.category}")
+                Timber.tag("NotificationTask").d("  selectedDate: ${currentState.selectedDate}")
+                Timber.tag("NotificationTask").d("  preciseTime: ${currentState.preciseTime}")
+                Timber.tag("NotificationTask").d("  notificationStrategyId: ${currentState.notificationStrategyId}")
+
+                // 计算截止时间
+                val dueDateTime = when {
+                    // 情况1：选择了日期
+                    currentState.selectedDate != null -> {
+                        val baseDate = currentState.selectedDate.atStartOfDay()
+                        if (currentState.preciseTime != null) {
+                            // 如果设置了精确时间，使用设置的时间
+                            val time = baseDate.withHour(currentState.preciseTime.first)
+                                .withMinute(currentState.preciseTime.second)
+                                .withSecond(0)
+                                .withNano(0)
+                            Timber.tag("NotificationTask").d("计算得到的dueDateTime (选择日期+精确时间): $time")
+                            time
+                        } else {
+                            // 如果没有设置精确时间，默认为当天23:59
+                            val time = baseDate.withHour(23)
+                                .withMinute(59)
+                                .withSecond(59)
+                                .withNano(0)
+                            Timber.tag("NotificationTask").d("计算得到的dueDateTime (选择日期+默认23:59): $time")
+                            time
+                        }
+                    }
+                    // 情况2：没有选择日期，但设置了精确时间 - 使用今天+精确时间
+                    currentState.preciseTime != null -> {
+                        val today = java.time.LocalDate.now()
+                        val time = today.atTime(
+                            currentState.preciseTime.first,
+                            currentState.preciseTime.second,
+                            0,
+                            0
+                        )
+                        Timber.tag("NotificationTask").d("计算得到的dueDateTime (今天+精确时间): $time")
+                        time
+                    }
+                    // 情况3：都没有设置
+                    else -> {
+                        Timber.tag("NotificationTask").d("未选择日期和精确时间，dueDateTime = null")
+                        null
+                    }
+                }
+
+                Timber.tag("NotificationTask").d("准备调用 taskUseCases.createTask()...")
+
                 val result = taskUseCases.createTask(
                     title = currentState.title,
                     description = currentState.description,
                     category = currentState.category,
-                    dueDate = if (currentState.dueDate.isNotBlank()) LocalDateTime.now().plusDays(1) else null,
+                    dueDate = dueDateTime,
                     imageUri = currentState.selectedImageUri,
-                    repeatFrequency = currentState.repeatFrequency
+                    repeatFrequency = currentState.repeatFrequency,
+                    notificationStrategyId = currentState.notificationStrategyId
                 )
-                
+
                 if (result.isSuccess) {
-                    Timber.d("Task created successfully: ${currentState.title}")
+                    Timber.tag("NotificationTask").d("✅ 任务创建成功")
+                    Timber.tag("NotificationTask").d("  任务ID: ${result.getOrNull()}")
+                    Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     // 重置表单
                     _uiState.value = CreateTaskUiState()
                 } else {
-                    Timber.e("Failed to create task: ${result.exceptionOrNull()?.message}")
+                    Timber.tag("NotificationTask").e("❌ 任务创建失败: ${result.exceptionOrNull()?.message}")
+                    Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create task")
@@ -293,11 +388,15 @@ data class CreateTaskUiState(
     val description: String = "",
     val selectedCategoryItem: CategoryItem? = null,
     val dueDate: String = "",
+    val selectedDate: LocalDate? = null, // 选择的日期
+    val preciseTime: Pair<Int, Int>? = null, // 精确时间（小时, 分钟），null表示未设置
     val isLoading: Boolean = false,
     val selectedLocation: LocationInfo? = null,
     val importanceUrgency: TaskImportanceUrgency? = null,
     val selectedImageUri: String? = null,
     val repeatFrequency: RepeatFrequency = RepeatFrequency(),
+    val notificationStrategyId: String? = null, // 通知策略ID
+    val availableNotificationStrategies: List<NotificationStrategy> = emptyList(), // 可用的通知策略列表
     val errorMessage: String? = null
 ) {
     // 获取对应的TaskCategory，用于创建任务

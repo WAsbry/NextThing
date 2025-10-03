@@ -12,8 +12,10 @@ import com.example.nextthingb1.domain.model.Subtask
 import com.example.nextthingb1.domain.model.CategoryItem
 import com.example.nextthingb1.domain.usecase.TaskUseCases
 import com.example.nextthingb1.domain.repository.CustomCategoryRepository
+import com.example.nextthingb1.domain.repository.NotificationStrategyRepository
 import com.example.nextthingb1.domain.service.CategoryPreferencesManager
 import com.example.nextthingb1.domain.usecase.LocationUseCases
+import com.example.nextthingb1.domain.model.NotificationStrategy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,13 +55,19 @@ data class TaskDetailUiState(
     val editedTags: List<String> = emptyList(),
     val editedSubtasks: List<Subtask> = emptyList(),
 
+    // 通知策略编辑
+    val editedNotificationStrategyId: String? = null,
+
     // 状态编辑
     val editedStatus: TaskStatus = TaskStatus.PENDING,
 
     // UI 状态
     val showDeleteConfirmDialog: Boolean = false,
     val showDatePicker: Boolean = false,
-    val showRepeatFrequencyDialog: Boolean = false
+    val showRepeatFrequencyDialog: Boolean = false,
+
+    // Toast 消息
+    val successMessage: String? = null
 )
 
 @HiltViewModel
@@ -67,7 +75,8 @@ class TaskDetailViewModel @Inject constructor(
     private val taskUseCases: TaskUseCases,
     private val customCategoryRepository: CustomCategoryRepository,
     private val categoryPreferencesManager: CategoryPreferencesManager,
-    private val locationUseCases: LocationUseCases
+    private val locationUseCases: LocationUseCases,
+    private val notificationStrategyRepository: NotificationStrategyRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TaskDetailUiState())
@@ -79,11 +88,27 @@ class TaskDetailViewModel @Inject constructor(
     private val _savedLocations = MutableStateFlow<List<LocationInfo>>(emptyList())
     val savedLocations: StateFlow<List<LocationInfo>> = _savedLocations.asStateFlow()
 
+    private val _availableNotificationStrategies = MutableStateFlow<List<NotificationStrategy>>(emptyList())
+    val availableNotificationStrategies: StateFlow<List<NotificationStrategy>> = _availableNotificationStrategies.asStateFlow()
+
     private var currentTaskId: String? = null
 
     init {
         loadCategories()
         loadSavedLocations()
+        loadNotificationStrategies()
+    }
+
+    private fun loadNotificationStrategies() {
+        viewModelScope.launch {
+            try {
+                notificationStrategyRepository.getAllStrategies().collect { strategies ->
+                    _availableNotificationStrategies.value = strategies
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load notification strategies")
+            }
+        }
     }
 
     private fun loadCategories() {
@@ -113,13 +138,38 @@ class TaskDetailViewModel @Inject constructor(
     }
 
     fun loadTask(taskId: String) {
+        Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Timber.tag("NotificationTask").d("【详情页】loadTask 被调用")
+        Timber.tag("NotificationTask").d("  taskId: $taskId")
+
         currentTaskId = taskId
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-            
+
             try {
                 taskUseCases.getAllTasks().collect { tasks ->
                     val task = tasks.find { it.id == taskId }
+
+                    if (task != null) {
+                        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                        Timber.tag("NotificationTask").d("✅ 从数据库加载到的任务信息:")
+                        Timber.tag("NotificationTask").d("  ID: ${task.id}")
+                        Timber.tag("NotificationTask").d("  标题: ${task.title}")
+                        Timber.tag("NotificationTask").d("  描述: ${task.description}")
+                        Timber.tag("NotificationTask").d("  分类: ${task.category.displayName}")
+                        Timber.tag("NotificationTask").d("  截止时间: ${task.dueDate?.format(formatter) ?: "null"}")
+                        Timber.tag("NotificationTask").d("  通知策略ID: ${task.notificationStrategyId ?: "null"}")
+                        Timber.tag("NotificationTask").d("  状态: ${task.status}")
+
+                        if (task.dueDate != null) {
+                            Timber.tag("NotificationTask").d("  精确时间: ${task.dueDate.hour}:${String.format("%02d", task.dueDate.minute)}")
+                        }
+                        Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    } else {
+                        Timber.tag("NotificationTask").w("❌ 未找到任务")
+                        Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    }
+
                     _uiState.value = _uiState.value.copy(
                         task = task,
                         isLoading = false,
@@ -127,6 +177,8 @@ class TaskDetailViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                Timber.tag("NotificationTask").e("❌ 加载任务失败: ${e.message}")
+                Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 Timber.e(e, "Failed to load task: $taskId")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -251,6 +303,7 @@ class TaskDetailViewModel @Inject constructor(
             editedImageUri = task.imageUri,
             editedTags = task.tags,
             editedSubtasks = task.subtasks,
+            editedNotificationStrategyId = task.notificationStrategyId,
             editedStatus = task.status
         )
     }
@@ -271,6 +324,7 @@ class TaskDetailViewModel @Inject constructor(
             editedImageUri = null,
             editedTags = emptyList(),
             editedSubtasks = emptyList(),
+            editedNotificationStrategyId = null,
             editedStatus = TaskStatus.PENDING
         )
     }
@@ -402,6 +456,17 @@ class TaskDetailViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(showRepeatFrequencyDialog = false)
     }
 
+    fun updateNotificationStrategy(strategyId: String?) {
+        _uiState.value = _uiState.value.copy(editedNotificationStrategyId = strategyId)
+    }
+
+    fun clearMessages() {
+        _uiState.value = _uiState.value.copy(
+            successMessage = null,
+            errorMessage = null
+        )
+    }
+
     fun saveChanges() {
         val task = _uiState.value.task ?: return
         val state = _uiState.value
@@ -422,6 +487,7 @@ class TaskDetailViewModel @Inject constructor(
             imageUri = state.editedImageUri,
             tags = state.editedTags,
             subtasks = state.editedSubtasks,
+            notificationStrategyId = state.editedNotificationStrategyId,
             status = state.editedStatus,
             updatedAt = LocalDateTime.now()
         )
@@ -433,20 +499,21 @@ class TaskDetailViewModel @Inject constructor(
                         Timber.d("Task updated successfully")
                         _uiState.value = _uiState.value.copy(
                             task = updatedTask,
-                            isEditMode = false
+                            isEditMode = false,
+                            successMessage = "任务修改成功"
                         )
                     },
                     onFailure = { error ->
                         Timber.e("Failed to update task: ${error.message}")
                         _uiState.value = _uiState.value.copy(
-                            errorMessage = error.message
+                            errorMessage = "任务修改失败: ${error.message}"
                         )
                     }
                 )
             } catch (e: Exception) {
                 Timber.e(e, "Exception while updating task")
                 _uiState.value = _uiState.value.copy(
-                    errorMessage = e.message
+                    errorMessage = "任务修改失败: ${e.message}"
                 )
             }
         }

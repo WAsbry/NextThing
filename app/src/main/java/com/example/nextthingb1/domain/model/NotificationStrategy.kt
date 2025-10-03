@@ -73,23 +73,11 @@ enum class SoundSetting(
         SoundType.NONE,
         "🔇"
     ),
-    LIGHT_TONE(
-        "轻提示音",
-        "短促系统提示音",
-        SoundType.NOTIFICATION,
-        "🔔"
-    ),
     STANDARD_TONE(
         "标准提示音",
         "标准系统通知音",
         SoundType.DEFAULT_NOTIFICATION,
         "🔊"
-    ),
-    URGENT_TONE(
-        "紧急提示音",
-        "紧急系统铃声",
-        SoundType.RINGTONE,
-        "🚨"
     ),
     PRESET_AUDIO(
         "预置音效",

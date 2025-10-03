@@ -26,5 +26,6 @@ data class TaskEntity(
     val imageUri: String? = null, // 任务图片URI
     val repeatFrequencyJson: String = "{}", // JSON string for repeat frequency
     val locationInfoJson: String? = null, // JSON string for location info
-    val importanceUrgencyJson: String? = null // JSON string for importance urgency
+    val importanceUrgencyJson: String? = null, // JSON string for importance urgency
+    val notificationStrategyId: String? = null // 通知策略ID
 ) 

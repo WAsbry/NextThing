@@ -19,7 +19,7 @@ import com.example.nextthingb1.data.local.converter.Converters
 
 @Database(
     entities = [TaskEntity::class, LocationEntity::class, NotificationStrategyEntity::class, UserEntity::class],
-    version = 7,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -65,6 +65,24 @@ abstract class TaskDatabase : RoomDatabase() {
             }
         }
 
+        // 数据库迁移脚本：从版本7到版本8
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // 为tasks表添加notificationStrategyId字段
+                database.execSQL("ALTER TABLE tasks ADD COLUMN notificationStrategyId TEXT")
+            }
+        }
+
+        // 数据库迁移脚本：从版本8到版本9
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // 为notification_strategies表添加音频相关字段
+                database.execSQL("ALTER TABLE notification_strategies ADD COLUMN customAudioPath TEXT")
+                database.execSQL("ALTER TABLE notification_strategies ADD COLUMN customAudioName TEXT")
+                database.execSQL("ALTER TABLE notification_strategies ADD COLUMN presetAudioName TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): TaskDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -72,8 +90,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration() // Allow destructive migration for development
                     .build()
                 INSTANCE = instance
                 instance

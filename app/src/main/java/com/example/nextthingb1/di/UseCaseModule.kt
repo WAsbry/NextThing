@@ -16,13 +16,16 @@ object UseCaseModule {
 
     @Provides
     @Singleton
-    fun provideTaskUseCases(repository: TaskRepository): TaskUseCases {
+    fun provideTaskUseCases(
+        repository: TaskRepository,
+        taskAlarmManager: com.example.nextthingb1.util.TaskAlarmManager
+    ): TaskUseCases {
         return TaskUseCases(
             getAllTasks = GetAllTasksUseCase(repository),
             getTodayTasks = GetTodayTasksUseCase(repository),
-            createTask = CreateTaskUseCase(repository),
-            updateTask = UpdateTaskUseCase(repository),
-            deleteTask = DeleteTaskUseCase(repository),
+            createTask = CreateTaskUseCase(repository, taskAlarmManager),
+            updateTask = UpdateTaskUseCase(repository, taskAlarmManager),
+            deleteTask = DeleteTaskUseCase(repository, taskAlarmManager),
             deleteAllTasks = DeleteAllTasksUseCase(repository),
             toggleTaskStatus = ToggleTaskStatusUseCase(repository),
             deferTask = DeferTaskUseCase(repository),
