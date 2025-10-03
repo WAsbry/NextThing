@@ -55,7 +55,8 @@ fun TaskEntity.toDomain(): Task {
         imageUri = imageUri,
         repeatFrequency = repeatFrequency,
         locationInfo = locationInfo,
-        importanceUrgency = importanceUrgency
+        importanceUrgency = importanceUrgency,
+        notificationStrategyId = notificationStrategyId
     )
 }
 
@@ -83,7 +84,8 @@ fun Task.toEntity(): TaskEntity {
         imageUri = imageUri,
         repeatFrequencyJson = repeatFrequencyJson,
         locationInfoJson = locationInfoJson,
-        importanceUrgencyJson = importanceUrgencyJson
+        importanceUrgencyJson = importanceUrgencyJson,
+        notificationStrategyId = notificationStrategyId
     )
 }
 

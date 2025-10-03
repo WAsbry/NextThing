@@ -18,6 +18,7 @@ object TaskWorkScheduler {
 
     private const val OVERDUE_CHECK_WORK_NAME = "check_overdue_tasks"
     private const val DELAYED_CONVERT_WORK_NAME = "convert_delayed_tasks"
+    private const val TASK_NOTIFICATION_WORK_NAME = "task_notifications"
 
     /**
      * Schedule daily overdue task check.
@@ -132,6 +133,40 @@ object TaskWorkScheduler {
     }
 
     /**
+     * Schedule periodic task notification check.
+     *
+     * This schedules a periodic worker that runs every 15 minutes
+     * to check for tasks that need notifications.
+     *
+     * @param context Application context
+     */
+    fun scheduleTaskNotifications(context: Context) {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(false)
+            .build()
+
+        val notificationRequest = PeriodicWorkRequestBuilder<TaskNotificationWorker>(
+            repeatInterval = 15,
+            repeatIntervalTimeUnit = TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                WorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS
+            )
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            TASK_NOTIFICATION_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            notificationRequest
+        )
+
+        Timber.i("Scheduled task notification check to run every 15 minutes")
+    }
+
+    /**
      * Cancel all scheduled task work.
      *
      * @param context Application context
@@ -139,6 +174,7 @@ object TaskWorkScheduler {
     fun cancelAllWork(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(OVERDUE_CHECK_WORK_NAME)
         WorkManager.getInstance(context).cancelUniqueWork(DELAYED_CONVERT_WORK_NAME)
+        WorkManager.getInstance(context).cancelUniqueWork(TASK_NOTIFICATION_WORK_NAME)
         Timber.i("Cancelled all task work")
     }
 

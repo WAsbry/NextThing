@@ -7,8 +7,10 @@ import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.RepeatFrequency
 import com.example.nextthingb1.domain.repository.TaskRepository
 import kotlinx.coroutines.flow.Flow
+import timber.log.Timber
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class TaskUseCases @Inject constructor(
@@ -43,9 +45,20 @@ class GetTodayTasksUseCase @Inject constructor(
     }
 }
 
+/**
+ * 创建任务用例
+ *
+ * 【NotificationTest】通知流程 - 第1步：创建任务
+ * 当用户创建任务时，此用例会被调用
+ */
 class CreateTaskUseCase @Inject constructor(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val taskAlarmManager: com.example.nextthingb1.util.TaskAlarmManager
 ) {
+    companion object {
+        private const val TAG = "NotificationTask"
+    }
+
     suspend operator fun invoke(
         title: String,
         description: String = "",
@@ -53,15 +66,35 @@ class CreateTaskUseCase @Inject constructor(
         dueDate: LocalDateTime? = null,
         tags: List<String> = emptyList(),
         imageUri: String? = null,
-        repeatFrequency: RepeatFrequency = RepeatFrequency()
+        repeatFrequency: RepeatFrequency = RepeatFrequency(),
+        notificationStrategyId: String? = null
     ): Result<String> {
+        Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Timber.tag(TAG).d("【UseCase】CreateTaskUseCase 开始执行")
+        Timber.tag(TAG).d("接收到的参数：")
+        Timber.tag(TAG).d("  title: $title")
+        Timber.tag(TAG).d("  description: $description")
+        Timber.tag(TAG).d("  category: ${category.displayName}")
+        Timber.tag(TAG).d("  dueDate: $dueDate")
+        Timber.tag(TAG).d("  notificationStrategyId: $notificationStrategyId")
+
         return try {
             if (title.isBlank()) {
+                Timber.tag(TAG).e("❌ 任务标题为空，创建失败")
                 Result.failure(IllegalArgumentException("任务标题不能为空"))
             } else {
                 // 如果未设置截止时间，默认为今天23:59:59
                 // 这样确保所有任务都有截止时间，符合逾期检测逻辑
                 val finalDueDate = dueDate ?: LocalDateTime.now().toLocalDate().atTime(23, 59, 59)
+
+                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                Timber.tag(TAG).d("准备创建Task对象:")
+                Timber.tag(TAG).d("   标题: $title")
+                Timber.tag(TAG).d("   描述: $description")
+                Timber.tag(TAG).d("   分类: ${category.displayName}")
+                Timber.tag(TAG).d("   截止时间: ${finalDueDate.format(formatter)}")
+                Timber.tag(TAG).d("   通知策略ID: $notificationStrategyId")
+                Timber.tag(TAG).d("   重复频率: ${repeatFrequency.type}")
 
                 val task = Task(
                     title = title.trim(),
@@ -71,19 +104,48 @@ class CreateTaskUseCase @Inject constructor(
                     tags = tags,
                     isUrgent = finalDueDate.isBefore(LocalDateTime.now().plusHours(2)),
                     imageUri = imageUri,
-                    repeatFrequency = repeatFrequency
+                    repeatFrequency = repeatFrequency,
+                    notificationStrategyId = notificationStrategyId
                 )
+
+                Timber.tag(TAG).d("正在保存任务到数据库...")
                 val taskId = repository.insertTask(task)
+                Timber.tag(TAG).d("✅ 任务已保存，ID: $taskId")
+
+                // 如果任务设置了通知策略和截止时间，注册闹钟
+                if (task.notificationStrategyId != null && task.dueDate != null) {
+                    Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    Timber.tag(TAG).d("检测到任务设置了通知策略，准备调度闹钟...")
+                    Timber.tag(TAG).d("   任务ID: $taskId")
+                    Timber.tag(TAG).d("   截止时间: ${task.dueDate!!.format(formatter)}")
+                    Timber.tag(TAG).d("   通知策略ID: ${task.notificationStrategyId}")
+                    Timber.tag(TAG).d("调用 TaskAlarmManager.scheduleTaskAlarm()")
+
+                    taskAlarmManager.scheduleTaskAlarm(task)
+                } else {
+                    Timber.tag(TAG).d("任务未设置通知策略或截止时间，跳过闹钟调度")
+                    Timber.tag(TAG).d("   notificationStrategyId: $notificationStrategyId")
+                    Timber.tag(TAG).d("   dueDate: $finalDueDate")
+                }
+
+                Timber.tag(TAG).d("✅ CreateTaskUseCase 执行完成")
+                Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 Result.success(taskId)
             }
         } catch (e: Exception) {
+            Timber.tag(TAG).e("❌ 创建任务时发生异常")
+            Timber.tag(TAG).e("   异常类型: ${e.javaClass.simpleName}")
+            Timber.tag(TAG).e("   异常信息: ${e.message}")
+            e.printStackTrace()
+            Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             Result.failure(e)
         }
     }
 }
 
 class UpdateTaskUseCase @Inject constructor(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val taskAlarmManager: com.example.nextthingb1.util.TaskAlarmManager
 ) {
     suspend operator fun invoke(task: Task): Result<Unit> {
         return try {
@@ -95,6 +157,13 @@ class UpdateTaskUseCase @Inject constructor(
                     isUrgent = task.dueDate?.let { it.isBefore(LocalDateTime.now().plusHours(2)) } ?: false
                 )
                 repository.updateTask(updatedTask)
+
+                // 取消旧闹钟并重新设置（如果有通知策略）
+                taskAlarmManager.cancelTaskAlarm(updatedTask.id)
+                if (updatedTask.notificationStrategyId != null && updatedTask.dueDate != null) {
+                    taskAlarmManager.scheduleTaskAlarm(updatedTask)
+                }
+
                 Result.success(Unit)
             }
         } catch (e: Exception) {
@@ -104,10 +173,14 @@ class UpdateTaskUseCase @Inject constructor(
 }
 
 class DeleteTaskUseCase @Inject constructor(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val taskAlarmManager: com.example.nextthingb1.util.TaskAlarmManager
 ) {
     suspend operator fun invoke(taskId: String): Result<Unit> {
         return try {
+            // 取消闹钟
+            taskAlarmManager.cancelTaskAlarm(taskId)
+            // 删除任务
             repository.deleteTask(taskId)
             Result.success(Unit)
         } catch (e: Exception) {

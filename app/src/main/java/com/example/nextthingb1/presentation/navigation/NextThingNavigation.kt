@@ -61,11 +61,11 @@ fun NextThingNavigation(
     val currentRoute = navBackStackEntry?.destination?.route
 
     // 检查是否有用户登录
-    var startDestination by remember { mutableStateOf<String?>(null) }
+    val startDestination = remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         val currentUser = userUseCases.getCurrentUser().first()
-        startDestination = if (currentUser == null) {
+        startDestination.value = if (currentUser == null) {
             Screen.Login.route
         } else {
             Screen.Today.route
@@ -73,7 +73,7 @@ fun NextThingNavigation(
     }
 
     // 等待确定起始目的地
-    if (startDestination == null) {
+    if (startDestination.value == null) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -103,7 +103,7 @@ fun NextThingNavigation(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = startDestination!!,
+            startDestination = startDestination.value!!,
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(Screen.Login.route) {
