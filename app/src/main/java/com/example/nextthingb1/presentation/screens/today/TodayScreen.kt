@@ -79,9 +79,9 @@ fun TodayScreen(
     LaunchedEffect(uiState.hasLocationPermission) {
         if (uiState.hasLocationPermission) {
             viewModel.hidePermissionDialog()
-            // 权限授予后只更新状态，不自动获取位置
-            kotlinx.coroutines.delay(500)
-            viewModel.forceCheckPermissionsAndRefresh()
+            // 权限授予后立即触发位置获取
+            kotlinx.coroutines.delay(300)
+            viewModel.onPermissionGranted()
         }
     }
     

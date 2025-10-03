@@ -8,7 +8,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.animateScrollBy
+import kotlinx.coroutines.launch
+import java.time.LocalTime
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -23,6 +29,7 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.example.nextthingb1.util.ToastHelper
+import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
 import android.graphics.Bitmap
@@ -42,7 +49,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -57,6 +67,7 @@ import com.example.nextthingb1.domain.model.TaskCategory
 import com.example.nextthingb1.domain.model.CategoryItem
 import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
+import com.example.nextthingb1.domain.model.NotificationStrategy
 import com.example.nextthingb1.presentation.theme.*
 
 // 日期格式化辅助函数
@@ -95,18 +106,11 @@ fun CreateTaskScreen(
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
 
-    // 折叠状态管理
-    var isTimeExpanded by remember { mutableStateOf(false) }
-    var isCategoryExpanded by remember { mutableStateOf(false) }
-    var isLocationExpanded by remember { mutableStateOf(false) }
-    var isImageExpanded by remember { mutableStateOf(false) }
-    var isImportanceExpanded by remember { mutableStateOf(false) }
-    var isReminderExpanded by remember { mutableStateOf(false) }
-    var isRepeatExpanded by remember { mutableStateOf(false) }
+    // 折叠状态管理 - 使用单一状态追踪当前展开的卡片
+    var expandedCard by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
 
     // 日期选择状态
-    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     // 移除本地状态，在LocationConfigCard内部处理
@@ -137,29 +141,33 @@ fun CreateTaskScreen(
         CollapsibleConfigSection(
             screenHeight = screenHeight,
             screenWidth = screenWidth,
-            isTimeExpanded = isTimeExpanded,
-            isCategoryExpanded = isCategoryExpanded,
-            isLocationExpanded = isLocationExpanded,
-            isImageExpanded = isImageExpanded,
-            isImportanceExpanded = isImportanceExpanded,
-            isReminderExpanded = isReminderExpanded,
-            isRepeatExpanded = isRepeatExpanded,
-            onTimeExpandToggle = { isTimeExpanded = !isTimeExpanded },
-            onCategoryExpandToggle = { isCategoryExpanded = !isCategoryExpanded },
-            onLocationExpandToggle = { isLocationExpanded = !isLocationExpanded },
-            onImageExpandToggle = { isImageExpanded = !isImageExpanded },
-            onImportanceExpandToggle = { isImportanceExpanded = !isImportanceExpanded },
-            onReminderExpandToggle = { isReminderExpanded = !isReminderExpanded },
-            onRepeatExpandToggle = { isRepeatExpanded = !isRepeatExpanded },
+            isTimeExpanded = expandedCard == "time",
+            isPreciseTimeExpanded = expandedCard == "precise_time",
+            isCategoryExpanded = expandedCard == "category",
+            isLocationExpanded = expandedCard == "location",
+            isImageExpanded = expandedCard == "image",
+            isImportanceExpanded = expandedCard == "importance",
+            isReminderExpanded = expandedCard == "reminder",
+            isRepeatExpanded = expandedCard == "repeat",
+            onTimeExpandToggle = { expandedCard = if (expandedCard == "time") null else "time" },
+            onPreciseTimeExpandToggle = { expandedCard = if (expandedCard == "precise_time") null else "precise_time" },
+            onCategoryExpandToggle = { expandedCard = if (expandedCard == "category") null else "category" },
+            onLocationExpandToggle = { expandedCard = if (expandedCard == "location") null else "location" },
+            onImageExpandToggle = { expandedCard = if (expandedCard == "image") null else "image" },
+            onImportanceExpandToggle = { expandedCard = if (expandedCard == "importance") null else "importance" },
+            onReminderExpandToggle = { expandedCard = if (expandedCard == "reminder") null else "reminder" },
+            onRepeatExpandToggle = { expandedCard = if (expandedCard == "repeat") null else "repeat" },
             selectedCategoryItem = uiState.selectedCategoryItem,
             categories = categories,
             onCategorySelected = { viewModel.updateSelectedCategory(it) },
             onCreateCategoryClicked = { viewModel.showCreateCategoryDialog() },
             onDeleteCategory = { viewModel.deleteCategory(it) },
             onPinCategory = { categoryId, isPinned -> viewModel.pinCategory(categoryId, isPinned) },
-            selectedDate = selectedDate,
-            onDateSelected = { selectedDate = it },
+            selectedDate = uiState.selectedDate,
+            onDateSelected = { viewModel.updateSelectedDate(it) },
             onShowDatePicker = { showDatePicker = true },
+            preciseTime = uiState.preciseTime,
+            onPreciseTimeSelected = { viewModel.updatePreciseTime(it) },
             savedLocations = savedLocations,
             onNavigateToCreateLocation = onNavigateToCreateLocation,
             onDeleteLocation = { locationId -> viewModel.deleteLocation(locationId) },
@@ -168,6 +176,9 @@ fun CreateTaskScreen(
             onImageCleared = { viewModel.clearSelectedImage() },
             selectedImportanceUrgency = uiState.importanceUrgency,
             onImportanceUrgencySelected = { viewModel.updateImportanceUrgency(it) },
+            availableNotificationStrategies = uiState.availableNotificationStrategies,
+            selectedNotificationStrategyId = uiState.notificationStrategyId,
+            onNotificationStrategySelected = { viewModel.updateNotificationStrategy(it) },
             onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
             repeatFrequency = uiState.repeatFrequency,
             onRepeatFrequencyTypeChange = { viewModel.updateRepeatFrequencyType(it) },
@@ -193,7 +204,7 @@ fun CreateTaskScreen(
     if (showDatePicker) {
         MaterialDatePickerDialog(
             onDateSelected = { date ->
-                selectedDate = date
+                viewModel.updateSelectedDate(date)
                 showDatePicker = false
             },
             onDismiss = { showDatePicker = false }
@@ -358,6 +369,7 @@ private fun CollapsibleConfigSection(
     screenHeight: androidx.compose.ui.unit.Dp,
     screenWidth: androidx.compose.ui.unit.Dp,
     isTimeExpanded: Boolean,
+    isPreciseTimeExpanded: Boolean,
     isCategoryExpanded: Boolean,
     isLocationExpanded: Boolean,
     isImageExpanded: Boolean,
@@ -365,6 +377,7 @@ private fun CollapsibleConfigSection(
     isReminderExpanded: Boolean,
     isRepeatExpanded: Boolean,
     onTimeExpandToggle: () -> Unit,
+    onPreciseTimeExpandToggle: () -> Unit,
     onCategoryExpandToggle: () -> Unit,
     onLocationExpandToggle: () -> Unit,
     onImageExpandToggle: () -> Unit,
@@ -380,6 +393,8 @@ private fun CollapsibleConfigSection(
     selectedDate: LocalDate?,
     onDateSelected: (LocalDate?) -> Unit,
     onShowDatePicker: () -> Unit,
+    preciseTime: Pair<Int, Int>?,
+    onPreciseTimeSelected: (Pair<Int, Int>?) -> Unit,
     savedLocations: List<LocationInfo>,
     onNavigateToCreateLocation: () -> Unit,
     onDeleteLocation: (String) -> Unit,
@@ -388,6 +403,9 @@ private fun CollapsibleConfigSection(
     onImageCleared: () -> Unit,
     selectedImportanceUrgency: TaskImportanceUrgency?,
     onImportanceUrgencySelected: (TaskImportanceUrgency?) -> Unit,
+    availableNotificationStrategies: List<NotificationStrategy>,
+    selectedNotificationStrategyId: String?,
+    onNotificationStrategySelected: (String?) -> Unit,
     onNavigateToCreateNotificationStrategy: () -> Unit,
     repeatFrequency: com.example.nextthingb1.domain.model.RepeatFrequency,
     onRepeatFrequencyTypeChange: (com.example.nextthingb1.domain.model.RepeatFrequencyType) -> Unit,
@@ -417,6 +435,23 @@ private fun CollapsibleConfigSection(
                 modifier = Modifier.weight(1f)
             )
 
+            // 精确时间配置卡
+            PreciseTimeConfigCard(
+                screenHeight = screenHeight,
+                screenWidth = screenWidth,
+                isExpanded = isPreciseTimeExpanded,
+                onExpandToggle = onPreciseTimeExpandToggle,
+                preciseTime = preciseTime,
+                onPreciseTimeSelected = onPreciseTimeSelected,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // 第二行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // 分类配置卡
             CategoryPriorityConfigCard(
                 screenHeight = screenHeight,
@@ -431,13 +466,7 @@ private fun CollapsibleConfigSection(
                 onPinCategory = onPinCategory,
                 modifier = Modifier.weight(1f)
             )
-        }
 
-        // 第二行
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
             // 地点配置卡
             LocationConfigCard(
                 screenHeight = screenHeight,
@@ -451,7 +480,13 @@ private fun CollapsibleConfigSection(
                 onDeleteLocation = onDeleteLocation,
                 modifier = Modifier.weight(1f)
             )
+        }
 
+        // 第三行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // 重要性配置卡
             ImportanceConfigCard(
                 screenHeight = screenHeight,
@@ -462,14 +497,6 @@ private fun CollapsibleConfigSection(
                 onImportanceUrgencySelected = onImportanceUrgencySelected,
                 modifier = Modifier.weight(1f)
             )
-
-        }
-
-        // 第三行
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
 
             // 图片配置卡
             ImageConfigCard(
@@ -482,7 +509,13 @@ private fun CollapsibleConfigSection(
                 onImageCleared = onImageCleared,
                 modifier = Modifier.weight(1f)
             )
+        }
 
+        // 第四行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // 重复频次配置卡
             RepeatFrequencyConfigCard(
                 screenHeight = screenHeight,
@@ -495,25 +528,19 @@ private fun CollapsibleConfigSection(
                 onMonthDaysChange = onRepeatMonthDaysChange,
                 modifier = Modifier.weight(1f)
             )
-        }
 
-        // 第四行
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
             // 通知策略配置卡
             NotificationStrategyConfigCard(
                 screenHeight = screenHeight,
                 screenWidth = screenWidth,
                 isExpanded = isReminderExpanded,
                 onExpandToggle = onReminderExpandToggle,
+                availableStrategies = availableNotificationStrategies,
+                selectedStrategyId = selectedNotificationStrategyId,
+                onStrategySelected = onNotificationStrategySelected,
                 onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
                 modifier = Modifier.weight(1f)
             )
-
-            // 占位卡片（保持布局平衡）
-            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
@@ -644,6 +671,367 @@ internal fun TimeConfigCard(
                 }
             }
         }
+    }
+}
+
+// 精确时间配置卡
+@Composable
+internal fun PreciseTimeConfigCard(
+    screenHeight: androidx.compose.ui.unit.Dp,
+    screenWidth: androidx.compose.ui.unit.Dp,
+    isExpanded: Boolean,
+    onExpandToggle: () -> Unit,
+    preciseTime: Pair<Int, Int>?,
+    onPreciseTimeSelected: (Pair<Int, Int>?) -> Unit,
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = true
+) {
+    // 内部临时状态，用于时间选择器
+    val currentTime = remember { LocalTime.now() }
+    var tempHour by remember { mutableStateOf(preciseTime?.first ?: currentTime.hour) }
+    var tempMinute by remember { mutableStateOf(preciseTime?.second ?: currentTime.minute) }
+    var wasCleared by remember { mutableStateOf(false) }
+
+    // 当展开时，重置临时状态为当前值或已选值
+    LaunchedEffect(isExpanded) {
+        if (isExpanded) {
+            wasCleared = false // 重置清除标志
+            if (preciseTime != null) {
+                tempHour = preciseTime.first
+                tempMinute = preciseTime.second
+            } else {
+                val now = LocalTime.now()
+                tempHour = now.hour
+                tempMinute = now.minute
+            }
+        }
+        // 移除自动保存逻辑，只通过"确定"按钮保存
+    }
+
+    Column(modifier = modifier) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .clickable(enabled = isEditMode) { onExpandToggle() },
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+            ) {
+                // 左上角标签
+                Text(
+                    text = "精确时间",
+                    color = Color(0xFF9E9E9E),
+                    fontSize = 10.sp,
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
+
+                // 主要内容行
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.CenterStart)
+                        .padding(top = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "⏰",
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+
+                    Text(
+                        text = if (preciseTime != null) {
+                            String.format("%02d:%02d", preciseTime.first, preciseTime.second)
+                        } else {
+                            "未设置"
+                        },
+                        color = if (preciseTime != null) Color(0xFF424242) else Color(0xFF9E9E9E),
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (isEditMode) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF9E9E9E),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 展开的时间选择器
+        if (isExpanded && isEditMode) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    // 时间选择器 - 降低高度，只显示3个数字
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp), // 3个数字 * 40dp = 120dp
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 小时选择器
+                        TimePickerColumn(
+                            items = (0..23).toList(),
+                            selectedItem = tempHour,
+                            onItemSelected = { tempHour = it },
+                            modifier = Modifier.weight(1f),
+                            formatItem = { String.format("%02d", it) }
+                        )
+
+                        // 冒号分隔
+                        Box(
+                            modifier = Modifier
+                                .width(16.dp)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = ":",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF424242)
+                            )
+                        }
+
+                        // 分钟选择器
+                        TimePickerColumn(
+                            items = (0..59).toList(),
+                            selectedItem = tempMinute,
+                            onItemSelected = { tempMinute = it },
+                            modifier = Modifier.weight(1f),
+                            formatItem = { String.format("%02d", it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 操作按钮行 - 降低按钮高度
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 清除按钮（如果已设置时间）
+                        if (preciseTime != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    wasCleared = true
+                                    onPreciseTimeSelected(null)
+                                    onExpandToggle()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(36.dp), // 降低按钮高度
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFFEF5350)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFFEF5350)),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                            ) {
+                                Text("清除", fontSize = 13.sp)
+                            }
+                        }
+
+                        // 确定按钮
+                        Button(
+                            onClick = {
+                                Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                                Timber.tag("NotificationTask").d("【UI】用户点击精确时间'确定'按钮")
+                                Timber.tag("NotificationTask").d("  选择的时间: $tempHour:$tempMinute")
+                                onPreciseTimeSelected(Pair(tempHour, tempMinute))
+                                Timber.tag("NotificationTask").d("  已调用 onPreciseTimeSelected()")
+                                Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                                onExpandToggle()
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp), // 降低按钮高度
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF2196F3)
+                            ),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        ) {
+                            Text("确定", color = Color.White, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 时间选择器列组件 - iOS风格的滚动选择器
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TimePickerColumn(
+    items: List<Int>,
+    selectedItem: Int,
+    onItemSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    formatItem: (Int) -> String = { it.toString() }
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val itemHeight = 40.dp
+
+    // 初始化滚动位置
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = selectedItem
+    )
+
+    // 标记是否正在进行自动吸附滚动
+    var isSnapping by remember { mutableStateOf(false) }
+    // 记录上一次滚动状态，用于检测从滚动到停止的转变
+    var wasScrolling by remember { mutableStateOf(false) }
+
+    // 实时更新选中项（滚动过程中）
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (!isSnapping) {
+            val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
+            if (visibleItemsInfo.isEmpty()) return@LaunchedEffect
+
+            val viewportStart = listState.layoutInfo.viewportStartOffset
+            val viewportEnd = listState.layoutInfo.viewportEndOffset
+            val viewportCenterY = viewportStart + (viewportEnd - viewportStart) / 2
+
+            var closestItem = selectedItem
+            var minDistance = Int.MAX_VALUE
+
+            visibleItemsInfo.forEach { itemInfo ->
+                // 计算每个项目的中心Y坐标（相对于视口）
+                val itemCenterY = itemInfo.offset + itemInfo.size / 2
+                // 计算项目中心与视口中心的距离
+                val distance = kotlin.math.abs(itemCenterY - viewportCenterY)
+
+                if (distance < minDistance) {
+                    minDistance = distance
+                    closestItem = itemInfo.index
+                }
+            }
+
+            if (closestItem in items.indices && closestItem != selectedItem) {
+                onItemSelected(items[closestItem])
+            }
+        }
+    }
+
+    // iOS风格的自动吸附：只在用户手动滚动停止后触发一次
+    LaunchedEffect(listState.isScrollInProgress) {
+        val isCurrentlyScrolling = listState.isScrollInProgress
+
+        // 只在从滚动状态切换到停止状态时执行吸附，且不是正在吸附中
+        if (wasScrolling && !isCurrentlyScrolling && !isSnapping) {
+            val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
+            if (visibleItemsInfo.isNotEmpty()) {
+                val viewportStart = listState.layoutInfo.viewportStartOffset
+                val viewportEnd = listState.layoutInfo.viewportEndOffset
+                val viewportCenterY = viewportStart + (viewportEnd - viewportStart) / 2
+
+                var closestItem = selectedItem
+                var minDistance = Int.MAX_VALUE
+
+                visibleItemsInfo.forEach { itemInfo ->
+                    // 计算每个项目的中心Y坐标（相对于视口）
+                    val itemCenterY = itemInfo.offset + itemInfo.size / 2
+                    // 计算项目中心与视口中心的距离
+                    val distance = kotlin.math.abs(itemCenterY - viewportCenterY)
+
+                    if (distance < minDistance) {
+                        minDistance = distance
+                        closestItem = itemInfo.index
+                    }
+                }
+
+                if (closestItem in items.indices) {
+                    if (closestItem != selectedItem) {
+                        onItemSelected(items[closestItem])
+                    }
+
+                    // 执行吸附滚动
+                    isSnapping = true
+                    wasScrolling = false // 立即重置，防止吸附动画完成后再次触发
+                    coroutineScope.launch {
+                        listState.animateScrollToItem(
+                            index = closestItem,
+                            scrollOffset = 0
+                        )
+                        isSnapping = false
+                    }
+                }
+            }
+        }
+
+        // 更新滚动状态记录（只在非吸附状态下更新）
+        if (!isSnapping) {
+            wasScrolling = isCurrentlyScrolling
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(Color(0xFFF8F9FA), RoundedCornerShape(8.dp))
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            userScrollEnabled = true,
+            // 上下各留1个itemHeight的空间，这样正好显示3个数字
+            contentPadding = PaddingValues(vertical = 40.dp)
+        ) {
+            items(items.size) { index ->
+                val item = items[index]
+                val isSelected = item == selectedItem
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(itemHeight),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = formatItem(item),
+                        fontSize = if (isSelected) 18.sp else 15.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) Color(0xFF2196F3) else Color(0xFF9E9E9E),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+
+        // 中间选中区域的背景指示器
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .align(Alignment.Center)
+                .background(
+                    Color(0xFF2196F3).copy(alpha = 0.1f),
+                    RoundedCornerShape(4.dp)
+                )
+        )
     }
 }
 
@@ -1331,10 +1719,15 @@ internal fun NotificationStrategyConfigCard(
     screenWidth: androidx.compose.ui.unit.Dp,
     isExpanded: Boolean,
     onExpandToggle: () -> Unit,
+    availableStrategies: List<NotificationStrategy>,
+    selectedStrategyId: String?,
+    onStrategySelected: (String?) -> Unit,
     onNavigateToCreateNotificationStrategy: () -> Unit,
     modifier: Modifier = Modifier,
     isEditMode: Boolean = true
 ) {
+    val selectedStrategy = availableStrategies.find { it.id == selectedStrategyId }
+
     Column(modifier = modifier) {
         // 主卡片
         Card(
@@ -1374,8 +1767,8 @@ internal fun NotificationStrategyConfigCard(
                     )
 
                     Text(
-                        text = "未设置",
-                        color = Color(0xFF424242),
+                        text = selectedStrategy?.name ?: "未设置",
+                        color = if (selectedStrategy != null) Color(0xFF424242) else Color(0xFF9E9E9E),
                         fontSize = 14.sp,
                         modifier = Modifier.weight(1f)
                     )
@@ -1405,13 +1798,44 @@ internal fun NotificationStrategyConfigCard(
                 Column(
                     modifier = Modifier.padding(8.dp)
                 ) {
-                    // 这里将来会显示已保存的通知策略列表
+                    // 不使用通知策略选项
                     Text(
-                        text = "暂无通知策略",
-                        color = Color(0xFF9E9E9E),
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        text = "不使用",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onStrategySelected(null)
+                                onExpandToggle()
+                            }
+                            .padding(vertical = 8.dp, horizontal = 12.dp),
+                        color = if (selectedStrategyId == null) Color(0xFF2196F3) else Color(0xFF424242),
+                        fontSize = 14.sp
                     )
+
+                    // 显示已保存的通知策略列表
+                    if (availableStrategies.isNotEmpty()) {
+                        availableStrategies.forEach { strategy ->
+                            Text(
+                                text = strategy.name,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onStrategySelected(strategy.id)
+                                        onExpandToggle()
+                                    }
+                                    .padding(vertical = 8.dp, horizontal = 12.dp),
+                                color = if (strategy.id == selectedStrategyId) Color(0xFF2196F3) else Color(0xFF424242),
+                                fontSize = 14.sp
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "暂无通知策略",
+                            color = Color(0xFF9E9E9E),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp)
+                        )
+                    }
 
                     // 新建策略按钮
                     TextButton(

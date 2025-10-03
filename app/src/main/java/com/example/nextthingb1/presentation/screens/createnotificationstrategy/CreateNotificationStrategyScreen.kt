@@ -82,14 +82,6 @@ fun CreateNotificationStrategyScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 地理围栏设置
-            GeofenceSection(
-                isEnabled = uiState.isGeofenceEnabled,
-                onEnabledChange = { viewModel.updateGeofenceEnabled(it) }
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
             // 震动设置
             VibrationSection(
                 selectedVibration = uiState.vibrationSetting,
@@ -113,14 +105,6 @@ fun CreateNotificationStrategyScreen(
                 },
                 onPresetAudioSelected = { viewModel.updatePresetAudio(it) },
                 onClearCustomAudio = { viewModel.clearCustomAudio() }
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 系统通知方式
-            SystemNotificationSection(
-                selectedMode = uiState.systemNotificationMode,
-                onModeSelected = { viewModel.updateSystemNotificationMode(it) }
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -229,46 +213,6 @@ private fun StrategyNameSection(
                         innerTextField()
                     }
                 }
-            )
-        }
-    }
-}
-
-@Composable
-private fun GeofenceSection(
-    isEnabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "地理围栏",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF424242)
-                )
-                Text(
-                    text = "基于位置触发通知",
-                    fontSize = 12.sp,
-                    color = Color(0xFF9E9E9E),
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-
-            Switch(
-                checked = isEnabled,
-                onCheckedChange = onEnabledChange
             )
         }
     }
@@ -483,80 +427,6 @@ private fun SoundOptionItem(
             )
             Text(
                 text = sound.description,
-                fontSize = 12.sp,
-                color = Color(0xFF9E9E9E)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SystemNotificationSection(
-    selectedMode: SystemNotificationMode,
-    onModeSelected: (SystemNotificationMode) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = "系统通知方式",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF424242),
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            SystemNotificationMode.values().forEach { mode ->
-                SystemNotificationOptionItem(
-                    mode = mode,
-                    isSelected = mode == selectedMode,
-                    onClick = { onModeSelected(mode) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SystemNotificationOptionItem(
-    mode: SystemNotificationMode,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = isSelected,
-            onClick = onClick
-        )
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Text(
-            text = mode.icon,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(end = 8.dp)
-        )
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = mode.displayName,
-                fontSize = 14.sp,
-                color = Color(0xFF424242)
-            )
-            Text(
-                text = mode.description,
                 fontSize = 12.sp,
                 color = Color(0xFF9E9E9E)
             )

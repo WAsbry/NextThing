@@ -59,12 +59,15 @@ fun TaskDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val savedLocations by viewModel.savedLocations.collectAsState()
+    val availableNotificationStrategies by viewModel.availableNotificationStrategies.collectAsState()
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // 卡片展开状态
     var isTimeExpanded by remember { mutableStateOf(false) }
+    var isPreciseTimeExpanded by remember { mutableStateOf(false) }
     var isCategoryExpanded by remember { mutableStateOf(false) }
     var isLocationExpanded by remember { mutableStateOf(false) }
     var isImportanceExpanded by remember { mutableStateOf(false) }
@@ -72,11 +75,37 @@ fun TaskDetailScreen(
     var isRepeatExpanded by remember { mutableStateOf(false) }
     var isNotificationExpanded by remember { mutableStateOf(false) }
 
+    // 精确时间状态
+    var preciseTime by remember { mutableStateOf<Pair<Int, Int>?>(null) } // null表示未设置
+
     // 日期选择器状态
     var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(taskId) {
         viewModel.loadTask(taskId)
+    }
+
+    // 从 task 的 dueDate 中提取精确时间
+    LaunchedEffect(uiState.task?.dueDate) {
+        uiState.task?.dueDate?.let { dueDate ->
+            preciseTime = Pair(dueDate.hour, dueDate.minute)
+        }
+    }
+
+    // 显示成功消息
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let { message ->
+            com.example.nextthingb1.util.ToastHelper.showToast(context, message)
+            viewModel.clearMessages()
+        }
+    }
+
+    // 显示错误消息
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let { message ->
+            com.example.nextthingb1.util.ToastHelper.showToast(context, message)
+            viewModel.clearMessages()
+        }
     }
 
     Box(
@@ -124,7 +153,7 @@ fun TaskDetailScreen(
                             onDescriptionChange = viewModel::updateEditedDescription
                         )
 
-                        // 第一行：时间 + 分类·优先级
+                        // 第一行：时间 + 精确时间
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -143,6 +172,39 @@ fun TaskDetailScreen(
                                 isEditMode = uiState.isEditMode
                             )
 
+                            // 精确时间配置卡
+                            com.example.nextthingb1.presentation.screens.create.PreciseTimeConfigCard(
+                                screenHeight = screenHeight,
+                                screenWidth = screenWidth,
+                                isExpanded = isPreciseTimeExpanded,
+                                onExpandToggle = { isPreciseTimeExpanded = !isPreciseTimeExpanded },
+                                preciseTime = preciseTime,
+                                onPreciseTimeSelected = { newPreciseTime ->
+                                    preciseTime = newPreciseTime
+                                    // 更新 ViewModel 中的 editedDueDate
+                                    val currentDueDate = uiState.editedDueDate ?: uiState.task?.dueDate
+                                    if (newPreciseTime != null) {
+                                        val baseDate = currentDueDate?.toLocalDate() ?: LocalDate.now()
+                                        val newDueDate = baseDate.atTime(newPreciseTime.first, newPreciseTime.second, 0, 0)
+                                        viewModel.updateEditedDueDate(newDueDate)
+                                    } else {
+                                        // 如果清除精确时间，保留日期但设置为 23:59:59
+                                        val baseDate = currentDueDate?.toLocalDate()
+                                        if (baseDate != null) {
+                                            viewModel.updateEditedDueDate(baseDate.atTime(23, 59, 59))
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                isEditMode = uiState.isEditMode
+                            )
+                        }
+
+                        // 第二行：分类 + 位置
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             com.example.nextthingb1.presentation.screens.create.CategoryPriorityConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -163,13 +225,7 @@ fun TaskDetailScreen(
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
-                        }
 
-                        // 第二行：位置 + 重要性
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
                             com.example.nextthingb1.presentation.screens.create.LocationConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -187,7 +243,13 @@ fun TaskDetailScreen(
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
+                        }
 
+                        // 第三行：重要性 + 图片
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             com.example.nextthingb1.presentation.screens.create.ImportanceConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -200,13 +262,7 @@ fun TaskDetailScreen(
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
-                        }
 
-                        // 第三行：图片 + 重复频次
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
                             com.example.nextthingb1.presentation.screens.create.ImageConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -222,7 +278,13 @@ fun TaskDetailScreen(
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
+                        }
 
+                        // 第四行：重复频次 + 通知策略
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             com.example.nextthingb1.presentation.screens.create.RepeatFrequencyConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -247,25 +309,21 @@ fun TaskDetailScreen(
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
-                        }
 
-                        // 第四行：通知策略 + 占位
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
                             com.example.nextthingb1.presentation.screens.create.NotificationStrategyConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
                                 isExpanded = isNotificationExpanded,
                                 onExpandToggle = { isNotificationExpanded = !isNotificationExpanded },
+                                availableStrategies = availableNotificationStrategies,
+                                selectedStrategyId = if (uiState.isEditMode) uiState.editedNotificationStrategyId else uiState.task?.notificationStrategyId,
+                                onStrategySelected = { strategyId ->
+                                    viewModel.updateNotificationStrategy(strategyId)
+                                },
                                 onNavigateToCreateNotificationStrategy = { /* TODO: 导航到创建通知策略页面 */ },
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
-
-                            // 占位卡片（保持布局平衡）
-                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
 

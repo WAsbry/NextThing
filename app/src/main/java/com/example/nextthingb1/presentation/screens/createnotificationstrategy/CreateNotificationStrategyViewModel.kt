@@ -25,8 +25,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CreateNotificationStrategyViewModel @Inject constructor(
-    @ApplicationContext private val context: Context
-    // TODO: 注入通知策略用例
+    @ApplicationContext private val context: Context,
+    private val notificationStrategyRepository: com.example.nextthingb1.domain.repository.NotificationStrategyRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateNotificationStrategyUiState())
@@ -34,10 +34,6 @@ class CreateNotificationStrategyViewModel @Inject constructor(
 
     fun updateName(name: String) {
         _uiState.value = _uiState.value.copy(name = name)
-    }
-
-    fun updateGeofenceEnabled(enabled: Boolean) {
-        _uiState.value = _uiState.value.copy(isGeofenceEnabled = enabled)
     }
 
     fun updateVibrationSetting(vibrationSetting: VibrationSetting) {
@@ -276,26 +272,24 @@ class CreateNotificationStrategyViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // TODO: 保存通知策略
-                /*
-                val result = notificationStrategyUseCases.createStrategy(
+                val strategy = com.example.nextthingb1.domain.model.NotificationStrategy(
+                    id = java.util.UUID.randomUUID().toString(),
                     name = currentState.name,
-                    isGeofenceEnabled = currentState.isGeofenceEnabled,
+                    isGeofenceEnabled = false,
                     vibrationSetting = currentState.vibrationSetting,
                     soundSetting = currentState.soundSetting,
                     volume = currentState.volume,
-                    systemNotificationMode = currentState.systemNotificationMode
+                    customAudioPath = currentState.customAudioFileInfo?.uri?.toString(),
+                    customAudioName = currentState.customAudioName.takeIf { it.isNotBlank() },
+                    presetAudioName = currentState.selectedPresetAudio?.fileName,
+                    systemNotificationMode = currentState.systemNotificationMode,
+                    createdAt = java.time.LocalDateTime.now(),
+                    updatedAt = java.time.LocalDateTime.now(),
+                    usageCount = 0,
+                    lastUsedAt = null
                 )
 
-                if (result.isSuccess) {
-                    Timber.d("Notification strategy saved successfully: ${currentState.name}")
-                    _uiState.value = _uiState.value.copy(isSaved = true)
-                } else {
-                    Timber.e("Failed to save notification strategy: ${result.exceptionOrNull()?.message}")
-                }
-                */
-
-                // 临时模拟保存成功
+                notificationStrategyRepository.insertStrategy(strategy)
                 Timber.d("Notification strategy saved successfully: ${currentState.name}")
                 _uiState.value = _uiState.value.copy(isSaved = true)
             } catch (e: Exception) {
@@ -307,7 +301,6 @@ class CreateNotificationStrategyViewModel @Inject constructor(
 
 data class CreateNotificationStrategyUiState(
     val name: String = "",
-    val isGeofenceEnabled: Boolean = false,
     val vibrationSetting: VibrationSetting = VibrationSetting.NONE,
     val soundSetting: SoundSetting = SoundSetting.NONE,
     val volume: Int = 50,
