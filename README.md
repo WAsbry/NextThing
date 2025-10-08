@@ -22,6 +22,21 @@
 - **核心价值**：通过智能化的任务分类、可视化的数据统计、位置感知提醒等功能，帮助用户更好地规划和执行任务
 - **技术特色**：Clean Architecture + MVVM + Flow，确保代码可维护性、可测试性和可扩展性
 
+--- 
+
+## 🌟 核心技术亮点总结
+
+1. **Clean Architecture 架构**：Domain、Data、Presentation 三层分离，职责清晰
+2. **响应式编程**：Kotlin Flow + StateFlow 实现数据流自动更新
+3. **依赖注入**：Hilt 全局统一管理依赖，支持 ViewModel、WorkManager 注入
+4. **数据库设计**：Room 数据库 + 复杂类型转换器 + 版本迁移
+5. **位置服务双引擎**：Google Play Services + 高德 SDK 智能切换
+6. **后台任务调度**：WorkManager 可靠的定时任务（逾期检测、延期转换）
+7. **权限管理**：智能权限请求 + 状态监听 + 降级方案
+8. **Compose 声明式 UI**：完全使用 Jetpack Compose 构建，Material 3 规范
+9. **协程优化**：超时控制、缓存机制、静默更新策略
+10. **可测试性**：Use Case 封装业务逻辑，便于单元测试和 Mock
+
 ---  
 
 ## ✨ 核心功能
@@ -911,23 +926,6 @@ override fun onCreate() {
     // 数据同步  
     SyncScheduler.schedulePeriodicSync(this)}  
 ```  
-  
----  
-
-## 🌟 核心技术亮点总结
-
-1. **Clean Architecture 架构**：Domain、Data、Presentation 三层分离，职责清晰
-2. **响应式编程**：Kotlin Flow + StateFlow 实现数据流自动更新
-3. **依赖注入**：Hilt 全局统一管理依赖，支持 ViewModel、WorkManager 注入
-4. **数据库设计**：Room 数据库 + 复杂类型转换器 + 版本迁移
-5. **位置服务双引擎**：Google Play Services + 高德 SDK 智能切换
-6. **后台任务调度**：WorkManager 可靠的定时任务（逾期检测、延期转换）
-7. **权限管理**：智能权限请求 + 状态监听 + 降级方案
-8. **Compose 声明式 UI**：完全使用 Jetpack Compose 构建，Material 3 规范
-9. **协程优化**：超时控制、缓存机制、静默更新策略
-10. **可测试性**：Use Case 封装业务逻辑，便于单元测试和 Mock
-
----  
 
 ## 📄 License
 
