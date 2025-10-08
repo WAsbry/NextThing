@@ -1,236 +1,981 @@
-Next Thing 个人代办应用最终需求文档​
-
-应用定位与核心目标​
-
-Next Thing 聚焦个人任务管理场景，基于 Android 平台打造轻量化、高效率的代办工具。通过优化任务创建、分类、提醒、统计等核心流程，帮助用户实现个人时间规划与任务落地，核心目标是 “降低管理成本，提升任务完成率”，让每一件待办都清晰可控，让用户更专注于 “下一件事” 的执行。​
-
-一、核心功能模块设计​
-
-（一）今日页面（高频入口）​
-
-核心功能​
-
-1. 进度概览区​ 
-
-- 顶部左侧显示实时天气图标（晴天 / 阴天 / 小雨 / 中雨 / 大雨），点击展开天气详情（温度、24 小时预报），结合天气场景提供任务建议（如雨天提示 “添加带伞任务”）。​
-
-- 中部展示 “今日任务完成进度”（环形进度条 + 百分比），进度条颜色随完成率动态变化（<30% 红色、30%-70% 橙色、>70% 绿色），旁附 “剩余 X 项待办” 文字提示。​
-
-- 底部显示 “今日聚焦目标”（用户自定义，如 “完成 3 项高优任务”），达成后触发成就动画（如 “√ 今日目标达成！” 弹窗 + 轻微震动反馈）。​
-
-2. 任务列表区​
-
-- 按截止时间排序（上午→下午→晚上），任务项展示：标题、截止时间（精确到分钟）、优先级标签（红 / 黄 / 蓝底色）、状态标识（未完成空心圆 / 已完成实心绿圆 / 延期橙色感叹号）。​
-
-- 支持左滑快捷操作：左滑 1/3 标记完成、左滑 2/3 延期 1 小时、左滑到底删除（需二次确认弹窗）。​
-
-- 顶部固定 “待办 / 已完成” 切换标签，已完成任务默认折叠，展开后显示完成时间（如 “10:30 完成”）。​
-
-3. 快捷创建入口​
-
-- 右下角悬浮按钮 “+” 弹出三级菜单：​
-
-- 快速任务（仅输入标题，自动继承上次标签 / 优先级）；​
-
-- 完整任务（打开详情页录入全量信息）；​
-
-- 语音创建（AI 语音转文字解析任务信息）；​
-
-- 模板创建（调用预设模板快速生成任务）。​
-
-智能亮点​
-
-- 天气联动提醒：雨天 / 雪天自动显示 “添加带伞任务” 提示条，点击一键创建。​
-
-- 紧急任务预警：高优先级任务距截止时间 < 2 小时时，任务项边缘闪烁红色提醒，同步在通知栏置顶提示。​
-
-（二）任务页面（全量数据管理）​
-
-核心功能​
-
-1. 双视图切换​
-
-- 列表视图：按日期倒序分组（今天→昨天→前天），每组顶部显示日期标题 + 当日概览（“3 项待办，1 项已完成”），支持下拉刷新 / 上拉加载历史任务（默认加载 30 天内数据）。​
-
-- 日历视图：按月展示日期格子，按任务状态比例填充颜色（绿色 = 已完成、红色 = 放弃、橙色 = 延期、灰色 = 未开始），格子右上角标注任务总数。手指长按格子弹出当日任务迷你统计（如 “8 月 10 日：5 项任务（3 完成 / 1 延期）”）。​
-
-2. 任务详情页​
-
-- 基础信息区：标题（可编辑）、优先级标签、状态切换按钮（完成 / 未完成 / 放弃），底部显示创建时间（如 “创建于 2024-08-10 09:30”）。​
-
-- 核心内容区：​
-
-- 时间信息：开始时间、截止时间（支持时区调整）；​
-
-- 分类信息：标签（支持多级标签选择，如 “学习 / 编程”）；​
-
-- 内容描述：富文本编辑框（支持加粗 / 换行 / 列表）；​
-
-- 附件：最多 3 张图片（点击放大查看，支持删除替换）。​
-
-- 子任务模块：支持添加 / 编辑 / 删除子任务，子任务可独立设置截止时间和优先级，主任务完成条件可选 “所有子任务完成” 或 “任意 1 个子任务完成”。​
-
-- 重复任务设置：提供 “基础模式”（每天 / 每周 / 每月）和 “高级模式”：​
-
-- 自定义周期（如 “每 3 天”“每 2 周”）；​
-
-- 工作日筛选（如 “仅周一至周五重复”）；​
-
-- 例外日期（排除法定节假日或自定义日期）；​
-
-- 设置后预览未来 3 次任务日期（如 “下次：8 月 15 日 14:00”）。​
-
-3. 高级筛选工具​
-
-- 顶部筛选栏支持：标签筛选（多级标签树形选择）、优先级筛选（高 / 中 / 低）、状态筛选（未完成 / 已完成 / 延期 / 放弃）、日期范围筛选（今天 / 本周 / 本月 / 自定义）。​
-
-- 筛选条件支持保存为 “常用视图”（如 “学习类未完成任务”），支持一键切换和重命名。​
-
-智能亮点​
-
-- 重复任务推荐：任务创建频率≥3 次 / 周时，自动提示 “是否设置为重复任务？”，点击快速跳转配置页面。​
-
-- 子任务联动：主任务延期时，未完成子任务同步标记为 “需关注” 状态（文字标黄），提醒用户优先处理。​
-
-（三）统计页面（数据反馈与分析）​
-
-核心功能​
-
-1. 核心数据看板​
-
-- 完成率趋势：7 天 / 30 天折线图，标注 “最高值 / 最低值” 及对应日期，支持点击日期查看当日任务明细。​
-
-- 任务分类统计：饼图展示标签占比，扇形旁附该标签任务完成率（如 “学习 30%（完成率 85%）”）。​
-
-- 优先级完成对比：柱状图对比 “高 / 中 / 低” 优先级任务的 “创建数 vs 完成数”，高优任务完成率 < 50% 时标红警告。​
-
-2. 行为分析模块​
-
-- 拖延分析：统计 “延期任务平均拖延时长”“高频拖延标签”（如 “健身任务延期率最高”），用热力图展示拖延高发时段（如 “18:00-20:00 延期率 60%”）。​
-
-- 效率对比：对比任务 “计划耗时” 与 “实际耗时” 差异，识别 “低估 / 高估难度” 场景（如 “90% 的编程任务实际耗时超计划 2 倍”）。​
-
-- 高效时段识别：24 小时热力图标注用户高效时段（完成率≥80%），直观展示 “何时工作效率最高”。​
-
-3. 习惯养成与成就体系​
-
-- 连续规划天数：顶部显示 “已坚持规划生活 XX 天”，关联里程碑标识（7 天→新手、30 天→进阶、100 天→大师）。​
-
-- 成就徽章墙：按 “效率类 / 坚持类 / 挑战类” 分类展示：​
-
-- 效率类：“闪电手”（单日完成 10 项任务）、“零拖延”（连续 7 天高优任务无延期）；​
-
-- 坚持类：“30 天全勤”（连续 30 天完成率≥80%）、“习惯养成”（连续 21 天完成同一重复任务）；​
-
-- 挑战类：“全能王”（完成 5 类不同标签任务）、“规划大师”（单月创建 50 项任务且完成率≥90%）。​
-
-- 徽章同步展示于设置页个人头像旁，点击可查看解锁时间和描述。​
-
-智能亮点​
-
-- 个性化建议：基于分析结果生成改进建议（如 “晚上 8 点后完成率下降，建议复杂任务安排在上午”）。​
-
-- 周 / 月成长报告：每周一自动生成报告，包含完成率变化、新增徽章、效率提升点，支持保存本地或分享截图。​
-
-（四）设置页面（功能配置中心）​
-
-核心功能​
-
-1. 个人信息与成就​
-
-- 个人资料卡：头像（支持拍照 / 相册更换）、用户名（每月可修改 1 次）、个人签名（如 “专注每一件 Next Thing”），头像旁展示最近解锁的 3 个徽章（横向滚动查看更多）。​
-
-- 连续规划天数及等级标识（如 “规划大师 LV3”）。​
-
-2. 标签管理​
-
-- 树形结构展示标签层级（如 “工作” 下分 “项目 A”“项目 B”），支持新增 / 编辑 / 删除标签，设置标签颜色（16 种预设颜色）。​
-
-- 标签快捷操作：长按标签弹出 “筛选任务 / 批量移除 / 修改层级” 选项。​
-
-3. 提醒与通知设置​
-
-- 优先级提醒策略：​
-
-- 高优先级：铃声 + 强震动 + 常驻通知，支持重复提醒（5/10/15 分钟间隔）；​
-
-- 中优先级：轻柔铃声 + 弱震动 + 普通通知，10 分钟未查看自动再次提醒；​
-
-- 低优先级：静默通知（仅图标）。​
-
-- 提醒类型拓展：​
-
-- 倒计时提醒：支持 “X 天后提醒”“X 小时前提醒”（如 “考研倒计时 100 天”）；​
-
-- 农历日期支持：日期选择器新增 “农历” 选项，适配传统节日 / 生日场景。​
-
-- 免打扰时段：可设置 22:00-7:00 等时段，此时段内非高优任务转为静默通知。​
-
-4. 数据与同步​
-
-- 离线功能配置：明确支持离线创建 / 编辑任务（含富文本、图片附件），操作记录本地日志（最多保存 30 天离线记录）。​
-
-- 同步策略：网络恢复后按 “时间戳” 排序同步，同一任务多端离线修改时采用 “标题取最新，内容合并” 策略并提示用户确认。​
-
-- 数据备份：支持手动导出任务数据为 Excel/JSON 格式，自动备份频率可设（每日 / 每周），备份文件存储路径可自定义。​
-
-5. 个性化设置​
-
-- 主题换肤：预设浅色 / 深色 / 系统跟随模式，支持自定义主题色（主色调影响按钮、进度条颜色）。​
-
-- 字体大小：12px-32px 无级调节，适配不同视力需求。​
-
-- 无障碍支持：屏幕阅读器（TalkBack）适配、高对比度模式，确保视障 / 老龄用户使用。​
-
-智能亮点​
-
-- 场景化推荐：根据用户行为推荐功能（如 “频繁创建学习任务，建议开启标签层级分类”）。​
-
-- 功能引导：新功能首次使用时显示微型教程（如 “长按日历格子查看任务统计”），支持 “不再显示” 勾选。​
-
-（五）差异化竞争力功能​
-
-1. 任务模板库​
-
-- 内置场景化模板：会议记录（含 “预订会议室”“发送议程” 子任务）、旅行规划（含 “订机票”“打包清单” 子任务）、学习计划（预设 “复习 / 刷题” 时间节点）等。​
-
-- 模板支持一键套用，自动填充标签、优先级和子任务结构，用户仅需修改细节。​
-
-2. 专注模式联动​
-
-- 任务详情页新增 “专注计时” 按钮，启动番茄钟（默认 25 分钟，可自定义时长），计时期间屏蔽非高优通知干扰，显示专注进度条。​
-
-- 计时完成后自动关联任务 “专注时长” 统计，展示 “完成该任务累计专注 X 小时”，同步解锁 “专注达人” 系列徽章。​
-
-3. 无障碍体验优化​
-
-- 全页面支持屏幕阅读器语音导航，关键按钮添加无障碍描述（如 “标记完成按钮，点击后任务状态变为已完成”）。​
-
-- 高对比度模式下文字与背景对比度≥4.5:1，确保弱视用户清晰识别。​
-
-二、技术实现核心要求​
-
-1. 架构设计：采用 Clean Architecture+MVI 架构，分层明确（UI 层 / 领域层 / 数据层），通过 StateFlow 管理 UI 状态，确保状态可预测。​
-
-2. 数据存储：Room 数据库存储任务 / 标签 / 用户行为数据，支持事务管理和全文搜索（Fts4），提升数据操作效率。​
-
-3. 网络与同步：Retrofit+OkHttp 实现数据同步，离线操作通过本地日志 + 时间戳解决冲突，确保数据一致性。​
-
-4. 性能优化：列表滑动优化（DiffUtil 减少刷新）、图片缓存（Coil）、启动优化（AppStartup 延迟初始化非核心组件），冷启动时间≤3 秒。​
-
-5. 兼容性：支持 Android 8.0（API 26）及以上版本，适配不同屏幕尺寸（手机 / 平板），确保 UI 在各分辨率下正常显示。​
-
-三、优先级说明​
-
-​
-
-|   |   |   |
-|---|---|---|
-|优先级​|功能模块​|核心价值​|
-|高​|子任务拆分、高级重复任务、标签层级​|补齐个人任务管理核心能力​|
-|中​|倒计时提醒、农历支持、拖延分析​|提升场景覆盖度与数据价值​|
-|低​|任务模板、专注模式、无障碍支持​|打造差异化体验与包容性​|
-
-​
-
-本需求文档聚焦个人场景核心痛点，通过 “轻量化设计 + 深度功能优化” 平衡易用性与专业性，技术选型贴合现代 Android 开发趋势，可作为 Next Thing 面试项目的完整功能蓝图。​
+# NextThing - 智能任务管理应用
+
+
+
+**现代化的 Android 个人任务管理应用**
+
+[![Android](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android)](https://www.android.com/)  
+[![Kotlin](https://img.shields.io/badge/Language-Kotlin-7F52FF?logo=kotlin)](https://kotlinlang.org/)  
+[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)  
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)  
+[![API](https://img.shields.io/badge/API-24%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=24)
+
+[功能特性](#-功能特性) • [技术栈](#-技术栈) • [架构设计](#-架构设计) • [快速开始](#-快速开始) • [下载](#-下载)
+
+## 📱 应用概述
+
+**NextThing** 是一款面向个人用户的现代化任务管理应用，采用 Clean Architecture 架构模式和最新的 Android 开发技术栈构建。应用融合了艾森豪威尔矩阵（重要-紧急四象限）、位置提醒等多种效率管理方法，为用户提供科学、高效的任务管理解决方案。
+
+### 🎯 应用定位
+
+- **目标用户**：需要高效管理个人任务、提升工作效率的用户
+- **核心价值**：通过智能化的任务分类、可视化的数据统计、位置感知提醒等功能，帮助用户更好地规划和执行任务
+- **技术特色**：Clean Architecture + MVVM + Flow，确保代码可维护性、可测试性和可扩展性
+
+---  
+
+## ✨ 核心功能
+
+### 1. 📅 今日视图（TodayScreen）
+**智能的今日任务管理中心**
+
+- **任务状态管理**：支持 5 种任务状态（待办、已完成、延期、逾期、放弃）
+- **实时进度追踪**：动态展示今日任务完成率和剩余任务数
+- **智能位置服务**：
+  - 自动位置获取与缓存（5分钟缓存机制）
+  - 支持 Google Play Services 和高德定位双引擎
+  - 位置权限智能管理与引导
+- **天气集成**：基于当前位置自动获取实时天气信息，**集成和风天气SDK**
+- **手势操作**：
+  - 左滑弹出任务快捷操作：标记任务完成、延期任务至次日、放弃当前任务
+  - 点击查看任务详情
+
+**技术亮点**：
+- Flow 响应式数据流，自动同步任务状态变化
+- 协程 + withTimeout 实现位置获取超时控制、智能缓存机制减少不必要的定位请求、权限状态实时监听与自动刷新
+
+### 2. 📋 任务管理（TasksScreen）
+**全面的任务组织与筛选系统**
+
+- **多维度筛选**：
+  - 按分类筛选：
+    - 预置分类：工作、学习、生活、健康、个人
+    - 新增分类：支持自定义
+  - 按状态筛选：全部、待办、已完成、延期、逾期、放弃
+  - 按重要紧急程度筛选：四象限矩阵
+- **自定义分类**：
+  - 动态创建/删除/置顶分类
+  - 分类使用频率自动排序
+  - DataStore 持久化分类偏好
+- **批量操作**：支持批量标记完成、批量删除等操作
+- **搜索功能**：实时搜索任务标题和描述
+
+**技术亮点**：
+- Room Database 流式查询，实时响应数据变化
+- 自定义 TypeConverter 处理复杂数据类型（重复频次、位置信息等）
+- Repository 模式统一数据访问层
+- Use Case 封装业务逻辑，提高代码复用性
+
+### 3. ➕ 任务创建（CreateTaskScreen）
+**功能完善的任务创建流程**
+
+- **基础信息**：标题、描述、分类、截止日期、精确时间
+- **高级功能**：
+  - **重要紧急矩阵**：四象限分类（IMPORTANT_URGENT, IMPORTANT_NOT_URGENT 等）
+  - **重复任务**：支持每日、每周（指定星期）、每月（指定日期）重复
+  - **位置提醒**：选择已保存位置或创建新位置
+  - **图片附件**：支持拍照或从相册选择图片
+  - **通知策略**：自定义提醒声音、震动模式、**地理围栏**
+- **智能表单**：
+  - 自动保存上次选择的分类
+  - 分类按使用频率智能排序
+  - 表单验证与友好提示
+
+**技术亮点**：
+- Coil 图片加载库集成
+- FileProvider 安全的文件共享
+- DataStore Preferences 存储用户偏好
+- ViewModel 状态管理与表单验证
+
+### 4. 📊 数据统计（StatsScreen）
+**多维度的任务数据可视化分析**
+
+- **概览统计**：
+  - 任务总数、完成数、待办数统计
+  - 完成率可视化展示
+  - 5 种状态分布（待办、已完成、延期、逾期、放弃）
+  - 四象限任务分布统计
+- **分类统计**：
+  - 各分类任务数量与完成率
+  - 平均完成时长分析
+  - 分类效率对比
+- **趋势分析**：
+  - 近 7 日、近30日、近90日、全部任务创建与完成趋势
+  - 周/月视图切换
+  - 完成率变化曲线
+- **效率分析**：
+  - 按分类统计平均完成时长
+  - 按重要程度统计完成效率
+  - 准时完成率 vs 逾期完成率
+  - 子任务完成度分析
+
+**技术亮点**：
+- Flow collectLatest 实现响应式统计更新
+- 自定义 Composable 图表组件
+- LocalDate/LocalDateTime 时间处理
+- 复杂数据聚合与计算优化
+
+### 6. ⚙️ 设置与用户管理
+
+#### 设置页面（SettingsScreen）
+- **用户信息**：头像、昵称、使用天数展示
+- **功能开关**：
+  - 位置信息增强开关
+  - 地理围栏开关
+  - 主题皮肤设置（规划中）
+- **一键导航**：快速跳转用户信息页
+
+#### 用户信息页（UserInfoScreen）
+- **基础信息管理**：
+  - 头像选择（原生图片选择器）
+  - 昵称编辑
+  - 8 位随机用户 ID
+- **账号绑定**：
+  - 手机号绑定/换绑
+  - 微信账号绑定
+  - QQ 账号绑定
+- **账号操作**：
+  - 退出登录
+  - 注销账号（带二次确认）
+
+#### 登录系统（LoginScreen）
+- **首次启动引导**：首次使用需创建用户
+- **用户创建**：输入昵称，自动生成 8 位随机 ID
+- **状态持久化**：Room 数据库存储用户信息
+- **自动登录**：下次启动自动识别用户
+
+**技术亮点**：
+- Room 数据库迁移（版本 6 → 7）
+- Flow 实现用户状态响应式同步
+- Activity Result API 集成图片选择
+- Navigation 条件路由（根据登录状态决定起始页）
+
+### 7. 📍 位置管理
+
+#### 位置创建（CreateLocationScreen）
+- 手动输入位置信息
+- 地图选点（集成高德地图）
+- 位置搜索与地址解析
+- 位置保存与管理
+
+#### 位置权限管理
+- **智能权限请求**：首次使用时引导授权
+- **权限状态监听**：实时检测权限变化
+- **降级方案**：无权限时提供手动输入选项
+- **帮助引导**：多层次的帮助对话框与操作提示
+
+**技术亮点**：
+- Google Play Services Location API
+- 高德定位 SDK 双引擎支持
+- 权限状态 BroadcastReceiver 监听
+- 位置缓存与智能刷新策略
+
+### 8. 🔔 通知策略（CreateNotificationStrategyScreen）
+- **提醒音设置**：系统预置音频 + 自定义音频
+- **震动模式**：多种震动模式可选
+- **提醒时间**：支持多个提醒时间点
+- **策略保存**：可复用的通知策略模板
+
+**技术亮点**：
+- MediaPlayer 音频预览播放
+- Vibrator 震动反馈
+- Room 数据库存储策略
+- 自定义音频文件选择与管理
+
+---  
+
+## 🏗️ 技术架构
+
+### 架构模式
+
+本项目采用 **Clean Architecture（清晰架构）** + **MVVM** 设计模式，确保代码的可维护性、可测试性和可扩展性。
+
+```  
+app/src/main/java/com/example/nextthingb1/  
+│  
+├── presentation/          # 表现层（UI Layer）  
+│   ├── screens/          # 各功能页面  
+│   │   ├── today/        # 今日视图  
+│   │   ├── tasks/        # 任务管理  
+│   │   ├── create/       # 任务创建  
+│   │   ├── stats/        # 数据统计  
+│   │   ├── focus/        # 专注模式  
+│   │   ├── settings/     # 设置页面  
+│   │   ├── login/        # 登录页面  
+│   │   └── userinfo/     # 用户信息  
+│   ├── components/       # 可复用 Composable 组件  
+│   ├── navigation/       # 导航配置  
+│   └── theme/            # Material 3 主题  
+│  
+├── domain/               # 领域层（Domain Layer）  
+│   ├── model/           # 领域模型（纯 Kotlin 类）  
+│   ├── repository/      # Repository 接口定义  
+│   ├── usecase/         # 业务逻辑用例  
+│   └── service/         # 服务接口（定位、天气等）  
+│  
+├── data/                # 数据层（Data Layer）  
+│   ├── local/           # 本地数据源  
+│   │   ├── database/    # Room 数据库  
+│   │   ├── dao/         # 数据访问对象  
+│   │   ├── entity/      # 数据库实体  
+│   │   └── converter/   # 类型转换器  
+│   ├── remote/          # 远程数据源  
+│   │   ├── api/         # Retrofit API 定义  
+│   │   └── dto/         # 数据传输对象  
+│   ├── repository/      # Repository 实现  
+│   ├── mapper/          # Entity ↔ Domain Model 映射  
+│   └── service/         # 服务实现（定位、天气等）  
+│  
+├── di/                  # 依赖注入（Dependency Injection）  
+│   ├── DatabaseModule   # 数据库模块  
+│   ├── NetworkModule    # 网络模块  
+│   ├── LocationModule   # 定位模块  
+│   ├── UseCaseModule    # 用例模块  
+│   └── WeatherModule    # 天气模块  
+│  
+├── util/                # 工具类  
+│   ├── PermissionHelper        # 权限管理  
+│   ├── SyncScheduler          # 同步调度  
+│   ├── AudioFileHelper        # 音频文件处理  
+│   └── ToastHelper            # Toast 提示  
+│  
+└── work/                # 后台任务（WorkManager）  
+    ├── SyncTasksWorker            # 任务同步 Worker    ├── CheckOverdueTasksWorker    # 逾期检测 Worker    ├── ConvertDelayedTasksWorker  # 延期转待办 Worker    └── TaskWorkScheduler          # 任务调度器  
+```  
+
+### 核心技术栈
+
+#### 🎨 UI 层
+- **Jetpack Compose**：声明式 UI 框架，完全使用 Compose 构建
+- **Material Design 3**：遵循最新 Material You 设计规范
+- **Navigation Compose**：类型安全的导航组件
+- **Coil Compose**：高性能图片加载库
+
+#### 🧠 业务逻辑层
+- **Kotlin Coroutines**：协程异步编程
+- **Kotlin Flow**：响应式数据流
+- **Hilt/Dagger**：依赖注入框架
+- **Use Case Pattern**：用例模式封装业务逻辑
+
+#### 💾 数据持久化
+- **Room Database**：SQLite 数据库 ORM
+  - 版本：2.6.1
+  - 当前数据库版本：7
+  - 支持 Flow 查询、TypeConverter、Migration
+- **DataStore Preferences**：键值对存储，替代 SharedPreferences
+- **类型转换器**：
+  - `LocalDateTime` ↔ `Long` 时间戳
+  - `List<String>` ↔ `String` (JSON)
+  - `TaskCategory` ↔ `String`
+  - `TaskStatus` ↔ `String`
+  - `RepeatFrequency` ↔ `String` (JSON)
+  - `LocationInfo` ↔ `String` (JSON)
+  - `TaskImportanceUrgency` ↔ `String` (JSON)
+
+#### 🌐 网络层
+- **Retrofit 2**：RESTful API 客户端
+- **OkHttp 3**：HTTP 客户端与拦截器
+- **Gson**：JSON 序列化/反序列化
+- **Kotlinx Serialization**：Kotlin 原生序列化
+
+#### 📍 位置服务
+- **Google Play Services Location**：Google 位置服务 API
+- **高德定位 SDK**：国内定位解决方案
+- **双引擎策略**：自动选择可用定位引擎
+- **位置缓存**：5 分钟缓存机制优化性能
+
+#### ⏰ 后台任务
+- **WorkManager**：可靠的后台任务调度
+  - 每日凌晨 1:00 逾期任务检测
+  - 每日凌晨 0:00 延期任务转待办
+  - 周期性数据同步（15 分钟间隔）
+- **Hilt WorkManager Integration**：WorkManager 依赖注入支持
+
+#### 🛠️ 开发工具
+- **Timber**：日志记录库
+- **LeakCanary**：内存泄漏检测（Debug 构建）
+- **JUnit + Mockito**：单元测试
+- **Espresso + Compose Test**：UI 自动化测试
+
+#### 🔐 安全加密
+- **BouncyCastle**：EdDSA 加密算法支持（用于 JWT）
+- **FileProvider**：安全的文件共享
+
+---  
+
+## 📂 项目结构
+
+### 数据库设计
+
+**Room Database - Version 7**
+
+#### 1. Tasks 表（TaskEntity）
+```kotlin  
+@Entity(tableName = "tasks")  
+data class TaskEntity(    @PrimaryKey val id: String,  
+    val title: String,  
+    val description: String,  
+    val category: String,                    // TaskCategory  
+    val status: String,                      // TaskStatus (5种状态)  
+    val createdAt: Long,                     // 时间戳  
+    val updatedAt: Long,  
+    val dueDate: Long?,  
+    val completedAt: Long?,  
+    val tags: String,                        // JSON List<String>  
+    val isUrgent: Boolean,  
+    val estimatedDuration: Int,              // 分钟  
+    val actualDuration: Int,  
+    val subtasks: String,                    // JSON List<Subtask>  
+    val imageUri: String?,  
+    val repeatFrequencyJson: String,         // JSON RepeatFrequency  
+    val locationInfoJson: String?,           // JSON LocationInfo  
+    val importanceUrgencyJson: String?       // JSON TaskImportanceUrgency  
+)  
+```  
+
+**5 种任务状态**：
+- `PENDING`：待办（当天需处理）
+- `COMPLETED`：已完成（终态）
+- `DELAYED`：延期（手动延期至次日，次日自动转 PENDING）
+- `OVERDUE`：逾期（截止时间已过且未完成）
+- `CANCELLED`：放弃（终态）
+
+#### 2. Locations 表（LocationEntity）
+```kotlin  
+@Entity(tableName = "locations")  
+data class LocationEntity(    @PrimaryKey val id: String,  
+    val locationName: String,  
+    val address: String,  
+    val latitude: Double,  
+    val longitude: Double,  
+    val createdAt: Long  
+)  
+```  
+
+#### 3. NotificationStrategies 表（NotificationStrategyEntity）
+```kotlin  
+@Entity(tableName = "notification_strategies")  
+data class NotificationStrategyEntity(    @PrimaryKey val id: String,  
+    val name: String,  
+    val audioUri: String?,  
+    val vibratePattern: String,              // JSON LongArray  
+    val remindTimes: String,                 // JSON List<String>  
+    val createdAt: Long  
+)  
+```  
+
+#### 4. Users 表（UserEntity）
+```kotlin  
+@Entity(tableName = "users")  
+data class UserEntity(    @PrimaryKey val id: String,              // 8位随机字符串  
+    val nickname: String,  
+    val avatarUri: String?,  
+    val phoneNumber: String?,  
+    val wechatId: String?,  
+    val qqId: String?,  
+    val createdAt: Long,  
+    val updatedAt: Long  
+)  
+```  
+
+### 核心数据模型
+
+#### Task Domain Model
+```kotlin  
+data class Task(    val id: String = UUID.randomUUID().toString(),  
+    val title: String,  
+    val description: String = "",  
+    val category: TaskCategory = TaskCategory.WORK,  
+    val status: TaskStatus = TaskStatus.PENDING,  
+    val createdAt: LocalDateTime = LocalDateTime.now(),  
+    val updatedAt: LocalDateTime = LocalDateTime.now(),  
+    val dueDate: LocalDateTime? = null,  
+    val completedAt: LocalDateTime? = null,  
+    val tags: List<String> = emptyList(),  
+    val isUrgent: Boolean = false,  
+    val estimatedDuration: Int = 0,          // 分钟  
+    val actualDuration: Int = 0,             // 分钟  
+    val subtasks: List<Subtask> = emptyList(),  
+    val imageUri: String? = null,  
+    val repeatFrequency: RepeatFrequency = RepeatFrequency(),  
+    val locationInfo: LocationInfo? = null,  
+    val importanceUrgency: TaskImportanceUrgency? = null  
+)  
+```  
+
+#### 艾森豪威尔矩阵（重要-紧急四象限）
+```kotlin  
+enum class TaskImportanceUrgency(    val displayName: String,  
+    val description: String,  
+    val colorHex: String,  
+    val importance: TaskImportance,  
+    val urgency: TaskUrgency  
+) {  
+    IMPORTANT_URGENT(  
+        "重要且紧急",  
+        "需要立即处理的重要事项",  
+        "#F44336",        TaskImportance.IMPORTANT,        TaskUrgency.URGENT    ),    IMPORTANT_NOT_URGENT(  
+        "重要但不紧急",  
+        "重要的长期目标和计划",  
+        "#FF9800",        TaskImportance.IMPORTANT,        TaskUrgency.NOT_URGENT    ),    NOT_IMPORTANT_URGENT(  
+        "不重要但紧急",  
+        "需要快速处理的事务性工作",  
+        "#2196F3",        TaskImportance.NOT_IMPORTANT,        TaskUrgency.URGENT    ),    NOT_IMPORTANT_NOT_URGENT(  
+        "不重要且不紧急",  
+        "可以暂缓或委托的事项",  
+        "#4CAF50",        TaskImportance.NOT_IMPORTANT,        TaskUrgency.NOT_URGENT    )}  
+```  
+
+#### 重复频次
+```kotlin  
+data class RepeatFrequency(    val type: RepeatFrequencyType = RepeatFrequencyType.NONE,  
+    val weekdays: Set<Int> = emptySet(),      // 1-7 (周一到周日)  
+    val monthDays: Set<Int> = emptySet()      // 1-31  
+)  
+  
+enum class RepeatFrequencyType {    NONE,     // 不重复  
+    DAILY,    // 每天  
+    WEEKLY,   // 每周（指定星期几）  
+    MONTHLY   // 每月（指定日期）  
+}  
+```  
+  
+---  
+
+## 🔧 构建与运行
+
+### 环境要求
+
+- **Android Studio**：Hedgehog (2023.1.1) 或更高版本
+- **JDK**：Java 17
+- **Gradle**：8.0+
+- **Kotlin**：1.9.22
+- **Min SDK**：24 (Android 7.0)
+- **Target SDK**：34 (Android 14)
+- **Compile SDK**：34
+
+### 依赖镜像配置
+
+项目已配置国内镜像加速（阿里云、腾讯云），加快依赖下载速度。
+
+**settings.gradle.kts**：
+```kotlin  
+dependencyResolutionManagement {  
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)    repositories {        maven { url = uri("https://maven.aliyun.com/repository/google") }        maven { url = uri("https://maven.aliyun.com/repository/public") }        maven { url = uri("https://maven.aliyun.com/repository/jcenter") }        maven { url = uri("https://mirrors.tencent.com/nexus/repository/maven-public/") }        google()        mavenCentral()    }}  
+```  
+
+### 构建步骤
+
+#### 1. 克隆项目
+```bash  
+git clone https://github.com/your-repo/NextThingB1.gitcd NextThingB1
+```
+
+#### 2. 配置签名（Release 构建）
+项目已配置 Release 签名，如需自定义：
+
+**app/build.gradle.kts**：
+```kotlin  
+signingConfigs {  
+    create("release") {        
+	    storeFile = file("your-keystore.jks") 
+	    storePassword = "your-store-password"    
+	    keyAlias = "your-key-alias" 
+        keyPassword = "your-key-password"    
+    }}  
+```  
+
+#### 3. 构建 APK
+
+**Debug 构建**：
+```bash  
+./gradlew assembleDebug
+``` 
+
+**Release 构建**：
+```bash  
+./gradlew assembleRelease
+```  
+
+生成的 APK 位置：
+- Debug: `app/build/outputs/apk/debug/app-debug.apk`
+- Release: `app/build/outputs/apk/release/app-release.apk`
+
+#### 4. 运行测试
+
+**单元测试**：
+```bash  
+./gradlew testDebugUnitTest
+```  
+
+**UI 测试（需连接设备/模拟器）**：
+```bash  
+./gradlew connectedDebugAndroidTest
+```  
+
+#### 5. 代码质量检查
+```bash  
+./gradlew lint
+```  
+  
+---  
+
+## 🚀 开发指南
+
+### 添加新功能的步骤
+
+#### 1. 创建 Domain Model（领域模型）
+在 `domain/model/` 创建纯 Kotlin 数据类：
+```kotlin  
+// domain/model/YourModel.kt  
+data class YourModel(  
+    val id: String,    val name: String,    // ...)  
+```  
+
+#### 2. 创建 Room Entity（数据库实体）
+在 `data/local/entity/` 创建数据库实体：
+```kotlin  
+// data/local/entity/YourEntity.kt  
+@Entity(tableName = "your_table")  
+data class YourEntity(  
+    @PrimaryKey val id: String,    val name: String,    // ...)  
+```  
+
+#### 3. 创建 DAO（数据访问对象）
+在 `data/local/dao/` 创建 DAO 接口：
+```kotlin  
+// data/local/dao/YourDao.kt  
+@Dao  
+interface YourDao {  
+    @Query("SELECT * FROM your_table")    
+    fun getAll(): Flow<List<YourEntity>>  
+    
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: YourEntity)  
+    
+    @Delete    
+    suspend fun delete(entity: YourEntity)}  
+```  
+
+#### 4. 更新 Database 版本
+在 `TaskDatabase.kt` 添加实体和迁移：
+```kotlin  
+@Database(  
+    entities = [        
+	    TaskEntity::class,
+        LocationEntity::class,
+        YourEntity::class  // 新增  
+    ],    
+    version = 8,  // 版本号+1  
+    exportSchema = false)  
+abstract class TaskDatabase : RoomDatabase() {
+    abstract fun yourDao(): YourDao    
+    companion object {
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {  
+                database.execSQL("""CREATE TABLE IF NOT EXISTS your_table(
+                                    id TEXT PRIMARY KEY NOT NULL,
+                                    name TEXT NOT NULL)"""
+                                .trimIndent())  
+            }        }    }}  
+```  
+
+#### 5. 创建 Mapper（映射器）
+在 `data/mapper/` 创建转换函数：
+```kotlin  
+// data/mapper/YourMapper.kt  
+fun YourEntity.toDomainModel(): YourModel {  
+    return YourModel(        
+	    id = this.id,        
+	    name = this.name    
+	    )
+	}  
+  
+fun YourModel.toEntity(): YourEntity {  
+    return YourEntity(
+        id = this.id,
+        name = this.name
+        )
+    }  
+```  
+
+#### 6. 创建 Repository（仓库）
+在 `domain/repository/` 定义接口：
+```kotlin  
+// domain/repository/YourRepository.kt  
+interface YourRepository {  
+    fun getAll(): Flow<List<YourModel>>    
+    
+    suspend fun insert(model: YourModel): Result<Unit>    
+    
+    suspend fun delete(id: String): Result<Unit>
+}  
+```  
+
+在 `data/repository/` 实现接口：
+```kotlin  
+// data/repository/YourRepositoryImpl.kt  
+class YourRepositoryImpl @Inject constructor(  
+    private val dao: YourDao) : YourRepository {  
+    
+    override fun getAll(): Flow<List<YourModel>> {
+        return dao.getAll().map { entities -> 
+           entities.map { it.toDomainModel() }        
+       }    
+    }
+      
+    override suspend fun insert(model: YourModel): Result<Unit> {
+        return try {
+            dao.insert(model.toEntity())
+            Result.success(Unit)
+        } catch (e: Exception) {    
+	        Result.failure(e)   
+        }
+    }  
+    
+    override suspend fun delete(id: String): Result<Unit> {
+        // ...    }
+    }  
+```  
+
+#### 7. 创建 Use Case（用例）
+在 `domain/usecase/` 创建业务逻辑：
+```kotlin  
+// domain/usecase/YourUseCases.kt  
+data class YourUseCases(  
+    val getAll: GetAllYourModelsUseCase,    
+    val create: CreateYourModelUseCase,    
+    val delete: DeleteYourModelUseCase
+)  
+  
+class GetAllYourModelsUseCase @Inject constructor(  
+    private val repository: YourRepository) {  
+    operator fun invoke(): Flow<List<YourModel>> {
+        return repository.getAll()    
+    }
+}  
+  
+class CreateYourModelUseCase @Inject constructor(  
+    private val repository: YourRepository) {  
+    suspend operator fun invoke(name: String): Result<Unit> {
+        val model = YourModel(
+            id = UUID.randomUUID().toString(),
+            name = name
+        )
+    return repository.insert(model)
+    }
+}  
+```  
+
+#### 8. 配置 Hilt Module
+在 `di/` 添加 DI 配置：
+```kotlin  
+// di/DatabaseModule.kt  
+@Module  
+@InstallIn(SingletonComponent::class)  
+object DatabaseModule {  
+    @Provides    
+    @Singleton
+    fun provideYourDao(database: TaskDatabase): YourDao {
+        return database.yourDao()
+    }  
+    
+    @Provides
+    @Singleton
+    fun provideYourRepository(dao: YourDao): YourRepository {
+        return YourRepositoryImpl(dao)    
+    }
+}  
+  
+// di/UseCaseModule.kt  
+@Module  
+@InstallIn(ViewModelComponent::class)  
+object UseCaseModule {  
+    @Provides    
+    fun provideYourUseCases(repository: YourRepository): YourUseCases {
+        return YourUseCases(
+            getAll = GetAllYourModelsUseCase(repository),
+            create = CreateYourModelUseCase(repository),
+            delete = DeleteYourModelUseCase(repository)
+        )
+    }
+}  
+```  
+
+#### 9. 创建 ViewModel
+在 `presentation/screens/yourfeature/` 创建 ViewModel：
+```kotlin  
+// presentation/screens/yourfeature/YourViewModel.kt  
+data class YourUiState(  
+    val items: List<YourModel> = emptyList(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null
+)  
+  
+@HiltViewModel  
+class YourViewModel @Inject constructor(  
+    private val useCases: YourUseCases) : ViewModel() {  
+	    private val _uiState = MutableStateFlow(YourUiState())
+        val uiState: StateFlow<YourUiState> = _uiState.asStateFlow()  
+	    init {
+	        loadItems()
+	    }  
+	    private fun loadItems() {
+	        viewModelScope.launch {
+	            _uiState.value = _uiState.value.copy(isLoading = true)  
+	            useCases.getAll().collect { items ->
+	                _uiState.value = _uiState.value.copy(
+	                    items = items,
+	                    isLoading = false           
+	                )
+	            }
+	        }
+	    }
+	      
+    fun createItem(name: String) {
+        viewModelScope.launch {
+            useCases.create(name).fold(
+                onSuccess = { /* 成功处理 */ },
+                onFailure = { error ->
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = error.message
+                    )
+                }
+            )
+        }
+    }
+}  
+```  
+
+#### 10. 创建 Composable Screen
+在 `presentation/screens/yourfeature/` 创建 UI：
+```kotlin  
+// presentation/screens/yourfeature/YourScreen.kt  
+@Composable  
+fun YourScreen(  
+    viewModel: YourViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit) {  
+	    val uiState by viewModel.uiState.collectAsState()  
+	    Scaffold(
+	        topBar = {
+	            TopAppBar(
+	                title = { Text("Your Feature") },
+	                navigationIcon = {
+	                    IconButton(onClick = onNavigateBack) {
+	                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+	                    }
+	                }
+	            )
+	        }
+	    ) {
+		    paddingValues ->
+	        if (uiState.isLoading) {
+	            CircularProgressIndicator()
+	        } else {
+	            LazyColumn(
+	                modifier = Modifier.padding(paddingValues)
+	            ) {
+	                items(uiState.items) { item ->
+	                    Text(text = item.name)
+	            }
+            }
+        }
+    }
+}  
+```  
+
+#### 11. 添加 Navigation 路由
+在 `NextThingNavigation.kt` 添加路由：
+```kotlin  
+// presentation/navigation/NextThingNavigation.kt  
+sealed class Screen(val route: String) {  
+    // ...    object YourFeature : Screen("your_feature")}  
+  
+@Composable  
+fun NextThingNavigation(/* ... */) {  
+    NavHost(/* ... */) {
+        // ...
+        composable(Screen.YourFeature.route) {
+            val viewModel: YourViewModel = hiltViewModel()
+            YourScreen(
+                viewModel = viewModel,
+                onNavigateBack = { 
+	                navController.popBackStack() 
+	            }
+            )
+        }
+    }
+}  
+```  
+  
+---  
+
+## 📝 代码规范
+
+### Kotlin 编码规范
+- 遵循 [Kotlin 官方编码规范](https://kotlinlang.org/docs/coding-conventions.html)
+- 使用 4 空格缩进
+- 变量命名：驼峰命名法（camelCase）
+- 常量命名：大写下划线（UPPER_SNAKE_CASE）
+- 类名：帕斯卡命名法（PascalCase）
+
+### Compose 最佳实践
+- Composable 函数使用 PascalCase 命名
+- 优先使用 `remember` 和 `derivedStateOf` 优化重组
+- 使用 `LaunchedEffect` 和 `DisposableEffect` 管理副作用
+- 提取可复用的 Composable 到 `presentation/components/`
+
+### 依赖注入规范
+- 所有 ViewModel 使用 `@HiltViewModel` 注解
+- Repository 和 Service 使用 `@Inject` 构造函数注入
+- 模块使用 `@Module` + `@InstallIn` 注解
+
+### Git 提交规范
+```  
+feat: 新功能  
+fix: 修复 Bugdocs: 文档更新  
+style: 代码格式调整（不影响功能）  
+refactor: 重构代码  
+test: 测试相关  
+chore: 构建/工具链相关  
+```  
+  
+---  
+
+## 🧪 测试策略
+
+### 单元测试
+- **覆盖范围**：Use Case、ViewModel、Repository
+- **工具**：JUnit 4、Mockito、Kotlin Coroutines Test
+- **位置**：`app/src/test/java/`
+
+示例：
+```kotlin  
+@Test  
+fun `createTask should save task to repository`() = runTest {  
+    // Given    val repository = mockk<TaskRepository>()    val useCase = CreateTaskUseCase(repository)  
+    // When    useCase(title = "Test Task", category = TaskCategory.WORK)  
+    // Then    coVerify { repository.insert(any()) }  
+}  
+```  
+
+### UI 测试
+- **覆盖范围**：Composable UI、用户交互流程
+- **工具**：Compose Testing、Espresso
+- **位置**：`app/src/androidTest/java/`
+
+示例：
+```kotlin  
+@Test  
+fun taskList_displaysCorrectly() {  
+    composeTestRule.setContent {  
+        TaskListScreen(tasks = listOf(testTask))  
+    }  
+  
+    composeTestRule.onNodeWithText("Test Task").assertIsDisplayed()}  
+```  
+  
+---  
+
+## 🔄 WorkManager 后台任务
+
+### 已实现的 Worker
+
+#### 1. CheckOverdueTasksWorker（逾期检测）
+- **触发时间**：每日凌晨 1:00
+- **功能**：检测截止时间在昨天及之前且状态为 PENDING 的任务，标记为 OVERDUE
+- **约束**：无需低电量限制
+
+#### 2. ConvertDelayedTasksWorker（延期转待办）
+- **触发时间**：每日凌晨 0:00:01
+- **功能**：将状态为 DELAYED 的任务自动转为 PENDING
+- **约束**：无需低电量限制
+
+#### 3. SyncTasksWorker（数据同步）
+- **触发时间**：每 15 分钟
+- **功能**：与远程服务器同步任务数据（预留接口）
+- **约束**：需要网络连接
+
+### 调度器配置
+```kotlin  
+// NextThingApplication.kt  
+override fun onCreate() {  
+    super.onCreate()  
+    // 定时逾期检测  
+    TaskWorkScheduler.scheduleOverdueCheck(this)    
+    TaskWorkScheduler.triggerImmediateOverdueCheck(this)  // 启动立即检测  
+  
+    // 定时延期转待办  
+    TaskWorkScheduler.scheduleDelayedConversion(this)    
+    TaskWorkScheduler.triggerImmediateDelayedConversion(this)  
+    // 数据同步  
+    SyncScheduler.schedulePeriodicSync(this)}  
+```  
+  
+---  
+
+## 🌟 核心技术亮点总结
+
+1. **Clean Architecture 架构**：Domain、Data、Presentation 三层分离，职责清晰
+2. **响应式编程**：Kotlin Flow + StateFlow 实现数据流自动更新
+3. **依赖注入**：Hilt 全局统一管理依赖，支持 ViewModel、WorkManager 注入
+4. **数据库设计**：Room 数据库 + 复杂类型转换器 + 版本迁移
+5. **位置服务双引擎**：Google Play Services + 高德 SDK 智能切换
+6. **后台任务调度**：WorkManager 可靠的定时任务（逾期检测、延期转换）
+7. **权限管理**：智能权限请求 + 状态监听 + 降级方案
+8. **Compose 声明式 UI**：完全使用 Jetpack Compose 构建，Material 3 规范
+9. **协程优化**：超时控制、缓存机制、静默更新策略
+10. **可测试性**：Use Case 封装业务逻辑，便于单元测试和 Mock
+
+---  
+
+## 📄 License
+
+```  
+MIT License  
+  
+Copyright (c) 2024 NextThing  
+  
+Permission is hereby granted, free of charge, to any person obtaining a copy  
+of this software and associated documentation files (the "Software"), to deal  
+in the Software without restriction, including without limitation the rights  
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell  
+copies of the Software, and to permit persons to whom the Software is  
+furnished to do so, subject to the following conditions:  
+  
+The above copyright notice and this permission notice shall be included in all  
+copies or substantial portions of the Software.  
+  
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR  
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,  
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE  
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER  
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,  
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE  
+SOFTWARE.  
+```  
+  
+---  
+
+## 🤝 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'feat: Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 提交 Pull Request
+
+---  
+
+## 📬 联系方式
+
+- [**项目地址**](https://github.com/WAsbry/NextThing)
+- [**问题反馈**](https://github.com/WAsbry/NextThing/issues)
+
+---  
+
+
+**⭐ 如果这个项目对你有帮助，请给一个 Star！⭐**  
+   
