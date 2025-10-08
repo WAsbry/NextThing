@@ -23,7 +23,7 @@ import com.example.nextthingb1.presentation.theme.*
 
 @Composable
 fun LoginScreen(
-    viewModel: LoginViewModel = hiltViewModel(),
+    viewModel: LoginViewModel = hiltViewModel(), // 这个viewmodel 是哪里来的
     onLoginSuccess: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()

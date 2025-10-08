@@ -5,7 +5,9 @@ import com.example.nextthingb1.domain.model.TaskCategory
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.RepeatFrequency
+import com.example.nextthingb1.domain.model.TaskImportanceUrgency
 import com.example.nextthingb1.domain.repository.TaskRepository
+import com.example.nextthingb1.domain.repository.LocationRepository
 import kotlinx.coroutines.flow.Flow
 import timber.log.Timber
 import java.time.LocalDate
@@ -26,7 +28,8 @@ data class TaskUseCases @Inject constructor(
     val searchTasks: SearchTasksUseCase,
     val getTasksByCategory: GetTasksByCategoryUseCase,
     val getUrgentTasks: GetUrgentTasksUseCase,
-    val getEarliestTaskDate: GetEarliestTaskDateUseCase
+    val getEarliestTaskDate: GetEarliestTaskDateUseCase,
+    val locationRepository: LocationRepository
 )
 
 class GetAllTasksUseCase @Inject constructor(
@@ -67,7 +70,8 @@ class CreateTaskUseCase @Inject constructor(
         tags: List<String> = emptyList(),
         imageUri: String? = null,
         repeatFrequency: RepeatFrequency = RepeatFrequency(),
-        notificationStrategyId: String? = null
+        notificationStrategyId: String? = null,
+        importanceUrgency: TaskImportanceUrgency? = null
     ): Result<String> {
         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Timber.tag(TAG).d("【UseCase】CreateTaskUseCase 开始执行")
@@ -105,7 +109,8 @@ class CreateTaskUseCase @Inject constructor(
                     isUrgent = finalDueDate.isBefore(LocalDateTime.now().plusHours(2)),
                     imageUri = imageUri,
                     repeatFrequency = repeatFrequency,
-                    notificationStrategyId = notificationStrategyId
+                    notificationStrategyId = notificationStrategyId,
+                    importanceUrgency = importanceUrgency
                 )
 
                 Timber.tag(TAG).d("正在保存任务到数据库...")

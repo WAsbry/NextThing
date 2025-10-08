@@ -19,6 +19,7 @@ interface LocationRepository {
     suspend fun updateLocation(location: LocationInfo)
     suspend fun deleteLocationById(locationId: String): Result<Unit>
     suspend fun setAsCurrentLocation(locationId: String): Result<Unit>
+    suspend fun saveCurrentLocation(location: LocationInfo): Result<Unit>
     suspend fun incrementUsageCount(locationId: String): Result<Unit>
     suspend fun getMostUsedLocations(limit: Int = 10): List<LocationInfo>
     
