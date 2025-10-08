@@ -363,7 +363,8 @@ class CreateTaskViewModel @Inject constructor(
                     dueDate = dueDateTime,
                     imageUri = currentState.selectedImageUri,
                     repeatFrequency = currentState.repeatFrequency,
-                    notificationStrategyId = currentState.notificationStrategyId
+                    notificationStrategyId = currentState.notificationStrategyId,
+                    importanceUrgency = currentState.importanceUrgency
                 )
 
                 if (result.isSuccess) {

@@ -18,6 +18,7 @@ object UseCaseModule {
     @Singleton
     fun provideTaskUseCases(
         repository: TaskRepository,
+        locationRepository: LocationRepository,
         taskAlarmManager: com.example.nextthingb1.util.TaskAlarmManager
     ): TaskUseCases {
         return TaskUseCases(
@@ -33,7 +34,8 @@ object UseCaseModule {
             searchTasks = SearchTasksUseCase(repository),
             getTasksByCategory = GetTasksByCategoryUseCase(repository),
             getUrgentTasks = GetUrgentTasksUseCase(repository),
-            getEarliestTaskDate = GetEarliestTaskDateUseCase(repository)
+            getEarliestTaskDate = GetEarliestTaskDateUseCase(repository),
+            locationRepository = locationRepository
         )
     }
 

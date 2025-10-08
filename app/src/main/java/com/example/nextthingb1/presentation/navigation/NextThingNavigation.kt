@@ -63,6 +63,7 @@ fun NextThingNavigation(
     // 检查是否有用户登录
     val startDestination = remember { mutableStateOf<String?>(null) }
 
+    // 这个好像是什么异步的东西吧
     LaunchedEffect(Unit) {
         val currentUser = userUseCases.getCurrentUser().first()
         startDestination.value = if (currentUser == null) {

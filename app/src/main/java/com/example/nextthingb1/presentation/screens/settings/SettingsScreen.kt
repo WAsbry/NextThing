@@ -1,5 +1,6 @@
 package com.example.nextthingb1.presentation.screens.settings
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,11 +14,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 
 import com.example.nextthingb1.presentation.theme.*
 
@@ -38,6 +41,7 @@ fun SettingsScreen(
             // 用户信息卡片
             UserInfoCard(
                 username = uiState.username,
+                avatarUri = uiState.avatarUri,
                 usageDays = uiState.usageDays,
                 onClick = onNavigateToUserInfo
             )
@@ -56,6 +60,7 @@ fun SettingsScreen(
 @Composable
 private fun UserInfoCard(
     username: String,
+    avatarUri: Uri?,
     usageDays: Int,
     onClick: () -> Unit
 ) {
@@ -73,18 +78,29 @@ private fun UserInfoCard(
                 .padding(20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 头像
-            Box(
-                modifier = Modifier
-                    .size(60.dp)
-                    .clip(CircleShape)
-                    .background(Primary.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "👤",
-                    fontSize = 30.sp
+            // 头像 - 支持显示实际图片
+            if (avatarUri != null) {
+                AsyncImage(
+                    model = avatarUri,
+                    contentDescription = "用户头像",
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(Primary.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "👤",
+                        fontSize = 30.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(16.dp))

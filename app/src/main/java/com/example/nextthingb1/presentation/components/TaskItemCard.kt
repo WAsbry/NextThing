@@ -248,7 +248,7 @@ private fun getImportanceDisplayText(importanceUrgency: TaskImportanceUrgency?):
         TaskImportanceUrgency.IMPORTANT_NOT_URGENT -> "重要但不紧急"
         TaskImportanceUrgency.NOT_IMPORTANT_URGENT -> "不重要但紧急"
         TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT -> "不重要且不紧急"
-        null -> "不重要且不紧急"
+        null -> "未设置"
     }
 }
 
