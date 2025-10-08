@@ -1,5 +1,6 @@
 package com.example.nextthingb1.presentation.screens.settings
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.usecase.TaskUseCases
@@ -15,6 +16,7 @@ import com.example.nextthingb1.presentation.theme.*
 
 data class SettingsUiState(
     val username: String = "加载中...",
+    val avatarUri: Uri? = null,
     val usageDays: Int = 0,
     val settingSections: List<SettingSection> = emptyList(),
     val locationEnhancementEnabled: Boolean = false,
@@ -47,6 +49,7 @@ class SettingsViewModel @Inject constructor(
 
                     _uiState.value = _uiState.value.copy(
                         username = user.nickname,
+                        avatarUri = user.avatarUri?.let { Uri.parse(it) },
                         usageDays = usageDays.coerceAtLeast(1) // 至少显示1天
                     )
                 }

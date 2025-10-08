@@ -83,6 +83,31 @@ class LocationRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun saveCurrentLocation(location: LocationInfo): Result<Unit> {
+        return try {
+            // 步骤1: 删除所有旧的AUTO类型位置（只保留最新的一条）
+            locationDao.deleteAllAutoLocations()
+            timber.log.Timber.d("已清理所有旧的自动位置缓存")
+
+            // 步骤2: 标记这个位置为当前位置并保存
+            val locationWithFlag = location.copy(
+                locationType = LocationType.AUTO,
+                isCurrentLocation = true
+            )
+
+            // 步骤3: 插入新的当前位置
+            locationDao.insertLocation(locationWithFlag.toEntity())
+
+            timber.log.Timber.d("当前位置已保存到数据库: ${location.locationName}")
+            timber.log.Timber.d("   位置类型: AUTO (自动获取)")
+            timber.log.Timber.d("   缓存策略: 仅保留最新一条，旧记录已清理")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "保存当前位置失败")
+            Result.failure(e)
+        }
+    }
+
     override suspend fun incrementUsageCount(locationId: String): Result<Unit> {
         return try {
             locationDao.incrementUsageCount(locationId, LocalDateTime.now())
