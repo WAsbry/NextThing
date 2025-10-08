@@ -53,9 +53,16 @@ interface LocationDao {
     
     @Query("UPDATE locations SET isCurrentLocation = 0")
     suspend fun clearCurrentLocationFlag()
-    
+
     @Query("UPDATE locations SET isCurrentLocation = 1 WHERE id = :locationId")
     suspend fun setAsCurrentLocation(locationId: String)
+
+    /**
+     * 删除所有自动获取的位置记录
+     * 用于清理历史AUTO类型缓存，只保留最新的一条
+     */
+    @Query("DELETE FROM locations WHERE locationType = 'AUTO'")
+    suspend fun deleteAllAutoLocations()
 
     @Query("UPDATE locations SET usageCount = usageCount + 1, lastUsedAt = :usedAt WHERE id = :locationId")
     suspend fun incrementUsageCount(locationId: String, usedAt: LocalDateTime)

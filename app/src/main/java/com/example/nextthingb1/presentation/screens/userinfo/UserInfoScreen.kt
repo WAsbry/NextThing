@@ -2,6 +2,7 @@ package com.example.nextthingb1.presentation.screens.userinfo
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.nextthingb1.presentation.theme.*
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,9 +42,12 @@ fun UserInfoScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // 图片选择器
+    // 昵称编辑对话框状态
+    var showNicknameDialog by remember { mutableStateOf(false) }
+
+    // 图片选择器 - 使用 PickVisualMedia 提供更好的用户体验
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         uri?.let {
             viewModel.updateAvatar(it)
@@ -53,18 +59,24 @@ fun UserInfoScreen(
             .fillMaxSize()
             .background(BgPrimary)
     ) {
-        // 顶部导航栏
-        CenterAlignedTopAppBar(
-            title = {
-                Text(
-                    text = "账号信息",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
-            },
-            navigationIcon = {
-                IconButton(onClick = onBackPressed) {
+        // 顶部导航栏 - 紧凑设计
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White,
+            shadowElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)  // 标准Material高度
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 返回按钮
+                IconButton(
+                    onClick = onBackPressed,
+                    modifier = Modifier.size(48.dp)
+                ) {
                     Text(
                         text = "‹",
                         fontSize = 32.sp,
@@ -72,12 +84,21 @@ fun UserInfoScreen(
                         fontWeight = FontWeight.Light
                     )
                 }
-            },
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                containerColor = Color.White
-            ),
-            modifier = Modifier.height(48.dp)
-        )
+
+                // 标题
+                Text(
+                    text = "账号信息",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
+                )
+
+                // 占位，保持标题居中
+                Spacer(modifier = Modifier.size(48.dp))
+            }
+        }
 
         // 内容区域
         LazyColumn(
@@ -105,7 +126,9 @@ fun UserInfoScreen(
                     showAvatar = true,
                     showArrow = true,
                     onClick = {
-                        imagePickerLauncher.launch("image/*")
+                        imagePickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
                     }
                 )
             }
@@ -116,7 +139,7 @@ fun UserInfoScreen(
                     label = "昵称",
                     value = uiState.nickname.ifEmpty { "未设置" },
                     showArrow = true,
-                    onClick = { /* TODO: 修改昵称对话框 */ }
+                    onClick = { showNicknameDialog = true }
                 )
             }
 
@@ -126,7 +149,7 @@ fun UserInfoScreen(
                     label = "ID",
                     value = uiState.userId.ifEmpty { "加载中..." },
                     showCopy = true,
-                    onClick = { /* TODO: 复制ID */ }
+                    onClick = { viewModel.copyUserId() }
                 )
             }
 
@@ -220,6 +243,18 @@ fun UserInfoScreen(
             }
         }
 
+        // 昵称编辑对话框
+        if (showNicknameDialog) {
+            EditNicknameDialog(
+                currentNickname = uiState.nickname,
+                onDismiss = { showNicknameDialog = false },
+                onConfirm = { newNickname ->
+                    viewModel.updateNickname(newNickname)
+                    showNicknameDialog = false
+                }
+            )
+        }
+
         // 绑定输入对话框
         if (uiState.showBindDialog) {
             BindAccountDialog(
@@ -231,6 +266,81 @@ fun UserInfoScreen(
             )
         }
     }
+}
+
+@Composable
+private fun EditNicknameDialog(
+    currentNickname: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var inputValue by remember { mutableStateOf(currentNickname) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "修改昵称",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        text = {
+            OutlinedTextField(
+                value = inputValue,
+                onValueChange = {
+                    if (it.length <= 20) {  // 限制最大20个字符
+                        inputValue = it
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(text = "请输入昵称", color = TextMuted)
+                },
+                supportingText = {
+                    Text(
+                        text = "${inputValue.length}/20",
+                        fontSize = 12.sp,
+                        color = TextMuted
+                    )
+                },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Primary,
+                    unfocusedBorderColor = Border,
+                    cursorColor = Primary
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (inputValue.isNotBlank()) {
+                        onConfirm(inputValue.trim())
+                    }
+                },
+                enabled = inputValue.isNotBlank() && inputValue.trim() != currentNickname
+            ) {
+                Text(
+                    text = "确定",
+                    color = if (inputValue.isNotBlank() && inputValue.trim() != currentNickname)
+                        Primary else TextMuted,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = "取消",
+                    color = TextSecondary
+                )
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable

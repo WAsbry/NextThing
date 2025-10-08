@@ -30,14 +30,20 @@ object ToastHelper {
 
         // 取消当前显示的Toast
         currentToast?.cancel()
+        currentToast = null
 
         // 创建新的防抖任务
         debounceJob = CoroutineScope(Dispatchers.Main).launch {
             delay(debounceDelayMs)
 
-            // 延迟后显示Toast
-            currentToast = Toast.makeText(context, message, duration)
+            // 使用 ApplicationContext 避免内存泄漏
+            val appContext = context.applicationContext
+            currentToast = Toast.makeText(appContext, message, duration)
             currentToast?.show()
+
+            // Toast 显示后延迟清理引用，避免内存泄漏
+            delay(if (duration == Toast.LENGTH_LONG) 3500L else 2000L)
+            currentToast = null
         }
     }
 
@@ -54,10 +60,18 @@ object ToastHelper {
     ) {
         // 取消当前显示的Toast
         currentToast?.cancel()
+        currentToast = null
 
-        // 显示新Toast
-        currentToast = Toast.makeText(context, message, duration)
+        // 使用 ApplicationContext 避免内存泄漏
+        val appContext = context.applicationContext
+        currentToast = Toast.makeText(appContext, message, duration)
         currentToast?.show()
+
+        // Toast 显示后延迟清理引用，避免内存泄漏
+        CoroutineScope(Dispatchers.Main).launch {
+            delay(if (duration == Toast.LENGTH_LONG) 3500L else 2000L)
+            currentToast = null
+        }
     }
 
     /**

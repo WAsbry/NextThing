@@ -903,12 +903,17 @@ private fun TimePickerColumn(
     var isSnapping by remember { mutableStateOf(false) }
     // 记录上一次滚动状态，用于检测从滚动到停止的转变
     var wasScrolling by remember { mutableStateOf(false) }
+    // 记录上一次选中的项，避免重复更新
+    var lastSelectedItem by remember { mutableStateOf(selectedItem) }
 
-    // 实时更新选中项（滚动过程中）
+    // 实时更新选中项（滚动过程中）- 只用于视觉反馈，不触发吸附
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
-        if (!isSnapping) {
+        if (!isSnapping && listState.isScrollInProgress) {
             val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
-            if (visibleItemsInfo.isEmpty()) return@LaunchedEffect
+            if (visibleItemsInfo.isEmpty()) {
+                Timber.tag("TimePickerScroll").w("⚠️ visibleItemsInfo为空")
+                return@LaunchedEffect
+            }
 
             val viewportStart = listState.layoutInfo.viewportStartOffset
             val viewportEnd = listState.layoutInfo.viewportEndOffset
@@ -929,7 +934,9 @@ private fun TimePickerColumn(
                 }
             }
 
-            if (closestItem in items.indices && closestItem != selectedItem) {
+            if (closestItem in items.indices && closestItem != lastSelectedItem) {
+                Timber.tag("TimePickerScroll").d("📍 滚动中: 选中项从 $lastSelectedItem 更新到 $closestItem (值=${items[closestItem]})")
+                lastSelectedItem = closestItem
                 onItemSelected(items[closestItem])
             }
         }
@@ -939,51 +946,77 @@ private fun TimePickerColumn(
     LaunchedEffect(listState.isScrollInProgress) {
         val isCurrentlyScrolling = listState.isScrollInProgress
 
+        Timber.tag("TimePickerScroll").v("🔄 滚动状态: wasScrolling=$wasScrolling, isCurrentlyScrolling=$isCurrentlyScrolling, isSnapping=$isSnapping")
+
         // 只在从滚动状态切换到停止状态时执行吸附，且不是正在吸附中
         if (wasScrolling && !isCurrentlyScrolling && !isSnapping) {
+            Timber.tag("TimePickerScroll").d("🎯 滚动停止，开始吸附逻辑")
+
+            // 延迟一小段时间，确保惯性滚动完全停止
+            kotlinx.coroutines.delay(50)
+
             val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
-            if (visibleItemsInfo.isNotEmpty()) {
-                val viewportStart = listState.layoutInfo.viewportStartOffset
-                val viewportEnd = listState.layoutInfo.viewportEndOffset
-                val viewportCenterY = viewportStart + (viewportEnd - viewportStart) / 2
+            if (visibleItemsInfo.isEmpty()) {
+                Timber.tag("TimePickerScroll").w("⚠️ 吸附时visibleItemsInfo为空")
+                wasScrolling = false
+                return@LaunchedEffect
+            }
 
-                var closestItem = selectedItem
-                var minDistance = Int.MAX_VALUE
+            val viewportStart = listState.layoutInfo.viewportStartOffset
+            val viewportEnd = listState.layoutInfo.viewportEndOffset
+            val viewportCenterY = viewportStart + (viewportEnd - viewportStart) / 2
 
-                visibleItemsInfo.forEach { itemInfo ->
-                    // 计算每个项目的中心Y坐标（相对于视口）
-                    val itemCenterY = itemInfo.offset + itemInfo.size / 2
-                    // 计算项目中心与视口中心的距离
-                    val distance = kotlin.math.abs(itemCenterY - viewportCenterY)
+            var closestItem = selectedItem
+            var minDistance = Int.MAX_VALUE
 
-                    if (distance < minDistance) {
-                        minDistance = distance
-                        closestItem = itemInfo.index
-                    }
+            visibleItemsInfo.forEach { itemInfo ->
+                // 计算每个项目的中心Y坐标（相对于视口）
+                val itemCenterY = itemInfo.offset + itemInfo.size / 2
+                // 计算项目中心与视口中心的距离
+                val distance = kotlin.math.abs(itemCenterY - viewportCenterY)
+
+                if (distance < minDistance) {
+                    minDistance = distance
+                    closestItem = itemInfo.index
+                }
+            }
+
+            if (closestItem in items.indices) {
+                Timber.tag("TimePickerScroll").d("🎯 吸附目标: index=$closestItem, value=${items[closestItem]}, 当前选中=$selectedItem")
+
+                if (closestItem != lastSelectedItem) {
+                    Timber.tag("TimePickerScroll").d("✅ 更新选中项: $lastSelectedItem -> $closestItem")
+                    lastSelectedItem = closestItem
+                    onItemSelected(items[closestItem])
                 }
 
-                if (closestItem in items.indices) {
-                    if (closestItem != selectedItem) {
-                        onItemSelected(items[closestItem])
-                    }
-
-                    // 执行吸附滚动
-                    isSnapping = true
-                    wasScrolling = false // 立即重置，防止吸附动画完成后再次触发
-                    coroutineScope.launch {
+                // 执行吸附滚动
+                Timber.tag("TimePickerScroll").d("🔧 开始吸附动画到 index=$closestItem")
+                isSnapping = true
+                wasScrolling = false // 立即重置，防止吸附动画完成后再次触发
+                coroutineScope.launch {
+                    try {
                         listState.animateScrollToItem(
                             index = closestItem,
                             scrollOffset = 0
                         )
+                        Timber.tag("TimePickerScroll").d("✅ 吸附动画完成")
+                    } catch (e: Exception) {
+                        Timber.tag("TimePickerScroll").e(e, "❌ 吸附动画失败")
+                    } finally {
                         isSnapping = false
+                        Timber.tag("TimePickerScroll").d("🏁 重置isSnapping标志")
                     }
                 }
+            } else {
+                Timber.tag("TimePickerScroll").w("⚠️ closestItem=$closestItem 超出范围 [0, ${items.size})")
+                wasScrolling = false
             }
-        }
-
-        // 更新滚动状态记录（只在非吸附状态下更新）
-        if (!isSnapping) {
-            wasScrolling = isCurrentlyScrolling
+        } else {
+            // 更新滚动状态记录（只在非吸附状态下更新）
+            if (!isSnapping) {
+                wasScrolling = isCurrentlyScrolling
+            }
         }
     }
 
@@ -1204,7 +1237,7 @@ internal fun LocationConfigCard(
                     )
 
                     Text(
-                        text = internalSelectedLocation?.locationName ?: "实时位置",
+                        text = internalSelectedLocation?.locationName ?: "未选择",
                         color = Color(0xFF424242),
                         fontSize = 14.sp,
                         modifier = Modifier.weight(1f)
@@ -1235,14 +1268,6 @@ internal fun LocationConfigCard(
                 Column(
                     modifier = Modifier.padding(8.dp)
                 ) {
-                    // 实时位置选项
-                    RealTimeLocationMenuItem(
-                        onClick = {
-                            internalSelectedLocation = null
-                            onLocationSelected(null)
-                        }
-                    )
-
                     // 显示已保存的地点
                     savedLocations.forEach { location ->
                         LocationMenuItem(
@@ -1573,7 +1598,9 @@ internal fun ImportanceConfigCard(
     isEditMode: Boolean = true
 ) {
     // 内部状态管理选中的重要性和紧急性组合
-    var internalSelectedImportanceUrgency by remember { mutableStateOf<TaskImportanceUrgency?>(null) }
+    var internalSelectedImportanceUrgency by remember(selectedImportanceUrgency) {
+        mutableStateOf<TaskImportanceUrgency?>(selectedImportanceUrgency)
+    }
 
     Column(modifier = modifier) {
         // 主卡片：显示当前选中的重要性和紧急性
@@ -1614,7 +1641,7 @@ internal fun ImportanceConfigCard(
                     )
 
                     Text(
-                        text = internalSelectedImportanceUrgency?.displayName ?: "选择重要程度",
+                        text = internalSelectedImportanceUrgency?.displayName ?: "未选择",
                         color = Color(0xFF424242),
                         fontSize = 14.sp,
                         modifier = Modifier.weight(1f)
@@ -1652,6 +1679,7 @@ internal fun ImportanceConfigCard(
                             onClick = {
                                 internalSelectedImportanceUrgency = importanceUrgency
                                 onImportanceUrgencySelected(importanceUrgency)
+                                onExpandToggle()
                             }
                         )
                     }

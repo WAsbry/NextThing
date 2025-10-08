@@ -147,6 +147,7 @@ fun NextThingApp(
         )
     }
 
+    // 页面就在这里
     NextThingNavigation(
         navController = navController,
         userUseCases = userUseCases

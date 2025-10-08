@@ -1,14 +1,19 @@
 package com.example.nextthingb1.presentation.screens.userinfo
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.usecase.UserUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 data class UserInfoUiState(
@@ -31,7 +36,8 @@ enum class BindType {
 
 @HiltViewModel
 class UserInfoViewModel @Inject constructor(
-    private val userUseCases: UserUseCases
+    private val userUseCases: UserUseCases,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(UserInfoUiState())
@@ -68,8 +74,9 @@ class UserInfoViewModel @Inject constructor(
         viewModelScope.launch {
             val currentUserId = _uiState.value.currentUserId
             if (currentUserId.isNotEmpty()) {
-                _uiState.value = _uiState.value.copy(avatarUri = uri)
+                // 直接更新数据库，Flow会自动触发UI更新
                 userUseCases.updateAvatar(currentUserId, uri.toString())
+                Timber.d("头像已更新: $uri")
             }
         }
     }
@@ -79,7 +86,29 @@ class UserInfoViewModel @Inject constructor(
             val currentUserId = _uiState.value.currentUserId
             if (currentUserId.isNotEmpty() && nickname.isNotBlank()) {
                 userUseCases.updateNickname(currentUserId, nickname)
+                Timber.d("昵称已更新: $nickname")
             }
+        }
+    }
+
+    /**
+     * 复制用户ID到剪贴板
+     */
+    fun copyUserId() {
+        try {
+            val userId = _uiState.value.userId
+            if (userId.isEmpty()) {
+                Timber.w("用户ID为空，无法复制")
+                return
+            }
+
+            val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val clip = ClipData.newPlainText("用户ID", userId)
+            clipboardManager?.setPrimaryClip(clip)
+
+            Timber.d("用户ID已复制到剪贴板: $userId")
+        } catch (e: Exception) {
+            Timber.e(e, "复制用户ID失败")
         }
     }
 
