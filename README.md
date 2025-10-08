@@ -1,4 +1,4 @@
-# NextThing - 智能任务管理应用
+# NextThing - 最好的开源待办软件
 
 
 
