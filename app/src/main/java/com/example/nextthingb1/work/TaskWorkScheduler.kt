@@ -19,6 +19,7 @@ object TaskWorkScheduler {
     private const val OVERDUE_CHECK_WORK_NAME = "check_overdue_tasks"
     private const val DELAYED_CONVERT_WORK_NAME = "convert_delayed_tasks"
     private const val TASK_NOTIFICATION_WORK_NAME = "task_notifications"
+    private const val COUNTDOWN_UPDATE_WORK_NAME = "countdown_notifications"
 
     /**
      * Schedule daily overdue task check.
@@ -167,6 +168,40 @@ object TaskWorkScheduler {
     }
 
     /**
+     * Schedule periodic countdown notification update.
+     *
+     * This schedules a periodic worker that runs every 1 minute
+     * to update countdown notifications for tasks in the 3-minute window.
+     *
+     * @param context Application context
+     */
+    fun scheduleCountdownUpdates(context: Context) {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(false)
+            .build()
+
+        val countdownRequest = PeriodicWorkRequestBuilder<CountdownNotificationWorker>(
+            repeatInterval = 1,
+            repeatIntervalTimeUnit = TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                WorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS
+            )
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            COUNTDOWN_UPDATE_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            countdownRequest
+        )
+
+        Timber.i("Scheduled countdown notification updates to run every 1 minute")
+    }
+
+    /**
      * Cancel all scheduled task work.
      *
      * @param context Application context
@@ -175,6 +210,7 @@ object TaskWorkScheduler {
         WorkManager.getInstance(context).cancelUniqueWork(OVERDUE_CHECK_WORK_NAME)
         WorkManager.getInstance(context).cancelUniqueWork(DELAYED_CONVERT_WORK_NAME)
         WorkManager.getInstance(context).cancelUniqueWork(TASK_NOTIFICATION_WORK_NAME)
+        WorkManager.getInstance(context).cancelUniqueWork(COUNTDOWN_UPDATE_WORK_NAME)
         Timber.i("Cancelled all task work")
     }
 

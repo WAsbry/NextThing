@@ -90,7 +90,13 @@ fun TasksScreen(
                 TasksCalendarView(
                     calendarDays = uiState.calendarDays,
                     selectedDate = uiState.selectedDate,
-                    onDateSelected = { viewModel.selectDate(it) }
+                    selectedDateTasks = uiState.selectedDateTasks,
+                    selectedDateCompletedCount = uiState.selectedDateCompletedCount,
+                    selectedDatePendingCount = uiState.selectedDatePendingCount,
+                    selectedDateOverdueCount = uiState.selectedDateOverdueCount,
+                    selectedDateCancelledCount = uiState.selectedDateCancelledCount,
+                    onDateSelected = { viewModel.selectDate(it) },
+                    onNavigateToTaskDetail = onNavigateToTaskDetail
                 )
             }
         }
@@ -875,6 +881,34 @@ private fun formatDateDisplay(dateString: String): String {
     }
 }
 
+// 日历选定日期格式化结果（包含文本和字体大小）
+data class DateDisplayInfo(
+    val text: String,
+    val fontSize: Int  // 单位：sp
+)
+
+// 日历选定日期格式化函数（仅显示日期，不显示"今天"等相对时间）
+private fun formatSelectedDateDisplay(dateString: String): DateDisplayInfo {
+    return try {
+        val today = java.time.LocalDate.now()
+        val selectedDate = java.time.LocalDate.parse(dateString)
+
+        when {
+            // 本月或跨月但同年：显示"x月x日" - 使用 18sp
+            selectedDate.year == today.year -> {
+                DateDisplayInfo("${selectedDate.monthValue}月${selectedDate.dayOfMonth}日", 18)
+            }
+            // 跨年：显示"yy年x月x日"（缩写年份）- 使用 16sp
+            else -> {
+                val shortYear = selectedDate.year % 100  // 取后两位
+                DateDisplayInfo("${shortYear}年${selectedDate.monthValue}月${selectedDate.dayOfMonth}日", 16)
+            }
+        }
+    } catch (e: Exception) {
+        DateDisplayInfo(dateString, 18)
+    }
+}
+
 @Composable
 private fun TaskListItem(
     task: Task,
@@ -907,50 +941,96 @@ private fun TaskListItem(
 private fun TasksCalendarView(
     calendarDays: List<CalendarDay>,
     selectedDate: String?,
+    selectedDateTasks: List<Task>,
+    selectedDateCompletedCount: Int,
+    selectedDatePendingCount: Int,
+    selectedDateOverdueCount: Int,
+    selectedDateCancelledCount: Int,
+    onDateSelected: (String) -> Unit,
+    onNavigateToTaskDetail: (String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // 星期标题
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                listOf("一", "二", "三", "四", "五", "六", "日").forEach { day ->
+                    Text(
+                        text = day,
+                        fontSize = 12.sp,
+                        color = TextMuted,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+
+        // 日历网格 - 使用普通网格布局
+        item {
+            CalendarGrid(
+                calendarDays = calendarDays,
+                selectedDate = selectedDate,
+                onDateSelected = onDateSelected
+            )
+        }
+
+        // 选定日期详情
+        selectedDate?.let { date ->
+            item {
+                SelectedDateDetailCard(
+                    selectedDate = date,
+                    tasks = selectedDateTasks,
+                    completedCount = selectedDateCompletedCount,
+                    pendingCount = selectedDatePendingCount,
+                    overdueCount = selectedDateOverdueCount,
+                    cancelledCount = selectedDateCancelledCount,
+                    onTaskClick = { task -> onNavigateToTaskDetail(task.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarGrid(
+    calendarDays: List<CalendarDay>,
+    selectedDate: String?,
     onDateSelected: (String) -> Unit
 ) {
-    Column {
-        // 星期标题
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            listOf("一", "二", "三", "四", "五", "六", "日").forEach { day ->
-                Text(
-                    text = day,
-                    fontSize = 12.sp,
-                    color = TextMuted,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
-                )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        // 按每行7个分组
+        calendarDays.chunked(7).forEach { weekDays ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                weekDays.forEach { day ->
+                    Box(modifier = Modifier.weight(1f)) {
+                        CalendarDayItem(
+                            day = day,
+                            isSelected = selectedDate == day.date,
+                            onClick = { onDateSelected(day.date) }
+                        )
+                    }
+                }
+                // 填充空白（如果该行不足7天）
+                repeat(7 - weekDays.size) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
-        }
-
-        // 日历网格
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(7),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(1.dp),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-            horizontalArrangement = Arrangement.spacedBy(1.dp)
-        ) {
-            items(calendarDays) { day ->
-                CalendarDayItem(
-                    day = day,
-                    isSelected = selectedDate == day.date,
-                    onClick = { onDateSelected(day.date) }
-                )
-            }
-        }
-
-        // 今日详情
-        selectedDate?.let {
-            TodayDetailCard(selectedDate = it)
+            Spacer(modifier = Modifier.height(1.dp))
         }
     }
 }
@@ -1087,62 +1167,142 @@ private fun TaskStatusBackgroundFill(
 }
 
 @Composable
-private fun TodayDetailCard(selectedDate: String) {
+private fun SelectedDateDetailCard(
+    selectedDate: String,
+    tasks: List<Task>,
+    completedCount: Int,
+    pendingCount: Int,
+    overdueCount: Int,
+    cancelledCount: Int,
+    onTaskClick: (Task) -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
     ) {
-        Column {
-            Row(
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // 顶部概览
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .background(Primary.copy(alpha = 0.05f))
+                    .padding(16.dp)
             ) {
+                // 日期 - 紧贴左侧（动态字体大小）
+                val dateInfo = remember(selectedDate) {
+                    formatSelectedDateDisplay(selectedDate)
+                }
                 Text(
-                    text = formatDateDisplay(selectedDate),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
+                    text = dateInfo.text,
+                    fontSize = dateInfo.fontSize.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = (-16).dp) // 抵消 Box 的左侧 padding，使其紧贴左边缘
                 )
 
-                Row {
-                    Text(
-                        text = "已完成 0个",
-                        color = Success,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(
-                        text = "待办 0个",
-                        color = Primary,
-                        fontSize = 14.sp
-                    )
+                // 统计标签 - 紧贴右侧
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(x = 16.dp) // 抵消 Box 的右侧 padding，使其紧贴右边缘
+                ) {
+                    // 完成
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Success.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = "完成 ${completedCount}件",
+                            color = Success,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    // 未完成
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Primary.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = "未完成 ${pendingCount}件",
+                            color = Primary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    // 逾期
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Warning.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = "逾期 ${overdueCount}件",
+                            color = Warning,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    // 放弃
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Danger.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = "放弃 ${cancelledCount}件",
+                            color = Danger,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
 
-            // 空状态
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(40.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "📋",
-                    fontSize = 48.sp
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "当天没有任何任务哦",
-                    color = TextMuted,
-                    fontSize = 14.sp
-                )
+            // 任务列表或空状态
+            if (tasks.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "无任务",
+                        color = TextMuted,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                // 任务列表 - 普通 Column，由外层 LazyColumn 提供滚动
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                ) {
+                    tasks.forEach { task ->
+                        TaskItemCard(
+                            task = task,
+                            onClick = { onTaskClick(task) },
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
             }
         }
     }
