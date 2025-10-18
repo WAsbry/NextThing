@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -52,6 +53,11 @@ data class TasksUiState(
     val taskGroups: List<TaskGroup> = emptyList(),
     val calendarDays: List<CalendarDay> = emptyList(),
     val selectedDate: String? = null,
+    val selectedDateTasks: List<Task> = emptyList(),
+    val selectedDateCompletedCount: Int = 0,
+    val selectedDatePendingCount: Int = 0,
+    val selectedDateOverdueCount: Int = 0,
+    val selectedDateCancelledCount: Int = 0,
     val allTasks: List<Task> = emptyList(),
     val earliestTaskDate: LocalDate? = null,
     val currentWeekOffset: Int = 0,
@@ -88,21 +94,24 @@ class TasksViewModel @Inject constructor(
     }
     
     private fun loadTasks() {
-        Log.d("TasksViewModel", "=== loadTasks() 开始 ===")
-        Log.d("TasksViewModel", "当前周偏移量: ${_uiState.value.currentWeekOffset}")
-        Log.d("clickEvent", "loadTasks() 方法被调用，开始重新计算任务数据")
-        Log.d("clickEvent", "  - 使用的周偏移量: ${_uiState.value.currentWeekOffset}")
-        Log.d("clickEvent", "  - 线程信息: ${Thread.currentThread().name}")
+        Timber.tag("DataFlow").d("━━━━━━ TasksViewModel.loadTasks ━━━━━━")
+        Timber.tag("DataFlow").d("当前周偏移量: ${_uiState.value.currentWeekOffset}")
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
+            Timber.tag("DataFlow").d("开始加载所有任务，isLoading=true")
 
             try {
+                Timber.tag("DataFlow").d("调用 taskUseCases.getAllTasks().collect")
                 taskUseCases.getAllTasks().collect { tasks ->
-                    Log.d("TasksViewModel", "从数据库获取到 ${tasks.size} 个任务")
-                    Log.d("clickEvent", "数据库查询完成:")
-                    Log.d("clickEvent", "  - 任务总数: ${tasks.size}")
-                    Log.d("clickEvent", "  - 当前周偏移量: ${_uiState.value.currentWeekOffset}")
+                    Timber.tag("DataFlow").d("━━━━━━ Flow回调收到数据 ━━━━━━")
+                    Timber.tag("DataFlow").d("📊 收到 ${tasks.size} 个任务")
+                    tasks.take(5).forEachIndexed { index, task ->
+                        Timber.tag("DataFlow").d("  [$index] ${task.title} (${task.status}, dueDate=${task.dueDate})")
+                    }
+                    if (tasks.size > 5) {
+                        Timber.tag("DataFlow").d("  ... 还有 ${tasks.size - 5} 个任务")
+                    }
 
                     // 计算当前周的任务统计
                     val currentWeekTasks = filterTasksByWeek(tasks, _uiState.value.currentWeekOffset)
@@ -330,7 +339,37 @@ class TasksViewModel @Inject constructor(
         updateCurrentMonth()
         generateCalendarDays()
     }
-    fun selectDate(date: String) { _uiState.value = _uiState.value.copy(selectedDate = date) }
+    fun selectDate(date: String) {
+        _uiState.value = _uiState.value.copy(selectedDate = date)
+        loadSelectedDateTasks(date)
+    }
+
+    private fun loadSelectedDateTasks(date: String) {
+        viewModelScope.launch {
+            try {
+                taskUseCases.getAllTasks().collect { allTasks ->
+                    val selectedDateTasks = allTasks.filter { task ->
+                        task.createdAt.toLocalDate().toString() == date
+                    }
+
+                    val completedCount = selectedDateTasks.count { it.status == TaskStatus.COMPLETED }
+                    val pendingCount = selectedDateTasks.count { it.status == TaskStatus.PENDING }
+                    val overdueCount = selectedDateTasks.count { it.status == TaskStatus.OVERDUE }
+                    val cancelledCount = selectedDateTasks.count { it.status == TaskStatus.CANCELLED }
+
+                    _uiState.value = _uiState.value.copy(
+                        selectedDateTasks = selectedDateTasks,
+                        selectedDateCompletedCount = completedCount,
+                        selectedDatePendingCount = pendingCount,
+                        selectedDateOverdueCount = overdueCount,
+                        selectedDateCancelledCount = cancelledCount
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("TasksViewModel", "加载选定日期任务失败: ${e.message}", e)
+            }
+        }
+    }
     fun clearErrorMessage() { _uiState.value = _uiState.value.copy(errorMessage = null) }
 
     private fun updateCalendarTasksStatistics() {

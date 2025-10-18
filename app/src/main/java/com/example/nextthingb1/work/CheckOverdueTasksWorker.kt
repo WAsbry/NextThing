@@ -41,12 +41,12 @@ class CheckOverdueTasksWorker @AssistedInject constructor(
                 // 逾期的严格定义（根据用户需求）：
                 // 1. 任务状态必须是 PENDING（未完成）
                 // 2. 任务存在非空的截止时间（dueDate != null）
-                // 3. dueDate ≤ 昨天 23:59:59
+                // 3. 当前时间超过 dueDate 5分钟后才算逾期
                 //
                 // 注意：没有设置 dueDate 的任务永远不会逾期！
                 if (task.status == TaskStatus.PENDING &&
                     task.dueDate != null &&
-                    task.dueDate.toLocalDate() <= today.minusDays(1)) {
+                    now.isAfter(task.dueDate.plusMinutes(5))) {
 
                     val updatedTask = task.copy(
                         status = TaskStatus.OVERDUE,
@@ -55,7 +55,7 @@ class CheckOverdueTasksWorker @AssistedInject constructor(
                     taskRepository.updateTask(updatedTask)
                     updatedCount++
 
-                    Timber.d("Updated task '${task.title}' to OVERDUE (dueDate: ${task.dueDate}, today: $today)")
+                    Timber.d("Updated task '${task.title}' to OVERDUE (dueDate: ${task.dueDate}, now: $now)")
                 }
             }
 

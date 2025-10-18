@@ -8,16 +8,20 @@ import com.google.gson.reflect.TypeToken
 private val gson = Gson()
 
 fun TaskEntity.toDomain(): Task {
+    timber.log.Timber.tag("DataFlow").v("  转换Entity->Domain: $title")
+
     val subtasks = try {
         val listType = object : TypeToken<List<Subtask>>() {}.type
         gson.fromJson<List<Subtask>>(subtasksJson, listType) ?: emptyList()
     } catch (e: Exception) {
+        timber.log.Timber.tag("DataFlow").w("  解析subtasks失败: ${e.message}")
         emptyList()
     }
 
     val repeatFrequency = try {
         gson.fromJson(repeatFrequencyJson, RepeatFrequency::class.java) ?: RepeatFrequency()
     } catch (e: Exception) {
+        timber.log.Timber.tag("DataFlow").w("  解析repeatFrequency失败: ${e.message}")
         RepeatFrequency()
     }
 
@@ -26,6 +30,7 @@ fun TaskEntity.toDomain(): Task {
             gson.fromJson(it, LocationInfo::class.java)
         }
     } catch (e: Exception) {
+        timber.log.Timber.tag("DataFlow").w("  解析locationInfo失败: ${e.message}")
         null
     }
 
@@ -34,6 +39,7 @@ fun TaskEntity.toDomain(): Task {
             gson.fromJson(it, TaskImportanceUrgency::class.java)
         }
     } catch (e: Exception) {
+        timber.log.Timber.tag("DataFlow").w("  解析importanceUrgency失败: ${e.message}")
         null
     }
 
@@ -89,5 +95,12 @@ fun Task.toEntity(): TaskEntity {
     )
 }
 
-fun List<TaskEntity>.toDomain(): List<Task> = map { it.toDomain() }
+fun List<TaskEntity>.toDomain(): List<Task> {
+    timber.log.Timber.tag("DataFlow").d("━━━━━━ Mapper.toDomain ━━━━━━")
+    timber.log.Timber.tag("DataFlow").d("开始转换 ${this.size} 个TaskEntity")
+    val result = map { it.toDomain() }
+    timber.log.Timber.tag("DataFlow").d("✅ 转换完成，得到 ${result.size} 个Task")
+    return result
+}
+
 fun List<Task>.toEntity(): List<TaskEntity> = map { it.toEntity() } 

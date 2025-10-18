@@ -107,6 +107,28 @@ class NotificationHelper @Inject constructor(
     }
 
     /**
+     * 显示带倒计时的任务通知
+     *
+     * @param task 任务对象
+     * @param strategy 通知策略
+     * @param secondsUntilDue 距离截止时间的秒数
+     */
+    fun showTaskNotificationWithCountdown(
+        task: Task,
+        strategy: NotificationStrategy,
+        secondsUntilDue: Long
+    ) {
+        Timber.tag(TAG).d("━━━━━━ 显示倒计时通知开始 ━━━━━━")
+        Timber.tag(TAG).d("任务: ${task.title}")
+        Timber.tag(TAG).d("倒计时: ${secondsUntilDue}秒")
+
+        // 格式化倒计时
+        val countdownText = formatCountdown(secondsUntilDue)
+
+        showTaskNotificationInternal(task, strategy, countdownText, secondsUntilDue)
+    }
+
+    /**
      * 显示任务通知
      * 【NotificationTest】显示通知的主函数
      *
@@ -116,6 +138,18 @@ class NotificationHelper @Inject constructor(
     fun showTaskNotification(
         task: Task,
         strategy: NotificationStrategy
+    ) {
+        showTaskNotificationInternal(task, strategy, null, null)
+    }
+
+    /**
+     * 内部方法：显示任务通知
+     */
+    private fun showTaskNotificationInternal(
+        task: Task,
+        strategy: NotificationStrategy,
+        countdownText: String? = null,
+        secondsUntilDue: Long? = null
     ) {
         Timber.tag(TAG).d("━━━━━━ 显示通知开始 ━━━━━━")
         Timber.tag(TAG).d("任务: ${task.title}")
@@ -163,10 +197,18 @@ class NotificationHelper @Inject constructor(
         )
 
         // 构建详细的通知内容
-        val notificationContent = buildNotificationContent(task)
+        val notificationContent = buildNotificationContent(task, countdownText)
+
+        // 构建通知标题（包含倒计时）
+        val notificationTitle = if (countdownText != null) {
+            "⏰ ${task.title} - $countdownText"
+        } else {
+            task.title
+        }
+
         val bigTextStyle = NotificationCompat.BigTextStyle()
             .bigText(notificationContent)
-            .setBigContentTitle(task.title)
+            .setBigContentTitle(notificationTitle)
 
         // 构建通知
         Timber.tag(TAG).d("━━━━━━ 构建通知 ━━━━━━")
@@ -176,8 +218,8 @@ class NotificationHelper @Inject constructor(
 
         val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(task.title)
-            .setContentText(notificationContent)
+            .setContentTitle(notificationTitle)
+            .setContentText(countdownText ?: notificationContent)
             .setStyle(bigTextStyle)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -187,6 +229,12 @@ class NotificationHelper @Inject constructor(
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+
+        // 如果有倒计时，设置为持续通知（不自动消失）
+        if (countdownText != null) {
+            notificationBuilder.setOngoing(false)  // 允许用户滑动清除
+            notificationBuilder.setAutoCancel(true)
+        }
 
         // 设置震动和默认效果
         if (strategy.vibrationSetting != VibrationSetting.NONE) {
@@ -233,8 +281,13 @@ class NotificationHelper @Inject constructor(
     /**
      * 构建通知的详细内容
      */
-    private fun buildNotificationContent(task: Task): String {
+    private fun buildNotificationContent(task: Task, countdownText: String? = null): String {
         val contentBuilder = StringBuilder()
+
+        // 倒计时提示
+        if (countdownText != null) {
+            contentBuilder.append("⏰ 距离截止还有：$countdownText\n\n")
+        }
 
         // 任务描述
         if (task.description.isNotEmpty()) {
@@ -486,6 +539,26 @@ class NotificationHelper @Inject constructor(
             Timber.d("All notifications cancelled")
         } catch (e: Exception) {
             Timber.e(e, "Failed to cancel all notifications")
+        }
+    }
+
+    /**
+     * 格式化倒计时文本
+     * @param seconds 秒数
+     * @return 格式化的倒计时文本，如 "2分30秒"
+     */
+    private fun formatCountdown(seconds: Long): String {
+        if (seconds <= 0) {
+            return "已到时"
+        }
+
+        val minutes = seconds / 60
+        val remainingSeconds = seconds % 60
+
+        return when {
+            minutes > 0 && remainingSeconds > 0 -> "${minutes}分${remainingSeconds}秒"
+            minutes > 0 -> "${minutes}分钟"
+            else -> "${remainingSeconds}秒"
         }
     }
 }

@@ -159,12 +159,6 @@ private fun OverviewContent(uiState: StatsUiState) {
         // 核心指标卡片
         CoreMetricsCards(uiState)
 
-        // 新增：任务健康度仪表盘
-        HealthScoreGaugeCard(
-            healthScore = uiState.healthScore,
-            healthLevel = uiState.healthLevel
-        )
-
         // 新增：本周vs上周对比卡片
         uiState.weekComparison?.let { comparison ->
             WeekComparisonCard(comparison = comparison)
@@ -876,8 +870,15 @@ private fun WeeklyTrendChart(uiState: StatsUiState) {
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
+            val timeRangeText = when (uiState.selectedTimeRange) {
+                TimeRange.WEEK_7 -> "最近7天"
+                TimeRange.DAYS_30 -> "最近30天"
+                TimeRange.DAYS_90 -> "最近90天"
+                TimeRange.ALL -> "全部"
+                TimeRange.CUSTOM -> "自定义"
+            }
             Text(
-                text = "任务完成趋势（最近7天）",
+                text = "任务完成趋势（$timeRangeText）",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
@@ -901,6 +902,50 @@ private fun WeeklyTrendChart(uiState: StatsUiState) {
                         .fillMaxWidth()
                         .height(200.dp)
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 图例
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 创建任务图例
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 24.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp, 3.dp)
+                                .background(Primary, RoundedCornerShape(1.5.dp))
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "创建任务",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+
+                    // 完成任务图例
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp, 3.dp)
+                                .background(Success, RoundedCornerShape(1.5.dp))
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "完成任务",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
             }
         }
     }
@@ -911,79 +956,145 @@ private fun LineChart(
     data: List<DailyTrendData>,
     modifier: Modifier = Modifier
 ) {
-    Canvas(modifier = modifier) {
-        if (data.isEmpty()) return@Canvas
+    if (data.isEmpty()) return
 
-        val maxValue = data.maxOf { maxOf(it.createdCount, it.completedCount) }.toFloat()
-        if (maxValue == 0f) return@Canvas
+    val maxValue = data.maxOf { maxOf(it.createdCount, it.completedCount) }.toFloat()
+    if (maxValue == 0f) return
 
-        val pointSpacing = size.width / (data.size - 1).coerceAtLeast(1)
-        val heightScale = size.height / maxValue * 0.8f
+    // 计算纵轴刻度值（向上取整到5的倍数）
+    val yAxisMax = ((maxValue / 5).toInt() + 1) * 5
 
-        // 绘制网格线
-        for (i in 0..4) {
-            val y = size.height - (size.height / 4 * i)
-            drawLine(
-                color = Color(0xFFE0E0E0),
-                start = Offset(0f, y),
-                end = Offset(size.width, y),
-                strokeWidth = 1f
-            )
-        }
-
-        // 绘制创建任务折线（蓝色）
-        val createdPath = Path()
-        data.forEachIndexed { index, dayData ->
-            val x = index * pointSpacing
-            val y = size.height - (dayData.createdCount * heightScale)
-            if (index == 0) {
-                createdPath.moveTo(x, y)
-            } else {
-                createdPath.lineTo(x, y)
+    Row(modifier = modifier) {
+        // 纵轴标签
+        Column(
+            modifier = Modifier
+                .width(32.dp)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.End
+        ) {
+            for (i in 4 downTo 0) {
+                val value = (yAxisMax * i / 4)
+                Text(
+                    text = value.toString(),
+                    fontSize = 10.sp,
+                    color = TextMuted,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
             }
         }
-        drawPath(
-            path = createdPath,
-            color = Primary,
-            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        )
 
-        // 绘制完成任务折线（绿色）
-        val completedPath = Path()
-        data.forEachIndexed { index, dayData ->
-            val x = index * pointSpacing
-            val y = size.height - (dayData.completedCount * heightScale)
-            if (index == 0) {
-                completedPath.moveTo(x, y)
-            } else {
-                completedPath.lineTo(x, y)
+        // 图表区域
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
+            // 折线图Canvas
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                val pointSpacing = size.width / (data.size - 1).coerceAtLeast(1)
+                val heightScale = size.height / yAxisMax
+
+                // 绘制横向网格线
+                for (i in 0..4) {
+                    val y = size.height - (size.height / 4 * i)
+                    drawLine(
+                        color = Color(0xFFE0E0E0),
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = 1f
+                    )
+                }
+
+                // 绘制创建任务折线（蓝色）
+                val createdPath = Path()
+                data.forEachIndexed { index, dayData ->
+                    val x = index * pointSpacing
+                    val y = size.height - (dayData.createdCount * heightScale)
+                    if (index == 0) {
+                        createdPath.moveTo(x, y)
+                    } else {
+                        createdPath.lineTo(x, y)
+                    }
+                }
+                drawPath(
+                    path = createdPath,
+                    color = Primary,
+                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                )
+
+                // 绘制完成任务折线（绿色）
+                val completedPath = Path()
+                data.forEachIndexed { index, dayData ->
+                    val x = index * pointSpacing
+                    val y = size.height - (dayData.completedCount * heightScale)
+                    if (index == 0) {
+                        completedPath.moveTo(x, y)
+                    } else {
+                        completedPath.lineTo(x, y)
+                    }
+                }
+                drawPath(
+                    path = completedPath,
+                    color = Success,
+                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                )
+
+                // 绘制数据点
+                data.forEachIndexed { index, dayData ->
+                    val x = index * pointSpacing
+
+                    // 创建点
+                    val createdY = size.height - (dayData.createdCount * heightScale)
+                    drawCircle(
+                        color = Primary,
+                        radius = 4.dp.toPx(),
+                        center = Offset(x, createdY)
+                    )
+
+                    // 完成点
+                    val completedY = size.height - (dayData.completedCount * heightScale)
+                    drawCircle(
+                        color = Success,
+                        radius = 4.dp.toPx(),
+                        center = Offset(x, completedY)
+                    )
+                }
             }
-        }
-        drawPath(
-            path = completedPath,
-            color = Success,
-            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        )
 
-        // 绘制数据点
-        data.forEachIndexed { index, dayData ->
-            val x = index * pointSpacing
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // 创建点
-            val createdY = size.height - (dayData.createdCount * heightScale)
-            drawCircle(
-                color = Primary,
-                radius = 4.dp.toPx(),
-                center = Offset(x, createdY)
-            )
+            // 横轴日期标签
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // 根据数据量显示合适数量的日期标签
+                val labelsToShow = when {
+                    data.size <= 7 -> data.size
+                    data.size <= 30 -> 6
+                    else -> 5
+                }
+                val step = (data.size - 1) / (labelsToShow - 1).coerceAtLeast(1)
 
-            // 完成点
-            val completedY = size.height - (dayData.completedCount * heightScale)
-            drawCircle(
-                color = Success,
-                radius = 4.dp.toPx(),
-                center = Offset(x, completedY)
-            )
+                for (i in 0 until labelsToShow) {
+                    val index = (i * step).coerceAtMost(data.size - 1)
+                    val date = data[index].date
+                    Text(
+                        text = "${date.monthValue}/${date.dayOfMonth}",
+                        fontSize = 10.sp,
+                        color = TextMuted,
+                        modifier = Modifier.weight(1f),
+                        textAlign = if (i == 0) androidx.compose.ui.text.style.TextAlign.Start
+                        else if (i == labelsToShow - 1) androidx.compose.ui.text.style.TextAlign.End
+                        else androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
         }
     }
 }
