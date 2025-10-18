@@ -54,6 +54,7 @@ data class StatsUiState(
     val categoryWeekdayHeatmap: Map<TaskCategory, Map<Int, Int>> = emptyMap(),
     // 趋势数据
     val weeklyTrend: List<DailyTrendData> = emptyList(),
+    val allWeeklyTrend: List<DailyTrendData> = emptyList(), // 新增：保存完整未过滤的趋势数据
     val monthlyTrend: List<WeeklyTrendData> = emptyList(),
     val trendViewMode: TrendViewMode = TrendViewMode.WEEK,
     // 新增：时间范围选择器
@@ -62,6 +63,7 @@ data class StatsUiState(
     val customEndDate: LocalDate? = null,
     // 新增：月历热力图（GitHub风格）
     val calendarHeatmap: List<CalendarHeatmapData> = emptyList(),
+    val allCalendarHeatmap: List<CalendarHeatmapData> = emptyList(), // 保存完整未过滤的热力图数据
     val calendarStats: CalendarHeatmapStats? = null,
     // 新增：任务积压趋势
     val backlogTrend: List<BacklogTrendData> = emptyList(),
@@ -420,7 +422,9 @@ class StatsViewModel @Inject constructor(
                             categoryEfficiencyRanking = categoryEfficiencyRanking,
                             categoryWeekdayHeatmap = categoryWeekdayHeatmap,
                             weeklyTrend = filteredWeeklyTrend,
+                            allWeeklyTrend = weeklyTrend, // 保存完整未过滤的数据
                             calendarHeatmap = calendarHeatmap,
+                            allCalendarHeatmap = calendarHeatmap, // 保存完整未过滤的热力图数据
                             calendarStats = calendarStats,
                             backlogTrend = backlogTrend,
                             velocityAcceleration = velocityAcceleration,
@@ -492,8 +496,12 @@ class StatsViewModel @Inject constructor(
         }.filter { it.value.totalCount > 0 } // 只返回有任务的分类
     }
 
+    /**
+     * 计算每日趋势数据（最近90天）
+     * 生成足够多的数据以支持所有时间范围选择
+     */
     private fun calculateWeeklyTrend(tasks: List<com.example.nextthingb1.domain.model.Task>): List<DailyTrendData> {
-        return (0..6).map { daysAgo ->
+        return (0..89).map { daysAgo ->
             val targetDate = LocalDate.now().minusDays(daysAgo.toLong())
             val dayTasks = tasks.filter {
                 it.createdAt.toLocalDate() == targetDate
@@ -580,7 +588,7 @@ class StatsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
-    // ==================== 新增：智能洞察生成 ====================
+    // ==================== 新增：智能洞察生成（仅针对本周任务）====================
     private fun generateInsights(
         tasks: List<com.example.nextthingb1.domain.model.Task>,
         completionRate: Float,
@@ -592,87 +600,110 @@ class StatsViewModel @Inject constructor(
     ): List<InsightData> {
         val insights = mutableListOf<InsightData>()
 
-        // 1. 完成率洞察
-        if (completionRate >= 80f) {
+        // 获取本周任务（周一到周日）
+        val today = LocalDate.now()
+        val weekStart = today.with(java.time.DayOfWeek.MONDAY)
+        val weekEnd = today.with(java.time.DayOfWeek.SUNDAY)
+
+        val thisWeekTasks = tasks.filter { task ->
+            val taskDate = task.createdAt.toLocalDate()
+            taskDate in weekStart..weekEnd
+        }
+
+        if (thisWeekTasks.isEmpty()) {
+            return emptyList()
+        }
+
+        // 本周任务统计
+        val weekTotal = thisWeekTasks.size
+        val weekCompleted = thisWeekTasks.count { it.status == TaskStatus.COMPLETED }
+        val weekCompletionRate = (weekCompleted.toFloat() / weekTotal) * 100
+
+        // 本周逾期任务
+        val weekOverdue = thisWeekTasks.count { it.status == TaskStatus.OVERDUE }
+
+        // 本周重要且紧急任务
+        val weekImportantUrgentTasks = thisWeekTasks.filter {
+            it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT
+        }
+        val weekImportantUrgentTotal = weekImportantUrgentTasks.size
+        val weekImportantUrgentCompleted = weekImportantUrgentTasks.count {
+            it.status == TaskStatus.COMPLETED
+        }
+
+        // 维度1：本周完成率洞察
+        if (weekCompletionRate >= 80f) {
             insights.add(InsightData(
                 type = InsightType.POSITIVE,
                 icon = "🎉",
-                message = "完成率${String.format("%.0f", completionRate)}%，表现优秀！"
+                message = "本周完成率${String.format("%.0f", weekCompletionRate)}%，表现优秀！"
             ))
-        } else if (completionRate < 50f && tasks.isNotEmpty()) {
+        } else if (weekCompletionRate >= 60f) {
+            insights.add(InsightData(
+                type = InsightType.POSITIVE,
+                icon = "👍",
+                message = "本周完成率${String.format("%.0f", weekCompletionRate)}%，继续保持"
+            ))
+        } else if (weekCompletionRate < 60f) {
             insights.add(InsightData(
                 type = InsightType.WARNING,
                 icon = "⚠️",
-                message = "完成率仅${String.format("%.0f", completionRate)}%，需要加油"
+                message = "本周完成率仅${String.format("%.0f", weekCompletionRate)}%，需要加油"
             ))
         }
 
-        // 2. 逾期任务警告
-        if (overdueTasks > 5) {
+        // 维度2：本周逾期任务警告
+        if (weekOverdue > 3) {
             insights.add(InsightData(
                 type = InsightType.ALERT,
                 icon = "🔴",
-                message = "有${overdueTasks}个任务已逾期，建议优先处理"
+                message = "本周有${weekOverdue}个任务已逾期，建议优先处理"
             ))
-        } else if (overdueTasks in 1..5) {
+        } else if (weekOverdue in 1..3) {
             insights.add(InsightData(
                 type = InsightType.WARNING,
                 icon = "⏰",
-                message = "有${overdueTasks}个任务即将逾期"
+                message = "本周有${weekOverdue}个任务已逾期，注意时间管理"
             ))
-        }
-
-        // 3. 重要紧急任务洞察
-        if (importantUrgentTotal > 0) {
-            val urgentCompletionRate = (importantUrgentCompleted.toFloat() / importantUrgentTotal) * 100
-            if (urgentCompletionRate < 50f) {
-                insights.add(InsightData(
-                    type = InsightType.ALERT,
-                    icon = "🔥",
-                    message = "重要紧急任务完成率仅${String.format("%.0f", urgentCompletionRate)}%"
-                ))
-            }
-        }
-
-        // 4. 本周vs上周对比洞察
-        if (lastWeekCompleted > 0) {
-            val weekChange = ((thisWeekCompleted - lastWeekCompleted).toFloat() / lastWeekCompleted) * 100
-            if (weekChange > 20f) {
-                insights.add(InsightData(
-                    type = InsightType.POSITIVE,
-                    icon = "📈",
-                    message = "本周完成量提升${String.format("%.0f", weekChange)}%，保持节奏"
-                ))
-            } else if (weekChange < -20f) {
-                insights.add(InsightData(
-                    type = InsightType.WARNING,
-                    icon = "📉",
-                    message = "本周完成量下降${String.format("%.0f", -weekChange)}%"
-                ))
-            }
-        }
-
-        // 5. 连续完成激励
-        val recentCompletedDays = tasks
-            .filter { it.status == TaskStatus.COMPLETED && it.completedAt != null }
-            .groupBy { it.completedAt!!.toLocalDate() }
-            .keys
-            .sortedDescending()
-            .takeWhile { date ->
-                val daysBetween = java.time.temporal.ChronoUnit.DAYS.between(date, LocalDate.now())
-                daysBetween <= 7
-            }
-            .size
-
-        if (recentCompletedDays >= 7) {
+        } else {
             insights.add(InsightData(
                 type = InsightType.POSITIVE,
-                icon = "🔥",
-                message = "已连续${recentCompletedDays}天完成任务，继续保持！"
+                icon = "✅",
+                message = "本周无逾期任务，时间管理良好"
             ))
         }
 
-        // 限制最多3条洞察
+        // 维度3：本周重要且紧急任务完成情况
+        if (weekImportantUrgentTotal > 0) {
+            val urgentCompletionRate = (weekImportantUrgentCompleted.toFloat() / weekImportantUrgentTotal) * 100
+            if (urgentCompletionRate >= 80f) {
+                insights.add(InsightData(
+                    type = InsightType.POSITIVE,
+                    icon = "🔥",
+                    message = "本周重要紧急任务完成率${String.format("%.0f", urgentCompletionRate)}%，处理及时"
+                ))
+            } else if (urgentCompletionRate >= 50f) {
+                insights.add(InsightData(
+                    type = InsightType.WARNING,
+                    icon = "💼",
+                    message = "本周重要紧急任务完成${weekImportantUrgentCompleted}/${weekImportantUrgentTotal}个"
+                ))
+            } else {
+                insights.add(InsightData(
+                    type = InsightType.ALERT,
+                    icon = "⚡",
+                    message = "本周重要紧急任务完成率仅${String.format("%.0f", urgentCompletionRate)}%，需重点关注"
+                ))
+            }
+        } else {
+            insights.add(InsightData(
+                type = InsightType.POSITIVE,
+                icon = "😌",
+                message = "本周暂无重要紧急任务"
+            ))
+        }
+
+        // 返回最多3条洞察
         return insights.take(3)
     }
 
@@ -1008,10 +1039,37 @@ class StatsViewModel @Inject constructor(
      * 时间范围选择器
      */
     fun selectTimeRange(timeRange: TimeRange, startDate: LocalDate? = null, endDate: LocalDate? = null) {
+        val customStart = if (timeRange == TimeRange.CUSTOM) startDate else null
+        val customEnd = if (timeRange == TimeRange.CUSTOM) endDate else null
+
+        val filteredTrend = filterTrendByTimeRange(
+            _uiState.value.allWeeklyTrend,
+            timeRange,
+            customStart,
+            customEnd
+        )
+
+        val filteredHeatmap = filterHeatmapByTimeRange(
+            _uiState.value.allCalendarHeatmap,
+            timeRange,
+            customStart,
+            customEnd
+        )
+
+        // 重新计算热力图统计数据
+        val newCalendarStats = if (filteredHeatmap.isNotEmpty()) {
+            calculateCalendarStats(filteredHeatmap)
+        } else {
+            null
+        }
+
         _uiState.value = _uiState.value.copy(
             selectedTimeRange = timeRange,
-            customStartDate = if (timeRange == TimeRange.CUSTOM) startDate else null,
-            customEndDate = if (timeRange == TimeRange.CUSTOM) endDate else null
+            customStartDate = customStart,
+            customEndDate = customEnd,
+            weeklyTrend = filteredTrend,
+            calendarHeatmap = filteredHeatmap,
+            calendarStats = newCalendarStats
         )
     }
 
@@ -1036,6 +1094,32 @@ class StatsViewModel @Inject constructor(
                     allTrend.filter { it.date in customStart..customEnd }
                 } else {
                     allTrend
+                }
+            }
+        }
+    }
+
+    /**
+     * 根据时间范围过滤热力图数据
+     */
+    private fun filterHeatmapByTimeRange(
+        allHeatmap: List<CalendarHeatmapData>,
+        timeRange: TimeRange,
+        customStart: LocalDate?,
+        customEnd: LocalDate?
+    ): List<CalendarHeatmapData> {
+        val today = LocalDate.now()
+
+        return when (timeRange) {
+            TimeRange.WEEK_7 -> allHeatmap.filter { it.date >= today.minusDays(6) }
+            TimeRange.DAYS_30 -> allHeatmap.filter { it.date >= today.minusDays(29) }
+            TimeRange.DAYS_90 -> allHeatmap.filter { it.date >= today.minusDays(89) }
+            TimeRange.ALL -> allHeatmap
+            TimeRange.CUSTOM -> {
+                if (customStart != null && customEnd != null) {
+                    allHeatmap.filter { it.date in customStart..customEnd }
+                } else {
+                    allHeatmap
                 }
             }
         }

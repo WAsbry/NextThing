@@ -99,7 +99,7 @@ enum class TaskStatus {
     PENDING,     // 未完成：当天需处理但未完成的任务
     COMPLETED,   // 已完成：用户主动标记完成的任务（终态）
     DELAYED,     // 延期：当天未完成手动延期至次日的过渡状态（次日自动转为 PENDING）
-    OVERDUE,     // 逾期：截止时间在昨天及以前且未完成的任务
+    OVERDUE,     // 逾期：当前时间超过任务截止时间5分钟后且未完成的任务
     CANCELLED    // 放弃：用户主动放弃的任务（终态）
 }
 
