@@ -15,11 +15,10 @@ import timber.log.Timber
 import java.time.LocalDateTime
 
 /**
- * WorkManager worker that checks for tasks that need notifications
- * and triggers them according to their notification strategy
+ * Worker that updates countdown notifications every minute
  */
 @HiltWorker
-class TaskNotificationWorker @AssistedInject constructor(
+class CountdownNotificationWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
     private val taskRepository: TaskRepository,
@@ -29,12 +28,12 @@ class TaskNotificationWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            Timber.d("TaskNotificationWorker: Starting task notification check")
+            Timber.d("CountdownNotificationWorker: Starting countdown update")
 
             val now = LocalDateTime.now()
             val tasks = taskRepository.getAllTasks().first()
             val strategies = notificationStrategyRepository.getAllStrategies().first()
-            var notificationCount = 0
+            var updateCount = 0
 
             // 遍历所有未完成且有截止时间的任务
             tasks.filter { task ->
@@ -44,39 +43,32 @@ class TaskNotificationWorker @AssistedInject constructor(
             }.forEach { task ->
                 val dueDate = task.dueDate!!
 
-                // 检查是否到达通知时间（提前3分钟发送通知）
                 // 计算距离截止时间还有多少分钟
                 val minutesUntilDue = java.time.Duration.between(now, dueDate).toMinutes()
 
-                // 在截止时间前3分钟到截止时间这个窗口内发送通知
-                val shouldNotify = minutesUntilDue in 0..3
-
-                if (shouldNotify) {
-                    // 查找对应的通知策略
+                // 只更新在3分钟倒计时窗口内的任务
+                if (minutesUntilDue in 0..3) {
                     val strategy = strategies.find { it.id == task.notificationStrategyId }
 
                     if (strategy != null) {
-                        // 计算精确的倒计时（秒）
                         val secondsUntilDue = java.time.Duration.between(now, dueDate).seconds
 
-                        // 显示通知，传递倒计时信息
+                        // 更新通知
                         notificationHelper.showTaskNotificationWithCountdown(
                             task = task,
                             strategy = strategy,
                             secondsUntilDue = secondsUntilDue
                         )
-                        notificationCount++
-                        Timber.d("Notification sent for task: ${task.title}, ${minutesUntilDue} minutes until due")
-                    } else {
-                        Timber.w("Notification strategy not found for task: ${task.title}, strategyId: ${task.notificationStrategyId}")
+                        updateCount++
+                        Timber.d("Updated countdown for task: ${task.title}, ${secondsUntilDue}s remaining")
                     }
                 }
             }
 
-            Timber.i("TaskNotificationWorker: Completed. Sent $notificationCount notification(s)")
+            Timber.i("CountdownNotificationWorker: Updated $updateCount countdown notification(s)")
             Result.success()
         } catch (e: Exception) {
-            Timber.e(e, "TaskNotificationWorker: Failed to check task notifications")
+            Timber.e(e, "CountdownNotificationWorker: Failed to update countdown notifications")
             Result.retry()
         }
     }

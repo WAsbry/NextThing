@@ -20,47 +20,103 @@ import javax.inject.Singleton
 class TaskRepositoryImpl @Inject constructor(
     private val taskDao: TaskDao
 ) : TaskRepository {
-    
+
+    companion object {
+        private const val TAG = "DataFlow"
+    }
+
     override suspend fun insertTask(task: Task): String {
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.insertTask ━━━━━━")
+        timber.log.Timber.tag(TAG).d("插入任务: ${task.title}, ID: ${task.id}")
         taskDao.insertTask(task.toEntity())
+        timber.log.Timber.tag(TAG).d("✅ 任务已插入数据库")
         return task.id
     }
-    
+
     override suspend fun updateTask(task: Task) {
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.updateTask ━━━━━━")
+        timber.log.Timber.tag(TAG).d("更新任务: ${task.title}, ID: ${task.id}")
         taskDao.updateTask(task.toEntity())
+        timber.log.Timber.tag(TAG).d("✅ 任务已更新")
     }
-    
+
     override suspend fun deleteTask(taskId: String) {
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.deleteTask ━━━━━━")
+        timber.log.Timber.tag(TAG).d("删除任务: $taskId")
         taskDao.deleteTaskById(taskId)
+        timber.log.Timber.tag(TAG).d("✅ 任务已删除")
     }
-    
+
     override suspend fun deleteAllTasks() {
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.deleteAllTasks ━━━━━━")
         taskDao.deleteAllTasks()
+        timber.log.Timber.tag(TAG).d("✅ 所有任务已删除")
     }
-    
+
     override suspend fun getTaskById(taskId: String): Task? {
-        return taskDao.getTaskById(taskId)?.toDomain()
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTaskById ━━━━━━")
+        timber.log.Timber.tag(TAG).d("查询任务ID: $taskId")
+        val entity = taskDao.getTaskById(taskId)
+        val task = entity?.toDomain()
+        timber.log.Timber.tag(TAG).d("查询结果: ${if (task != null) "找到任务 ${task.title}" else "未找到"}")
+        return task
     }
-    
+
     override fun getAllTasks(): Flow<List<Task>> {
-        return taskDao.getAllTasks().map { entities -> entities.toDomain() }
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getAllTasks ━━━━━━")
+        timber.log.Timber.tag(TAG).d("开始订阅所有任务的Flow")
+        return taskDao.getAllTasks().map { entities ->
+            timber.log.Timber.tag(TAG).d("📊 DAO返回 ${entities.size} 个TaskEntity")
+            entities.forEachIndexed { index, entity ->
+                timber.log.Timber.tag(TAG).d("  [$index] Entity: id=${entity.id}, title=${entity.title}, status=${entity.status}")
+            }
+            val tasks = entities.toDomain()
+            timber.log.Timber.tag(TAG).d("📊 转换后得到 ${tasks.size} 个Task对象")
+            tasks.forEachIndexed { index, task ->
+                timber.log.Timber.tag(TAG).d("  [$index] Task: id=${task.id}, title=${task.title}, status=${task.status}")
+            }
+            tasks
+        }
     }
     
     override fun getTasksByStatus(status: TaskStatus): Flow<List<Task>> {
-        return taskDao.getTasksByStatus(status).map { entities -> entities.toDomain() }
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTasksByStatus ━━━━━━")
+        timber.log.Timber.tag(TAG).d("查询状态: $status")
+        return taskDao.getTasksByStatus(status).map { entities ->
+            timber.log.Timber.tag(TAG).d("📊 状态[$status]返回 ${entities.size} 个任务")
+            entities.toDomain()
+        }
     }
-    
+
     override fun getTasksByCategory(category: TaskCategory): Flow<List<Task>> {
-        return taskDao.getTasksByCategory(category).map { entities -> entities.toDomain() }
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTasksByCategory ━━━━━━")
+        timber.log.Timber.tag(TAG).d("查询分类: $category")
+        return taskDao.getTasksByCategory(category).map { entities ->
+            timber.log.Timber.tag(TAG).d("📊 分类[$category]返回 ${entities.size} 个任务")
+            entities.toDomain()
+        }
     }
-    
-    
+
+
     override fun getTasksByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<Task>> {
-        return taskDao.getTasksByDateRange(startDate, endDate).map { entities -> entities.toDomain() }
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTasksByDateRange ━━━━━━")
+        timber.log.Timber.tag(TAG).d("查询日期范围: $startDate ~ $endDate")
+        return taskDao.getTasksByDateRange(startDate, endDate).map { entities ->
+            timber.log.Timber.tag(TAG).d("📊 日期范围返回 ${entities.size} 个任务")
+            entities.toDomain()
+        }
     }
-    
+
     override fun getTodayTasks(): Flow<List<Task>> {
-        return taskDao.getTodayTasks().map { entities -> entities.toDomain() }
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTodayTasks ━━━━━━")
+        timber.log.Timber.tag(TAG).d("查询今日任务")
+        return taskDao.getTodayTasks().map { entities ->
+            timber.log.Timber.tag(TAG).d("📊 今日任务返回 ${entities.size} 个任务")
+            entities.forEachIndexed { index, entity ->
+                timber.log.Timber.tag(TAG).d("  [$index] 今日任务: ${entity.title}, dueDate=${entity.dueDate}")
+            }
+            entities.toDomain()
+        }
     }
     
     override fun getOverdueTasks(): Flow<List<Task>> {

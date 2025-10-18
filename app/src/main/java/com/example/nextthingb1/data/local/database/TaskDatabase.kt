@@ -19,7 +19,7 @@ import com.example.nextthingb1.data.local.converter.Converters
 
 @Database(
     entities = [TaskEntity::class, LocationEntity::class, NotificationStrategyEntity::class, UserEntity::class],
-    version = 9,
+    version = 1,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -31,67 +31,46 @@ abstract class TaskDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     
     companion object {
-        const val DATABASE_NAME = "next_thing_database"
+        const val DATABASE_NAME = "tasks_database"
 
         @Volatile
         private var INSTANCE: TaskDatabase? = null
 
-        // 数据库迁移脚本：从版本5到版本6
-        private val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // 为tasks表添加新字段
-                database.execSQL("ALTER TABLE tasks ADD COLUMN repeatFrequencyJson TEXT NOT NULL DEFAULT '{}'")
-                database.execSQL("ALTER TABLE tasks ADD COLUMN locationInfoJson TEXT")
-                database.execSQL("ALTER TABLE tasks ADD COLUMN importanceUrgencyJson TEXT")
-            }
-        }
-
-        // 数据库迁移脚本：从版本6到版本7
-        private val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // 创建users表
-                database.execSQL("""
-                    CREATE TABLE IF NOT EXISTS users (
-                        id TEXT PRIMARY KEY NOT NULL,
-                        nickname TEXT NOT NULL,
-                        avatarUri TEXT,
-                        phoneNumber TEXT,
-                        wechatId TEXT,
-                        qqId TEXT,
-                        createdAt INTEGER NOT NULL,
-                        updatedAt INTEGER NOT NULL
-                    )
-                """.trimIndent())
-            }
-        }
-
-        // 数据库迁移脚本：从版本7到版本8
-        private val MIGRATION_7_8 = object : Migration(7, 8) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // 为tasks表添加notificationStrategyId字段
-                database.execSQL("ALTER TABLE tasks ADD COLUMN notificationStrategyId TEXT")
-            }
-        }
-
-        // 数据库迁移脚本：从版本8到版本9
-        private val MIGRATION_8_9 = object : Migration(8, 9) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // 为notification_strategies表添加音频相关字段
-                database.execSQL("ALTER TABLE notification_strategies ADD COLUMN customAudioPath TEXT")
-                database.execSQL("ALTER TABLE notification_strategies ADD COLUMN customAudioName TEXT")
-                database.execSQL("ALTER TABLE notification_strategies ADD COLUMN presetAudioName TEXT")
-            }
-        }
-
         fun getDatabase(context: Context): TaskDatabase {
             return INSTANCE ?: synchronized(this) {
+                timber.log.Timber.tag("DataFlow").d("━━━━━━ 初始化数据库 ━━━━━━")
+                timber.log.Timber.tag("DataFlow").d("数据库名称: $DATABASE_NAME")
+                timber.log.Timber.tag("DataFlow").d("数据库版本: 1 (全新数据库)")
+                timber.log.Timber.tag("DataFlow").d("数据库路径: ${context.applicationContext.getDatabasePath(DATABASE_NAME).absolutePath}")
+
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     TaskDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .fallbackToDestructiveMigration() // Allow destructive migration for development
+                    .addCallback(object : RoomDatabase.Callback() {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            super.onCreate(db)
+                            timber.log.Timber.tag("DataFlow").d("✅ 数据库首次创建完成 (Version 1)")
+                        }
+
+                        override fun onOpen(db: SupportSQLiteDatabase) {
+                            super.onOpen(db)
+                            timber.log.Timber.tag("DataFlow").d("✅ 数据库已打开，版本: ${db.version}")
+
+                            // 查询任务数量
+                            val cursor = db.query("SELECT COUNT(*) FROM tasks")
+                            if (cursor.moveToFirst()) {
+                                val count = cursor.getInt(0)
+                                timber.log.Timber.tag("DataFlow").d("📊 数据库中任务数量: $count")
+                            }
+                            cursor.close()
+                        }
+                    })
+                    .fallbackToDestructiveMigration() // 版本不匹配时清空数据库重建
                     .build()
+
+                timber.log.Timber.tag("DataFlow").d("✅ 数据库实例创建完成")
                 INSTANCE = instance
                 instance
             }

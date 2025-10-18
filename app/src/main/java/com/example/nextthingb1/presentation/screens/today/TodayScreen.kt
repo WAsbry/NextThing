@@ -59,6 +59,15 @@ fun TodayScreen(
     onNavigateToTaskDetail: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // 监听UI状态变化并记录日志
+    LaunchedEffect(uiState.totalTasks, uiState.displayTasks.size) {
+        timber.log.Timber.tag("DataFlow").d("━━━━━━ TodayScreen UI状态更新 ━━━━━━")
+        timber.log.Timber.tag("DataFlow").d("📊 UI渲染: totalTasks=${uiState.totalTasks}, displayTasks=${uiState.displayTasks.size}")
+        timber.log.Timber.tag("DataFlow").d("  已完成=${uiState.completedTasks}, 待办=${uiState.remainingTasks}")
+        timber.log.Timber.tag("DataFlow").d("  当前Tab=${uiState.selectedTab}")
+        timber.log.Timber.tag("DataFlow").d("  isLoading=${uiState.isLoading}")
+    }
     val showPermissionDialog by viewModel.showPermissionDialog.collectAsState()
     val showLocationDetailDialog by viewModel.showLocationDetailDialog.collectAsState()
     val showLocationHelpDialog by viewModel.showLocationHelpDialog.collectAsState()

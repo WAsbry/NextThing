@@ -71,6 +71,14 @@ class NextThingApplication : Application(), Configuration.Provider {
             Timber.e(e, "❌ [Application] 任务通知 TaskWorkScheduler 初始化失败")
         }
 
+        // 倒计时通知更新调度
+        try {
+            TaskWorkScheduler.scheduleCountdownUpdates(this)
+            Timber.d("✅ [Application] 倒计时更新 TaskWorkScheduler 初始化成功")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ [Application] 倒计时更新 TaskWorkScheduler 初始化失败")
+        }
+
         Timber.d("🎉 [Application] NextThingApplication 初始化完成")
     }
 

@@ -73,15 +73,26 @@ class TodayViewModel @Inject constructor(
     
     private fun loadTodayTasks() {
         viewModelScope.launch {
+            Timber.tag("DataFlow").d("━━━━━━ TodayViewModel.loadTodayTasks ━━━━━━")
             _uiState.value = _uiState.value.copy(isLoading = true)
-            
+            Timber.tag("DataFlow").d("开始加载今日任务，isLoading=true")
+
             try {
+                Timber.tag("DataFlow").d("调用 taskUseCases.getTodayTasks().collect")
                 taskUseCases.getTodayTasks().collect { tasks ->
+                    Timber.tag("DataFlow").d("━━━━━━ Flow回调收到数据 ━━━━━━")
+                    Timber.tag("DataFlow").d("📊 收到 ${tasks.size} 个今日任务")
+                    tasks.forEachIndexed { index, task ->
+                        Timber.tag("DataFlow").d("  [$index] ${task.title} (${task.status})")
+                    }
+
                     val completed = tasks.filter { it.status == TaskStatus.COMPLETED }
                     val pending = tasks.filter {
                     it.status == TaskStatus.PENDING
                 }
-                    
+
+                    Timber.tag("DataFlow").d("📊 筛选结果: 已完成=${completed.size}, 待办=${pending.size}")
+
                     _uiState.value = _uiState.value.copy(
                         allTasks = tasks,
                         displayTasks = if (_uiState.value.selectedTab == TaskTab.PENDING) pending else completed,
@@ -91,8 +102,11 @@ class TodayViewModel @Inject constructor(
                         completionRate = if (tasks.isNotEmpty()) completed.size.toFloat() / tasks.size else 0f,
                         isLoading = false
                     )
+
+                    Timber.tag("DataFlow").d("✅ UI状态已更新: totalTasks=${tasks.size}, displayTasks=${_uiState.value.displayTasks.size}")
                 }
             } catch (e: Exception) {
+                Timber.tag("DataFlow").e(e, "❌ 加载今日任务失败")
                 _uiState.value = _uiState.value.copy(
                     errorMessage = e.message,
                     isLoading = false
