@@ -1,10 +1,14 @@
 package com.example.nextthingb1.data.repository
 
 import com.example.nextthingb1.data.local.dao.TaskDao
+import com.example.nextthingb1.data.local.dao.CategoryDao
+import com.example.nextthingb1.data.local.dao.CategoryTaskCount
 import com.example.nextthingb1.data.mapper.toDomain
+import com.example.nextthingb1.data.mapper.toDomainList
 import com.example.nextthingb1.data.mapper.toEntity
+import com.example.nextthingb1.data.mapper.CategoryMapper.toDomain
 import com.example.nextthingb1.domain.model.Task
-import com.example.nextthingb1.domain.model.TaskCategory
+import com.example.nextthingb1.domain.model.Category
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.repository.TaskRepository
@@ -18,7 +22,8 @@ import javax.inject.Singleton
 
 @Singleton
 class TaskRepositoryImpl @Inject constructor(
-    private val taskDao: TaskDao
+    private val taskDao: TaskDao,
+    private val categoryDao: CategoryDao
 ) : TaskRepository {
 
     companion object {
@@ -65,12 +70,12 @@ class TaskRepositoryImpl @Inject constructor(
     override fun getAllTasks(): Flow<List<Task>> {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getAllTasks ━━━━━━")
         timber.log.Timber.tag(TAG).d("开始订阅所有任务的Flow")
-        return taskDao.getAllTasks().map { entities ->
-            timber.log.Timber.tag(TAG).d("📊 DAO返回 ${entities.size} 个TaskEntity")
-            entities.forEachIndexed { index, entity ->
-                timber.log.Timber.tag(TAG).d("  [$index] Entity: id=${entity.id}, title=${entity.title}, status=${entity.status}")
+        return taskDao.getAllTasks().map { taskWithCategories ->
+            timber.log.Timber.tag(TAG).d("📊 DAO返回 ${taskWithCategories.size} 个TaskWithCategory")
+            taskWithCategories.forEachIndexed { index, twc ->
+                timber.log.Timber.tag(TAG).d("  [$index] Entity: id=${twc.task.id}, title=${twc.task.title}, status=${twc.task.status}")
             }
-            val tasks = entities.toDomain()
+            val tasks = taskWithCategories.toDomainList()
             timber.log.Timber.tag(TAG).d("📊 转换后得到 ${tasks.size} 个Task对象")
             tasks.forEachIndexed { index, task ->
                 timber.log.Timber.tag(TAG).d("  [$index] Task: id=${task.id}, title=${task.title}, status=${task.status}")
@@ -82,18 +87,18 @@ class TaskRepositoryImpl @Inject constructor(
     override fun getTasksByStatus(status: TaskStatus): Flow<List<Task>> {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTasksByStatus ━━━━━━")
         timber.log.Timber.tag(TAG).d("查询状态: $status")
-        return taskDao.getTasksByStatus(status).map { entities ->
-            timber.log.Timber.tag(TAG).d("📊 状态[$status]返回 ${entities.size} 个任务")
-            entities.toDomain()
+        return taskDao.getTasksByStatus(status).map { taskWithCategories ->
+            timber.log.Timber.tag(TAG).d("📊 状态[$status]返回 ${taskWithCategories.size} 个任务")
+            taskWithCategories.toDomainList()
         }
     }
 
-    override fun getTasksByCategory(category: TaskCategory): Flow<List<Task>> {
+    override fun getTasksByCategory(category: Category): Flow<List<Task>> {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTasksByCategory ━━━━━━")
-        timber.log.Timber.tag(TAG).d("查询分类: $category")
-        return taskDao.getTasksByCategory(category).map { entities ->
-            timber.log.Timber.tag(TAG).d("📊 分类[$category]返回 ${entities.size} 个任务")
-            entities.toDomain()
+        timber.log.Timber.tag(TAG).d("查询分类: ${category.name}")
+        return taskDao.getTasksByCategoryId(category.id).map { taskWithCategories ->
+            timber.log.Timber.tag(TAG).d("📊 分类[${category.name}]返回 ${taskWithCategories.size} 个任务")
+            taskWithCategories.toDomainList()
         }
     }
 
@@ -101,34 +106,34 @@ class TaskRepositoryImpl @Inject constructor(
     override fun getTasksByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<Task>> {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTasksByDateRange ━━━━━━")
         timber.log.Timber.tag(TAG).d("查询日期范围: $startDate ~ $endDate")
-        return taskDao.getTasksByDateRange(startDate, endDate).map { entities ->
-            timber.log.Timber.tag(TAG).d("📊 日期范围返回 ${entities.size} 个任务")
-            entities.toDomain()
+        return taskDao.getTasksByDateRange(startDate, endDate).map { taskWithCategories ->
+            timber.log.Timber.tag(TAG).d("📊 日期范围返回 ${taskWithCategories.size} 个任务")
+            taskWithCategories.toDomainList()
         }
     }
 
     override fun getTodayTasks(): Flow<List<Task>> {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTodayTasks ━━━━━━")
         timber.log.Timber.tag(TAG).d("查询今日任务")
-        return taskDao.getTodayTasks().map { entities ->
-            timber.log.Timber.tag(TAG).d("📊 今日任务返回 ${entities.size} 个任务")
-            entities.forEachIndexed { index, entity ->
-                timber.log.Timber.tag(TAG).d("  [$index] 今日任务: ${entity.title}, dueDate=${entity.dueDate}")
+        return taskDao.getTodayTasks().map { taskWithCategories ->
+            timber.log.Timber.tag(TAG).d("📊 今日任务返回 ${taskWithCategories.size} 个任务")
+            taskWithCategories.forEachIndexed { index, twc ->
+                timber.log.Timber.tag(TAG).d("  [$index] 今日任务: ${twc.task.title}, dueDate=${twc.task.dueDate}")
             }
-            entities.toDomain()
+            taskWithCategories.toDomainList()
         }
     }
     
     override fun getOverdueTasks(): Flow<List<Task>> {
-        return taskDao.getOverdueTasks().map { entities -> entities.toDomain() }
+        return taskDao.getOverdueTasks().map { taskWithCategories -> taskWithCategories.toDomainList() }
     }
-    
+
     override fun getUrgentTasks(): Flow<List<Task>> {
-        return taskDao.getUrgentTasks().map { entities -> entities.toDomain() }
+        return taskDao.getUrgentTasks().map { taskWithCategories -> taskWithCategories.toDomainList() }
     }
-    
+
     override fun searchTasks(query: String): Flow<List<Task>> {
-        return taskDao.searchTasks(query).map { entities -> entities.toDomain() }
+        return taskDao.searchTasks(query).map { taskWithCategories -> taskWithCategories.toDomainList() }
     }
     
     override fun getTasksByTags(tags: List<String>): Flow<List<Task>> {
@@ -146,9 +151,15 @@ class TaskRepositoryImpl @Inject constructor(
         val overdueTasks = taskDao.getOverdueTasksCount()
         val completionRate = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f
         val averageCompletionTime = taskDao.getAverageCompletionTime()?.toInt() ?: 0
-        val categoryCounts = taskDao.getCategoryStatistics()
-        val categoryStats = categoryCounts.associate { it.category to it.count }
-        
+
+        // Get category statistics
+        val categoryTaskCounts = taskDao.getCategoryTaskCounts()
+        val allCategoriesEntities = categoryDao.getAllCategoriesList()
+        val categoryStats = categoryTaskCounts.mapNotNull { count ->
+            val categoryEntity = allCategoriesEntities.find { it.id == count.categoryId }
+            categoryEntity?.let { it.toDomain() to count.count }
+        }.toMap()
+
         return TaskStatistics(
             totalTasks = totalTasks,
             completedTasks = completedTasks,
@@ -169,8 +180,16 @@ class TaskRepositoryImpl @Inject constructor(
         return getTaskStatistics()
     }
     
-    override suspend fun getCategoryStatistics(): Map<TaskCategory, Int> {
-        return taskDao.getCategoryStatistics().associate { it.category to it.count }
+    override suspend fun getCategoryStatistics(): Map<Category, Int> {
+        // Get category task counts from database
+        val categoryTaskCounts = taskDao.getCategoryTaskCounts()
+        val allCategoriesEntities = categoryDao.getAllCategoriesList()
+
+        // Map category IDs to Category domain models with their counts
+        return categoryTaskCounts.mapNotNull { count ->
+            val categoryEntity = allCategoriesEntities.find { it.id == count.categoryId }
+            categoryEntity?.let { it.toDomain() to count.count }
+        }.toMap()
     }
     
     override suspend fun markTasksAsCompleted(taskIds: List<String>) {
@@ -181,8 +200,8 @@ class TaskRepositoryImpl @Inject constructor(
         taskDao.deleteCompletedTasks()
     }
     
-    override suspend fun bulkUpdateTaskCategory(taskIds: List<String>, category: TaskCategory) {
-        taskDao.bulkUpdateTaskCategory(taskIds, category)
+    override suspend fun bulkUpdateTaskCategory(taskIds: List<String>, category: Category) {
+        taskDao.bulkUpdateTaskCategory(taskIds, category.id)
     }
     
     override suspend fun syncTasks(): Result<Unit> {

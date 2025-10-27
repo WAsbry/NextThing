@@ -137,21 +137,37 @@ fun TaskItemCard(
 
             Spacer(modifier = Modifier.height(3.dp))
 
-            // 底部区域：地理位置、重复频率
+            // 底部区域：地理位置、逾期状态、重复频率
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 左侧：地理位置
-                Text(
-                    text = "📍 ${task.locationInfo?.locationName ?: "未设置"}",
-                    fontSize = 11.sp,
-                    color = if (task.locationInfo != null) TextPrimary else TextMuted,
+                // 左侧：地理位置 + 逾期状态
+                Row(
                     modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📍 ${task.locationInfo?.locationName ?: "未设置"}",
+                        fontSize = 11.sp,
+                        color = if (task.locationInfo != null) TextPrimary else TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    // 逾期状态标签
+                    if (task.status == TaskStatus.OVERDUE) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "已逾期",
+                            fontSize = 10.sp,
+                            color = Danger,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.width(8.dp))
 
@@ -189,36 +205,35 @@ fun TaskItemCard(
 }
 
 // 辅助函数
-private fun getCategoryColors(category: TaskCategory): List<Color> {
-    return when (category) {
-        TaskCategory.WORK -> listOf(Color(0xFF42A5F5).copy(alpha = 0.15f), Color(0xFF42A5F5).copy(alpha = 0.25f))
-        TaskCategory.STUDY -> listOf(Color(0xFFAB47BC).copy(alpha = 0.15f), Color(0xFFAB47BC).copy(alpha = 0.25f))
-        TaskCategory.LIFE -> listOf(Color(0xFF66BB6A).copy(alpha = 0.15f), Color(0xFF66BB6A).copy(alpha = 0.25f))
-        TaskCategory.HEALTH -> listOf(Color(0xFFE91E63).copy(alpha = 0.15f), Color(0xFFE91E63).copy(alpha = 0.25f))
-        TaskCategory.PERSONAL -> listOf(Color(0xFFFF9800).copy(alpha = 0.15f), Color(0xFFFF9800).copy(alpha = 0.25f))
-        TaskCategory.OTHER -> listOf(Color(0xFF9E9E9E).copy(alpha = 0.15f), Color(0xFF9E9E9E).copy(alpha = 0.25f))
+private fun getCategoryColors(category: Category): List<Color> {
+    // 从category.colorHex解析颜色
+    val baseColor = try {
+        Color(android.graphics.Color.parseColor(category.colorHex))
+    } catch (e: Exception) {
+        Color(0xFF9E9E9E) // 默认灰色
     }
+    return listOf(baseColor.copy(alpha = 0.15f), baseColor.copy(alpha = 0.25f))
 }
 
-private fun getCategoryBorderColor(category: TaskCategory): Color {
-    return when (category) {
-        TaskCategory.WORK -> Color(0xFF42A5F5).copy(alpha = 0.3f)
-        TaskCategory.STUDY -> Color(0xFFAB47BC).copy(alpha = 0.3f)
-        TaskCategory.LIFE -> Color(0xFF66BB6A).copy(alpha = 0.3f)
-        TaskCategory.HEALTH -> Color(0xFFE91E63).copy(alpha = 0.3f)
-        TaskCategory.PERSONAL -> Color(0xFFFF9800).copy(alpha = 0.3f)
-        TaskCategory.OTHER -> Color(0xFF9E9E9E).copy(alpha = 0.3f)
+private fun getCategoryBorderColor(category: Category): Color {
+    // 从category.colorHex解析颜色
+    val baseColor = try {
+        Color(android.graphics.Color.parseColor(category.colorHex))
+    } catch (e: Exception) {
+        Color(0xFF9E9E9E) // 默认灰色
     }
+    return baseColor.copy(alpha = 0.3f)
 }
 
-private fun getCategoryEmoji(category: TaskCategory): String {
-    return when (category) {
-        TaskCategory.WORK -> "💼"
-        TaskCategory.STUDY -> "📚"
-        TaskCategory.LIFE -> "🏠"
-        TaskCategory.HEALTH -> "❤️"
-        TaskCategory.PERSONAL -> "👤"
-        TaskCategory.OTHER -> "📋"
+private fun getCategoryEmoji(category: Category): String {
+    // 根据分类名称返回对应的emoji
+    return when (category.name) {
+        "工作" -> "💼"
+        "学习" -> "📚"
+        "生活" -> "🏠"
+        "健康" -> "❤️"
+        "个人" -> "👤"
+        else -> "📋"
     }
 }
 
