@@ -2,17 +2,20 @@ package com.example.nextthingb1.di
 
 import android.content.Context
 import androidx.room.Room
+import com.example.nextthingb1.data.local.dao.CategoryDao
 import com.example.nextthingb1.data.local.dao.LocationDao
 import com.example.nextthingb1.data.local.dao.NotificationStrategyDao
 import com.example.nextthingb1.data.local.dao.TaskDao
 import com.example.nextthingb1.data.local.dao.UserDao
 import com.example.nextthingb1.data.local.database.TaskDatabase
+import com.example.nextthingb1.data.repository.CategoryRepositoryImpl
 import com.example.nextthingb1.data.repository.TaskRepositoryImpl
 import com.example.nextthingb1.data.repository.LocationRepositoryImpl
 import com.example.nextthingb1.data.repository.CustomCategoryRepositoryImpl
 import com.example.nextthingb1.data.repository.NotificationStrategyRepositoryImpl
 import com.example.nextthingb1.data.repository.UserRepositoryImpl
 import com.example.nextthingb1.data.service.CategoryPreferencesManagerImpl
+import com.example.nextthingb1.domain.repository.CategoryRepository
 import com.example.nextthingb1.domain.repository.TaskRepository
 import com.example.nextthingb1.domain.repository.LocationRepository
 import com.example.nextthingb1.domain.repository.CustomCategoryRepository
@@ -58,9 +61,20 @@ object DatabaseModule {
     }
 
     @Provides
+    fun provideCategoryDao(database: TaskDatabase): CategoryDao {
+        return database.categoryDao()
+    }
+
+    @Provides
     @Singleton
-    fun provideTaskRepository(taskDao: TaskDao): TaskRepository {
-        return TaskRepositoryImpl(taskDao)
+    fun provideTaskRepository(taskDao: TaskDao, categoryDao: CategoryDao): TaskRepository {
+        return TaskRepositoryImpl(taskDao, categoryDao)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCategoryRepository(categoryDao: CategoryDao): CategoryRepository {
+        return CategoryRepositoryImpl(categoryDao)
     }
 
     @Provides

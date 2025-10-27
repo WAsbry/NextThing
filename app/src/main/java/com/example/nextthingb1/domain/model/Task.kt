@@ -7,7 +7,7 @@ data class Task(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val description: String = "",
-    val category: TaskCategory = TaskCategory.WORK,
+    val category: Category, // 改为使用 Category 对象
     val status: TaskStatus = TaskStatus.PENDING,
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now(),
@@ -111,7 +111,7 @@ data class TaskStatistics(
     val completionRate: Float = 0f,
     val averageCompletionTime: Int = 0, // 分钟
     val mostProductiveHour: Int = 9,
-    val categoryStats: Map<TaskCategory, Int> = emptyMap(),
+    val categoryStats: Map<Category, Int> = emptyMap(),
     val weeklyStats: List<DailyStats> = emptyList()
 )
 

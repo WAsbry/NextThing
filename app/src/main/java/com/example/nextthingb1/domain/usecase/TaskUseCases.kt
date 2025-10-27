@@ -1,7 +1,7 @@
 package com.example.nextthingb1.domain.usecase
 
 import com.example.nextthingb1.domain.model.Task
-import com.example.nextthingb1.domain.model.TaskCategory
+import com.example.nextthingb1.domain.model.Category
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.RepeatFrequency
@@ -65,7 +65,7 @@ class CreateTaskUseCase @Inject constructor(
     suspend operator fun invoke(
         title: String,
         description: String = "",
-        category: TaskCategory = TaskCategory.WORK,
+        category: Category,
         dueDate: LocalDateTime? = null,
         tags: List<String> = emptyList(),
         imageUri: String? = null,
@@ -288,7 +288,7 @@ class SearchTasksUseCase @Inject constructor(
 class GetTasksByCategoryUseCase @Inject constructor(
     private val repository: TaskRepository
 ) {
-    operator fun invoke(category: TaskCategory): Flow<List<Task>> {
+    operator fun invoke(category: Category): Flow<List<Task>> {
         return repository.getTasksByCategory(category)
     }
 }
