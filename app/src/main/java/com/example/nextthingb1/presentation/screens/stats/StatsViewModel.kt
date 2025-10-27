@@ -3,7 +3,7 @@ package com.example.nextthingb1.presentation.screens.stats
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.usecase.TaskUseCases
-import com.example.nextthingb1.domain.model.TaskCategory
+import com.example.nextthingb1.domain.model.Category
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -45,13 +45,13 @@ data class StatsUiState(
     // 本周vs上周对比
     val weekComparison: WeekComparisonData? = null,
     // 分类统计
-    val categoryStats: Map<TaskCategory, CategoryStatsData> = emptyMap(),
+    val categoryStats: Map<Category, CategoryStatsData> = emptyMap(),
     // 新增：分类饼图选中状态
-    val selectedCategory: TaskCategory? = null,
+    val selectedCategory: Category? = null,
     // 新增：分类效率排行
     val categoryEfficiencyRanking: List<CategoryEfficiencyData> = emptyList(),
     // 新增：分类×星期热力图数据
-    val categoryWeekdayHeatmap: Map<TaskCategory, Map<Int, Int>> = emptyMap(),
+    val categoryWeekdayHeatmap: Map<Category, Map<Int, Int>> = emptyMap(),
     // 趋势数据
     val weeklyTrend: List<DailyTrendData> = emptyList(),
     val allWeeklyTrend: List<DailyTrendData> = emptyList(), // 新增：保存完整未过滤的趋势数据
@@ -71,7 +71,7 @@ data class StatsUiState(
     // 新增：完成速度加速度
     val velocityAcceleration: List<VelocityAccelerationData> = emptyList(),
     // 效率数据
-    val completionTimeByCategory: Map<TaskCategory, Double> = emptyMap(),
+    val completionTimeByCategory: Map<Category, Double> = emptyMap(),
     val completionTimeByImportance: Map<TaskImportanceUrgency, Double> = emptyMap(),
     val onTimeCompletionRate: Float = 0f,
     val overdueCompletionRate: Float = 0f,
@@ -92,7 +92,7 @@ data class StatsUiState(
 )
 
 data class CategoryStatsData(
-    val category: TaskCategory,
+    val category: Category,
     val totalCount: Int,
     val completedCount: Int,
     val completionRate: Float,
@@ -168,7 +168,7 @@ data class WeekComparisonData(
 
 // 分类效率排行数据
 data class CategoryEfficiencyData(
-    val category: TaskCategory,
+    val category: Category,
     val efficiencyScore: Int,
     val rank: Int,
     val completionRate: Float,
@@ -455,9 +455,11 @@ class StatsViewModel @Inject constructor(
         }
     }
 
-    private fun calculateCategoryStats(tasks: List<com.example.nextthingb1.domain.model.Task>): Map<TaskCategory, CategoryStatsData> {
-        return TaskCategory.values().associateWith { category ->
-            val categoryTasks = tasks.filter { it.category == category }
+    private fun calculateCategoryStats(tasks: List<com.example.nextthingb1.domain.model.Task>): Map<Category, CategoryStatsData> {
+        // 获取所有唯一的分类
+        val categories = tasks.map { it.category }.distinctBy { it.id }
+        return categories.associateWith { category ->
+            val categoryTasks = tasks.filter { it.category.id == category.id }
             val completed = categoryTasks.count { it.status == TaskStatus.COMPLETED }
             val pending = categoryTasks.count { it.status == TaskStatus.PENDING }
             val overdue = categoryTasks.count { it.status == TaskStatus.OVERDUE }
@@ -520,11 +522,12 @@ class StatsViewModel @Inject constructor(
         }.reversed()
     }
 
-    private fun calculateTimeByCategory(tasks: List<com.example.nextthingb1.domain.model.Task>): Map<TaskCategory, Double> {
+    private fun calculateTimeByCategory(tasks: List<com.example.nextthingb1.domain.model.Task>): Map<Category, Double> {
         val completedTasks = tasks.filter { it.status == TaskStatus.COMPLETED }
-        return TaskCategory.values().associateWith { category ->
+        val categories = tasks.map { it.category }.distinctBy { it.id }
+        return categories.associateWith { category ->
             completedTasks
-                .filter { it.category == category && it.actualDuration > 0 }
+                .filter { it.category.id == category.id && it.actualDuration > 0 }
                 .map { it.actualDuration }
                 .average()
                 .takeIf { !it.isNaN() } ?: 0.0
@@ -816,7 +819,7 @@ class StatsViewModel @Inject constructor(
 
     // ==================== 新增：分类效率排行榜 ====================
     private fun calculateCategoryEfficiencyRanking(
-        categoryStats: Map<TaskCategory, CategoryStatsData>
+        categoryStats: Map<Category, CategoryStatsData>
     ): List<CategoryEfficiencyData> {
         return categoryStats.values
             .sortedByDescending { it.efficiencyScore }
@@ -836,13 +839,14 @@ class StatsViewModel @Inject constructor(
     // ==================== 新增：分类×星期热力图 ====================
     private fun calculateCategoryWeekdayHeatmap(
         tasks: List<com.example.nextthingb1.domain.model.Task>
-    ): Map<TaskCategory, Map<Int, Int>> {
+    ): Map<Category, Map<Int, Int>> {
         val completedTasks = tasks.filter {
             it.status == TaskStatus.COMPLETED && it.completedAt != null
         }
 
-        return TaskCategory.values().associateWith { category ->
-            val categoryTasks = completedTasks.filter { it.category == category }
+        val categories = tasks.map { it.category }.distinctBy { it.id }
+        return categories.associateWith { category ->
+            val categoryTasks = completedTasks.filter { it.category.id == category.id }
 
             // 星期1-7的完成数量统计
             (1..7).associateWith { dayOfWeek ->
@@ -854,7 +858,7 @@ class StatsViewModel @Inject constructor(
     }
 
     // ==================== 新增：选择分类 ====================
-    fun selectCategory(category: TaskCategory?) {
+    fun selectCategory(category: Category?) {
         _uiState.value = _uiState.value.copy(selectedCategory = category)
     }
 

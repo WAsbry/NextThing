@@ -1,7 +1,7 @@
 package com.example.nextthingb1.domain.repository
 
 import com.example.nextthingb1.domain.model.Task
-import com.example.nextthingb1.domain.model.TaskCategory
+import com.example.nextthingb1.domain.model.Category
 import com.example.nextthingb1.domain.model.TaskStatistics
 import com.example.nextthingb1.domain.model.TaskStatus
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +20,7 @@ interface TaskRepository {
     // 查询操作
     fun getAllTasks(): Flow<List<Task>>
     fun getTasksByStatus(status: TaskStatus): Flow<List<Task>>
-    fun getTasksByCategory(category: TaskCategory): Flow<List<Task>>
+    fun getTasksByCategory(category: Category): Flow<List<Task>>
     fun getTasksByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<Task>>
     fun getTodayTasks(): Flow<List<Task>>
     fun getOverdueTasks(): Flow<List<Task>>
@@ -33,13 +33,13 @@ interface TaskRepository {
     // 统计功能
     suspend fun getTaskStatistics(): TaskStatistics
     suspend fun getTaskStatisticsByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): TaskStatistics
-    suspend fun getCategoryStatistics(): Map<TaskCategory, Int>
+    suspend fun getCategoryStatistics(): Map<Category, Int>
     suspend fun getEarliestTaskDate(): LocalDate?
-    
+
     // 批量操作
     suspend fun markTasksAsCompleted(taskIds: List<String>)
     suspend fun deleteCompletedTasks()
-    suspend fun bulkUpdateTaskCategory(taskIds: List<String>, category: TaskCategory)
+    suspend fun bulkUpdateTaskCategory(taskIds: List<String>, category: Category)
     
     // 数据同步
     suspend fun syncTasks(): Result<Unit>

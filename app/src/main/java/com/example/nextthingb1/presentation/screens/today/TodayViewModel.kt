@@ -88,7 +88,7 @@ class TodayViewModel @Inject constructor(
 
                     val completed = tasks.filter { it.status == TaskStatus.COMPLETED }
                     val pending = tasks.filter {
-                    it.status == TaskStatus.PENDING
+                    it.status != TaskStatus.COMPLETED && it.status != TaskStatus.CANCELLED
                 }
 
                     Timber.tag("DataFlow").d("📊 筛选结果: 已完成=${completed.size}, 待办=${pending.size}")
@@ -118,13 +118,13 @@ class TodayViewModel @Inject constructor(
     fun selectTab(tab: TaskTab) {
         val displayTasks = when (tab) {
             TaskTab.PENDING -> _uiState.value.allTasks.filter {
-                it.status == TaskStatus.PENDING
+                it.status != TaskStatus.COMPLETED && it.status != TaskStatus.CANCELLED
             }
             TaskTab.COMPLETED -> _uiState.value.allTasks.filter {
                 it.status == TaskStatus.COMPLETED
             }
         }
-        
+
         _uiState.value = _uiState.value.copy(
             selectedTab = tab,
             displayTasks = displayTasks

@@ -4,14 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.domain.model.TaskStatus
-import com.example.nextthingb1.domain.model.TaskCategory
+import com.example.nextthingb1.domain.model.Category
+import com.example.nextthingb1.domain.model.CategoryType
 import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
 import com.example.nextthingb1.domain.model.RepeatFrequency
 import com.example.nextthingb1.domain.model.Subtask
 import com.example.nextthingb1.domain.model.CategoryItem
 import com.example.nextthingb1.domain.usecase.TaskUseCases
-import com.example.nextthingb1.domain.repository.CustomCategoryRepository
+import com.example.nextthingb1.domain.repository.CategoryRepository
 import com.example.nextthingb1.domain.repository.NotificationStrategyRepository
 import com.example.nextthingb1.domain.service.CategoryPreferencesManager
 import com.example.nextthingb1.domain.usecase.LocationUseCases
@@ -43,7 +44,6 @@ data class TaskDetailUiState(
     val editedActualDuration: Int = 0,
 
     // 分类和重要性编辑
-    val editedCategory: TaskCategory = TaskCategory.OTHER,
     val editedCategoryItem: CategoryItem? = null,
     val editedImportanceUrgency: TaskImportanceUrgency? = null,
 
@@ -73,7 +73,7 @@ data class TaskDetailUiState(
 @HiltViewModel
 class TaskDetailViewModel @Inject constructor(
     private val taskUseCases: TaskUseCases,
-    private val customCategoryRepository: CustomCategoryRepository,
+    private val categoryRepository: CategoryRepository,
     private val categoryPreferencesManager: CategoryPreferencesManager,
     private val locationUseCases: LocationUseCases,
     private val notificationStrategyRepository: NotificationStrategyRepository
@@ -114,9 +114,21 @@ class TaskDetailViewModel @Inject constructor(
     private fun loadCategories() {
         viewModelScope.launch {
             try {
-                customCategoryRepository.initializeSystemCategories()
-                customCategoryRepository.getAllCategories().collect { categoryList ->
-                    val sortedCategories = categoryPreferencesManager.sortCategoriesByUsage(categoryList)
+                categoryRepository.initializeSystemCategories()
+                categoryRepository.getAllCategories().collect { categories ->
+                    // 将Category转换为CategoryItem
+                    val categoryItems = categories.map { category ->
+                        CategoryItem(
+                            id = category.id,
+                            displayName = category.name,
+                            colorHex = category.colorHex,
+                            icon = category.icon,
+                            isPinned = false,
+                            order = category.sortOrder,
+                            isSystemDefault = (category.type == CategoryType.PRESET)
+                        )
+                    }
+                    val sortedCategories = categoryPreferencesManager.sortCategoriesByUsage(categoryItems)
                     _categories.value = sortedCategories
                 }
             } catch (e: Exception) {
@@ -285,8 +297,16 @@ class TaskDetailViewModel @Inject constructor(
         val task = _uiState.value.task ?: return
 
         // 将任务的category转换为CategoryItem
-        val categoryItem = _categories.value.find { it.id == task.category.name }
-            ?: CategoryItem.fromTaskCategory(task.category)
+        val categoryItem = _categories.value.find { it.id == task.category.id }
+            ?: CategoryItem(
+                id = task.category.id,
+                displayName = task.category.name,
+                colorHex = task.category.colorHex,
+                icon = task.category.icon,
+                isPinned = false,
+                order = task.category.sortOrder,
+                isSystemDefault = (task.category.type == CategoryType.PRESET)
+            )
 
         _uiState.value = _uiState.value.copy(
             isEditMode = true,
@@ -296,7 +316,6 @@ class TaskDetailViewModel @Inject constructor(
             editedRepeatFrequency = task.repeatFrequency,
             editedEstimatedDuration = task.estimatedDuration,
             editedActualDuration = task.actualDuration,
-            editedCategory = task.category,
             editedCategoryItem = categoryItem,
             editedImportanceUrgency = task.importanceUrgency,
             editedLocation = task.locationInfo,
@@ -317,7 +336,6 @@ class TaskDetailViewModel @Inject constructor(
             editedRepeatFrequency = RepeatFrequency(),
             editedEstimatedDuration = 0,
             editedActualDuration = 0,
-            editedCategory = TaskCategory.OTHER,
             editedCategoryItem = null,
             editedImportanceUrgency = null,
             editedLocation = null,
@@ -341,10 +359,6 @@ class TaskDetailViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(editedDueDate = dueDate)
     }
 
-    fun updateEditedCategory(category: TaskCategory) {
-        _uiState.value = _uiState.value.copy(editedCategory = category)
-    }
-
     fun updateSelectedCategory(categoryItem: CategoryItem) {
         viewModelScope.launch {
             try {
@@ -359,7 +373,7 @@ class TaskDetailViewModel @Inject constructor(
     fun deleteCategory(categoryId: String) {
         viewModelScope.launch {
             try {
-                customCategoryRepository.deleteCategory(categoryId)
+                categoryRepository.deleteCategory(categoryId)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to delete category")
             }
@@ -369,7 +383,7 @@ class TaskDetailViewModel @Inject constructor(
     fun pinCategory(categoryId: String, isPinned: Boolean) {
         viewModelScope.launch {
             try {
-                customCategoryRepository.pinCategory(categoryId, isPinned)
+                categoryRepository.pinCategory(categoryId, isPinned)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to pin category")
             }
@@ -476,6 +490,17 @@ class TaskDetailViewModel @Inject constructor(
             return
         }
 
+        // 将CategoryItem转换为Category
+        val category = state.editedCategoryItem?.let { categoryItem ->
+            Category(
+                id = categoryItem.id,
+                name = categoryItem.displayName,
+                type = if (categoryItem.isSystemDefault) CategoryType.PRESET else CategoryType.CUSTOM,
+                icon = categoryItem.icon,
+                colorHex = categoryItem.colorHex
+            )
+        } ?: task.category // 如果没有编辑分类，保持原分类
+
         val updatedTask = task.copy(
             title = state.editedTitle,
             description = state.editedDescription,
@@ -483,7 +508,7 @@ class TaskDetailViewModel @Inject constructor(
             repeatFrequency = state.editedRepeatFrequency,
             estimatedDuration = state.editedEstimatedDuration,
             actualDuration = state.editedActualDuration,
-            category = state.editedCategory,
+            category = category,
             imageUri = state.editedImageUri,
             tags = state.editedTags,
             subtasks = state.editedSubtasks,

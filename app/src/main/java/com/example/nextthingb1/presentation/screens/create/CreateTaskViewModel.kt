@@ -3,14 +3,15 @@ package com.example.nextthingb1.presentation.screens.create
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.domain.model.Task
-import com.example.nextthingb1.domain.model.TaskCategory
+import com.example.nextthingb1.domain.model.Category
+import com.example.nextthingb1.domain.model.CategoryType
 import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.CategoryItem
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
 import com.example.nextthingb1.domain.model.RepeatFrequency
 import com.example.nextthingb1.domain.model.RepeatFrequencyType
 import com.example.nextthingb1.domain.usecase.TaskUseCases
-import com.example.nextthingb1.domain.repository.CustomCategoryRepository
+import com.example.nextthingb1.domain.repository.CategoryRepository
 import com.example.nextthingb1.domain.repository.NotificationStrategyRepository
 import com.example.nextthingb1.domain.service.CategoryPreferencesManager
 import com.example.nextthingb1.domain.usecase.LocationUseCases
@@ -29,7 +30,7 @@ import javax.inject.Inject
 @HiltViewModel
 class CreateTaskViewModel @Inject constructor(
     private val taskUseCases: TaskUseCases,
-    private val customCategoryRepository: CustomCategoryRepository,
+    private val categoryRepository: CategoryRepository,
     private val categoryPreferencesManager: CategoryPreferencesManager,
     private val locationUseCases: LocationUseCases,
     private val notificationStrategyRepository: NotificationStrategyRepository
@@ -56,14 +57,27 @@ class CreateTaskViewModel @Inject constructor(
     private fun initializeCategories() {
         viewModelScope.launch {
             try {
-                customCategoryRepository.initializeSystemCategories()
+                categoryRepository.initializeSystemCategories()
 
                 // 首先获取上次选择的分类
                 val lastSelectedCategoryId = categoryPreferencesManager.getLastSelectedCategoryId()
 
-                customCategoryRepository.getAllCategories().collect { categoryList ->
+                categoryRepository.getAllCategories().collect { categories ->
+                    // 将Category转换为CategoryItem
+                    val categoryItems = categories.map { category ->
+                        CategoryItem(
+                            id = category.id,
+                            displayName = category.name,
+                            colorHex = category.colorHex,
+                            icon = category.icon,
+                            isPinned = false,
+                            order = category.sortOrder,
+                            isSystemDefault = (category.type == CategoryType.PRESET)
+                        )
+                    }
+
                     // 按使用频率排序分类
-                    val sortedCategories = categoryPreferencesManager.sortCategoriesByUsage(categoryList)
+                    val sortedCategories = categoryPreferencesManager.sortCategoriesByUsage(categoryItems)
                     _categories.value = sortedCategories
 
                     // 设置默认选中的分类
@@ -79,14 +93,14 @@ class CreateTaskViewModel @Inject constructor(
         try {
             // 在分类列表中查找对应的CategoryItem
             val categoryItem = _categories.value.find { it.id == categoryId }
-                ?: _categories.value.find { it.id == TaskCategory.LIFE.name } // 默认生活分类
-                ?: CategoryItem.fromTaskCategory(TaskCategory.LIFE) // 备用默认
+                ?: _categories.value.find { it.displayName == "生活" } // 默认生活分类
+                ?: _categories.value.firstOrNull() // 使用第一个分类作为备用
 
             _uiState.value = _uiState.value.copy(selectedCategoryItem = categoryItem)
         } catch (e: Exception) {
             Timber.e(e, "Failed to load last selected category")
-            // 出错时使用默认分类
-            val defaultCategory = CategoryItem.fromTaskCategory(TaskCategory.LIFE)
+            // 出错时使用第一个分类
+            val defaultCategory = _categories.value.firstOrNull()
             _uiState.value = _uiState.value.copy(selectedCategoryItem = defaultCategory)
         }
     }
@@ -148,7 +162,7 @@ class CreateTaskViewModel @Inject constructor(
     fun createCategory(name: String, colorHex: String = "#9E9E9E") {
         viewModelScope.launch {
             try {
-                val result = customCategoryRepository.createCategory(name, colorHex)
+                val result = categoryRepository.createCategory(name, colorHex)
                 if (result.isSuccess) {
                     Timber.d("Category created successfully: $name")
                     hideCreateCategoryDialog()
@@ -164,7 +178,7 @@ class CreateTaskViewModel @Inject constructor(
     fun deleteCategory(categoryId: String) {
         viewModelScope.launch {
             try {
-                val result = customCategoryRepository.deleteCategory(categoryId)
+                val result = categoryRepository.deleteCategory(categoryId)
                 if (result.isSuccess) {
                     Timber.d("Category deleted successfully: $categoryId")
                 } else {
@@ -179,7 +193,7 @@ class CreateTaskViewModel @Inject constructor(
     fun pinCategory(categoryId: String, isPinned: Boolean) {
         viewModelScope.launch {
             try {
-                val result = customCategoryRepository.pinCategory(categoryId, isPinned)
+                val result = categoryRepository.pinCategory(categoryId, isPinned)
                 if (result.isSuccess) {
                     Timber.d("Category pin status updated: $categoryId -> $isPinned")
                 } else {
@@ -393,23 +407,28 @@ data class CreateTaskUiState(
     val preciseTime: Pair<Int, Int>? = null, // 精确时间（小时, 分钟），null表示未设置
     val isLoading: Boolean = false,
     val selectedLocation: LocationInfo? = null,
-    val importanceUrgency: TaskImportanceUrgency? = null,
+    val importanceUrgency: TaskImportanceUrgency? = TaskImportanceUrgency.IMPORTANT_NOT_URGENT,
     val selectedImageUri: String? = null,
     val repeatFrequency: RepeatFrequency = RepeatFrequency(),
     val notificationStrategyId: String? = null, // 通知策略ID
     val availableNotificationStrategies: List<NotificationStrategy> = emptyList(), // 可用的通知策略列表
     val errorMessage: String? = null
 ) {
-    // 获取对应的TaskCategory，用于创建任务
-    val category: TaskCategory
+    // 获取对应的Category，用于创建任务
+    val category: Category
         get() = selectedCategoryItem?.let { categoryItem ->
-            when (categoryItem.id) {
-                TaskCategory.WORK.name -> TaskCategory.WORK
-                TaskCategory.STUDY.name -> TaskCategory.STUDY
-                TaskCategory.LIFE.name -> TaskCategory.LIFE
-                TaskCategory.HEALTH.name -> TaskCategory.HEALTH
-                TaskCategory.PERSONAL.name -> TaskCategory.PERSONAL
-                else -> TaskCategory.OTHER // 自定义分类映射到OTHER
-            }
-        } ?: TaskCategory.LIFE
+            Category(
+                id = categoryItem.id,
+                name = categoryItem.displayName,
+                type = if (categoryItem.isSystemDefault) CategoryType.PRESET else CategoryType.CUSTOM,
+                icon = categoryItem.icon,
+                colorHex = categoryItem.colorHex
+            )
+        } ?: Category(
+            id = "LIFE",
+            name = "生活",
+            type = CategoryType.PRESET,
+            icon = "life",
+            colorHex = "#4CAF50"
+        )
 } 
