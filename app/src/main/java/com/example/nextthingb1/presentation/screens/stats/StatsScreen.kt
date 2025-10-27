@@ -30,24 +30,24 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.nextthingb1.domain.model.TaskCategory
+import com.example.nextthingb1.domain.model.Category
 import com.example.nextthingb1.presentation.theme.*
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
-// 扩展属性：将 TaskCategory 的 colorHex 转换为 Compose Color
-private val TaskCategory.color: Color
+// 扩展属性：将 Category 的 colorHex 转换为 Compose Color
+private val Category.color: Color
     get() = Color(android.graphics.Color.parseColor(this.colorHex))
 
-// 扩展属性：为 TaskCategory 提供 emoji 表示
-private val TaskCategory.emoji: String
-    get() = when (this) {
-        TaskCategory.WORK -> "💼"
-        TaskCategory.STUDY -> "📚"
-        TaskCategory.LIFE -> "🏠"
-        TaskCategory.HEALTH -> "❤️"
-        TaskCategory.PERSONAL -> "👤"
-        TaskCategory.OTHER -> "⭕"
+// 扩展属性：为 Category 提供 emoji 表示
+private val Category.emoji: String
+    get() = when (this.name) {
+        "工作" -> "💼"
+        "学习" -> "📚"
+        "生活" -> "🏠"
+        "健康" -> "❤️"
+        "个人" -> "👤"
+        else -> "⭕"
     }
 
 @Composable
@@ -651,7 +651,7 @@ private fun CategoryDistributionChart(uiState: StatsUiState) {
 
 @Composable
 private fun CategoryStatItem(
-    category: TaskCategory,
+    category: Category,
     stats: CategoryStatsData
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -763,7 +763,7 @@ private fun CategoryDurationChart(uiState: StatsUiState) {
 
 @Composable
 private fun CategoryDurationItem(
-    category: TaskCategory,
+    category: Category,
     duration: Double,
     maxDuration: Double
 ) {
@@ -1863,8 +1863,8 @@ private fun ComparisonRow(
 @Composable
 private fun CategoryDoublePieChart(
     categoryStats: List<CategoryStatsData>,
-    selectedCategory: TaskCategory?,
-    onCategorySelected: (TaskCategory?) -> Unit
+    selectedCategory: Category?,
+    onCategorySelected: (Category?) -> Unit
 ) {
     if (categoryStats.isEmpty()) return
 
@@ -2300,7 +2300,7 @@ private fun CategoryEfficiencyRanking(
  */
 @Composable
 private fun CategoryWeekdayHeatmap(
-    heatmapData: Map<TaskCategory, Map<Int, Int>>
+    heatmapData: Map<Category, Map<Int, Int>>
 ) {
     Card(
         modifier = Modifier
