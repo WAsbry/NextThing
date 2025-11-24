@@ -1170,7 +1170,7 @@ internal fun CategoryPriorityConfigCard(
                             .fillMaxWidth()
                             .clickable {
                                 onCreateCategoryClicked()
-                                onExpandToggle()
+                                // 不关闭卡片,让用户看到对话框
                             }
                             .padding(vertical = 8.dp, horizontal = 12.dp),
                         color = Color(0xFF2196F3),

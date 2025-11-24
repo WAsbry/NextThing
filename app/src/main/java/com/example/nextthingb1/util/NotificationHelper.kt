@@ -275,6 +275,10 @@ class NotificationHelper @Inject constructor(
             e.printStackTrace()
         }
 
+        // 执行震动
+        executeVibration(strategy.vibrationSetting)
+
+        // 播放声音
         playSound(strategy)
     }
 
@@ -382,23 +386,32 @@ class NotificationHelper @Inject constructor(
      * 执行震动
      */
     private fun executeVibration(vibrationSetting: VibrationSetting) {
+        Timber.tag(TAG).d("━━━━━━ 执行震动 ━━━━━━")
+        Timber.tag(TAG).d("震动设置: ${vibrationSetting.displayName}")
+
         if (vibrationSetting == VibrationSetting.NONE) {
+            Timber.tag(TAG).d("震动设置为NONE，跳过震动")
             return
         }
 
         try {
+            Timber.tag(TAG).d("震动模式: ${vibrationSetting.pattern.contentToString()}")
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val effect = VibrationEffect.createWaveform(
                     vibrationSetting.pattern,
                     -1
                 )
                 vibrator.vibrate(effect)
+                Timber.tag(TAG).d("✅ 震动已执行 (Android O+)")
             } else {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(vibrationSetting.pattern, -1)
+                Timber.tag(TAG).d("✅ 震动已执行 (Legacy API)")
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).e("震动失败: ${e.message}")
+            Timber.tag(TAG).e("❌ 震动失败: ${e.message}")
+            e.printStackTrace()
         }
     }
 
