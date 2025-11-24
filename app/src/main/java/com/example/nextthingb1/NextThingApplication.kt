@@ -26,13 +26,13 @@ class NextThingApplication : Application(), Configuration.Provider {
 
         try {
             Timber.d("🔍 [Application] 检查Hilt依赖注入状态...")
-            
+
             // 检查基本依赖
             Timber.d("📋 [Application] TaskRepository: ${taskRepository.javaClass.simpleName}")
             Timber.d("🏭 [Application] WorkerFactory: ${workerFactory.javaClass.simpleName}")
-            
+
             Timber.d("✅ [Application] 基本依赖注入成功")
-            
+
         } catch (e: Exception) {
             Timber.e(e, "❌ [Application] 基本依赖注入失败")
         }

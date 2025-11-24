@@ -91,6 +91,9 @@ class TaskDetailViewModel @Inject constructor(
     private val _availableNotificationStrategies = MutableStateFlow<List<NotificationStrategy>>(emptyList())
     val availableNotificationStrategies: StateFlow<List<NotificationStrategy>> = _availableNotificationStrategies.asStateFlow()
 
+    private val _showCreateCategoryDialog = MutableStateFlow(false)
+    val showCreateCategoryDialog: StateFlow<Boolean> = _showCreateCategoryDialog.asStateFlow()
+
     private var currentTaskId: String? = null
 
     init {
@@ -481,6 +484,36 @@ class TaskDetailViewModel @Inject constructor(
         )
     }
 
+    fun showCreateCategoryDialog() {
+        _showCreateCategoryDialog.value = true
+    }
+
+    fun hideCreateCategoryDialog() {
+        _showCreateCategoryDialog.value = false
+    }
+
+    fun createCategory(name: String, colorHex: String = "#9E9E9E") {
+        viewModelScope.launch {
+            try {
+                val result = categoryRepository.createCategory(name, colorHex)
+                if (result.isSuccess) {
+                    Timber.d("Category created successfully: $name")
+                    hideCreateCategoryDialog()
+                } else {
+                    Timber.e("Failed to create category: ${result.exceptionOrNull()?.message}")
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "创建分类失败: ${result.exceptionOrNull()?.message}"
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to create category")
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "创建分类失败: ${e.message}"
+                )
+            }
+        }
+    }
+
     fun saveChanges() {
         val task = _uiState.value.task ?: return
         val state = _uiState.value
@@ -501,6 +534,27 @@ class TaskDetailViewModel @Inject constructor(
             )
         } ?: task.category // 如果没有编辑分类，保持原分类
 
+        // 计算任务状态：如果截止时间改变，需要重新计算是否逾期
+        val now = LocalDateTime.now()
+        val computedStatus = when {
+            // 保持已完成和已取消状态不变
+            state.editedStatus == TaskStatus.COMPLETED || state.editedStatus == TaskStatus.CANCELLED -> {
+                state.editedStatus
+            }
+            // 如果截止时间已过（超过5分钟），标记为逾期
+            state.editedDueDate != null && now.isAfter(state.editedDueDate.plusMinutes(5)) -> {
+                Timber.tag("TaskDetailSave").d("⚠️ 截止时间已过，自动标记为 OVERDUE")
+                TaskStatus.OVERDUE
+            }
+            // 否则标记为待办
+            else -> {
+                if (state.editedStatus == TaskStatus.OVERDUE) {
+                    Timber.tag("TaskDetailSave").d("✅ 截止时间在未来，从 OVERDUE 恢复为 PENDING")
+                }
+                TaskStatus.PENDING
+            }
+        }
+
         val updatedTask = task.copy(
             title = state.editedTitle,
             description = state.editedDescription,
@@ -509,19 +563,34 @@ class TaskDetailViewModel @Inject constructor(
             estimatedDuration = state.editedEstimatedDuration,
             actualDuration = state.editedActualDuration,
             category = category,
+            importanceUrgency = state.editedImportanceUrgency,
+            locationInfo = state.editedLocation,
             imageUri = state.editedImageUri,
             tags = state.editedTags,
             subtasks = state.editedSubtasks,
             notificationStrategyId = state.editedNotificationStrategyId,
-            status = state.editedStatus,
+            status = computedStatus,
             updatedAt = LocalDateTime.now()
         )
+
+        Timber.tag("TaskDetailSave").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Timber.tag("TaskDetailSave").d("【详情页】准备保存任务修改")
+        Timber.tag("TaskDetailSave").d("  任务ID: ${updatedTask.id}")
+        Timber.tag("TaskDetailSave").d("  标题: ${updatedTask.title}")
+        Timber.tag("TaskDetailSave").d("  描述: ${updatedTask.description}")
+        Timber.tag("TaskDetailSave").d("  分类: ${updatedTask.category.name}")
+        Timber.tag("TaskDetailSave").d("  重要程度: ${updatedTask.importanceUrgency?.displayName ?: "null"}")
+        Timber.tag("TaskDetailSave").d("  截止时间: ${updatedTask.dueDate}")
+        Timber.tag("TaskDetailSave").d("  位置: ${updatedTask.locationInfo?.locationName ?: "null"}")
+        Timber.tag("TaskDetailSave").d("  图片: ${updatedTask.imageUri ?: "null"}")
+        Timber.tag("TaskDetailSave").d("  状态: ${updatedTask.status}")
+        Timber.tag("TaskDetailSave").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         viewModelScope.launch {
             try {
                 taskUseCases.updateTask(updatedTask).fold(
                     onSuccess = {
-                        Timber.d("Task updated successfully")
+                        Timber.tag("TaskDetailSave").d("✅ 任务保存成功")
                         _uiState.value = _uiState.value.copy(
                             task = updatedTask,
                             isEditMode = false,
@@ -529,14 +598,14 @@ class TaskDetailViewModel @Inject constructor(
                         )
                     },
                     onFailure = { error ->
-                        Timber.e("Failed to update task: ${error.message}")
+                        Timber.tag("TaskDetailSave").e("❌ 任务保存失败: ${error.message}")
                         _uiState.value = _uiState.value.copy(
                             errorMessage = "任务修改失败: ${error.message}"
                         )
                     }
                 )
             } catch (e: Exception) {
-                Timber.e(e, "Exception while updating task")
+                Timber.tag("TaskDetailSave").e(e, "❌ 任务保存异常")
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "任务修改失败: ${e.message}"
                 )

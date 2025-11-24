@@ -60,6 +60,7 @@ fun TaskDetailScreen(
     val categories by viewModel.categories.collectAsState()
     val savedLocations by viewModel.savedLocations.collectAsState()
     val availableNotificationStrategies by viewModel.availableNotificationStrategies.collectAsState()
+    val showCreateCategoryDialog by viewModel.showCreateCategoryDialog.collectAsState()
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
@@ -215,7 +216,9 @@ fun TaskDetailScreen(
                                 onCategorySelected = { categoryItem ->
                                     viewModel.updateSelectedCategory(categoryItem)
                                 },
-                                onCreateCategoryClicked = { /* TODO: 打开创建分类对话框 */ },
+                                onCreateCategoryClicked = {
+                                    viewModel.showCreateCategoryDialog()
+                                },
                                 onDeleteCategory = { categoryId ->
                                     viewModel.deleteCategory(categoryId)
                                 },
@@ -382,6 +385,16 @@ fun TaskDetailScreen(
                     showDatePicker = false
                 },
                 onDismiss = { showDatePicker = false }
+            )
+        }
+
+        // 创建分类对话框
+        if (showCreateCategoryDialog) {
+            CreateCategoryDialog(
+                onConfirm = { categoryName ->
+                    viewModel.createCategory(categoryName)
+                },
+                onDismiss = { viewModel.hideCreateCategoryDialog() }
             )
         }
 
@@ -1071,4 +1084,57 @@ private fun formatDueDate(dueDate: LocalDateTime?): String {
 
 private fun formatLocation(location: LocationInfo?): String {
     return location?.locationName?.takeIf { it.isNotEmpty() } ?: "实时位置"
+}
+
+@Composable
+private fun CreateCategoryDialog(
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var categoryName by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "新建分类",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "请输入分类名称",
+                    color = Color(0xFF9E9E9E),
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = categoryName,
+                    onValueChange = { categoryName = it },
+                    placeholder = { Text("分类名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (categoryName.isNotBlank()) {
+                        onConfirm(categoryName.trim())
+                    }
+                },
+                enabled = categoryName.isNotBlank()
+            ) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
 }

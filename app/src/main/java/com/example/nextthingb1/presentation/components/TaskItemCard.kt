@@ -38,6 +38,19 @@ fun TaskItemCard(
     useRoundedCorners: Boolean = true,
     elevation: androidx.compose.ui.unit.Dp = 2.dp
 ) {
+    // 添加日志打印任务信息
+    timber.log.Timber.tag("TodayScreenRender").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    timber.log.Timber.tag("TodayScreenRender").d("【首页】渲染任务卡片")
+    timber.log.Timber.tag("TodayScreenRender").d("  任务ID: ${task.id}")
+    timber.log.Timber.tag("TodayScreenRender").d("  标题: ${task.title}")
+    timber.log.Timber.tag("TodayScreenRender").d("  描述: ${task.description}")
+    timber.log.Timber.tag("TodayScreenRender").d("  分类: ${task.category.name}")
+    timber.log.Timber.tag("TodayScreenRender").d("  重要程度: ${task.importanceUrgency?.displayName ?: "null"}")
+    timber.log.Timber.tag("TodayScreenRender").d("  截止时间: ${task.dueDate}")
+    timber.log.Timber.tag("TodayScreenRender").d("  位置: ${task.locationInfo?.locationName ?: "null"}")
+    timber.log.Timber.tag("TodayScreenRender").d("  状态: ${task.status}")
+    timber.log.Timber.tag("TodayScreenRender").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
