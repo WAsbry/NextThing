@@ -41,8 +41,20 @@ class TaskRepositoryImpl @Inject constructor(
     override suspend fun updateTask(task: Task) {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.updateTask ━━━━━━")
         timber.log.Timber.tag(TAG).d("更新任务: ${task.title}, ID: ${task.id}")
-        taskDao.updateTask(task.toEntity())
-        timber.log.Timber.tag(TAG).d("✅ 任务已更新")
+        timber.log.Timber.tag(TAG).d("  标题: ${task.title}")
+        timber.log.Timber.tag(TAG).d("  描述: ${task.description}")
+        timber.log.Timber.tag(TAG).d("  分类: ${task.category.name}")
+        timber.log.Timber.tag(TAG).d("  重要程度: ${task.importanceUrgency?.displayName ?: "null"}")
+        timber.log.Timber.tag(TAG).d("  截止时间: ${task.dueDate}")
+        timber.log.Timber.tag(TAG).d("  位置: ${task.locationInfo?.locationName ?: "null"}")
+        timber.log.Timber.tag(TAG).d("  状态: ${task.status}")
+
+        val entity = task.toEntity()
+        timber.log.Timber.tag(TAG).d("转换为Entity后:")
+        timber.log.Timber.tag(TAG).d("  importanceUrgencyJson: ${entity.importanceUrgencyJson}")
+
+        taskDao.updateTask(entity)
+        timber.log.Timber.tag(TAG).d("✅ 任务已更新到数据库")
     }
 
     override suspend fun deleteTask(taskId: String) {
