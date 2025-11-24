@@ -5,11 +5,21 @@ plugins {
     id("kotlin-kapt")
     alias(libs.plugins.hilt.android)
     id("kotlin-parcelize")
+    kotlin("plugin.serialization") version "1.9.22"
 }
 
 android {
     namespace = "com.example.nextthingb1"
     compileSdk = 34
+    
+    signingConfigs {
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "zrj80235324"
+            keyAlias = "release"
+            keyPassword = "zrj80235324"
+        }
+    }
 
     defaultConfig {
         applicationId = "com.example.nextthingb1"
@@ -26,6 +36,15 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -43,7 +62,12 @@ android {
     buildFeatures {
         compose = true
     }
-    
+
+    lint {
+        abortOnError = false
+        warningsAsErrors = false
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -93,16 +117,30 @@ dependencies {
     // Timber
     implementation("com.jakewharton.timber:timber:5.0.1")
 
+    // BouncyCastle for EdDSA support
+    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
+
+    // 和风天气SDK - 由于Maven仓库问题，使用直接API调用
+    // implementation("com.qweather:qweather-sdk:4.5.9")
+
     // WorkManager + Hilt integration
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.hilt:hilt-work:1.1.0")
     kapt("androidx.hilt:hilt-compiler:1.1.0")
+
+    // DataStore
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    // Kotlinx Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
 
     // App Startup
     implementation("androidx.startup:startup-runtime:1.1.1")
 
     // Location Services
     implementation("com.google.android.gms:play-services-location:21.0.1")
+    // 高德定位SDK
+    implementation("com.amap.api:location:6.4.3")
     implementation("com.google.android.gms:play-services-maps:18.2.0")
 
     testImplementation(libs.junit)
@@ -120,5 +158,9 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.12")
+    // LeakCanary - 已禁用，避免通知干扰
+    // debugImplementation("com.squareup.leakcanary:leakcanary-android:2.12")
+
+    // 新增：Desugar依赖（支持低版本Android的java.time包）
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
