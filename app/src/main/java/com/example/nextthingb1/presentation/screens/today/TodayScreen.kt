@@ -38,6 +38,8 @@ import com.example.nextthingb1.presentation.components.LocationDetailDialog
 import com.example.nextthingb1.presentation.components.LocationHelpDialog
 import com.example.nextthingb1.presentation.components.LocationPermissionDialog
 import com.example.nextthingb1.presentation.components.WeatherSummaryCard
+import com.example.nextthingb1.presentation.components.CancelReasonDialog
+import com.example.nextthingb1.presentation.components.PostponeReasonDialog
 import com.example.nextthingb1.domain.model.WeatherInfo
 import com.example.nextthingb1.presentation.theme.*
 import com.example.nextthingb1.presentation.components.TaskItemCard
@@ -151,8 +153,8 @@ fun TodayScreen(
                 TaskItem(
                     task = task,
                     onToggleStatus = { viewModel.toggleTaskStatus(task.id) },
-                    onPostpone = { viewModel.postponeTask(task.id) },
-                    onCancel = { viewModel.cancelTask(task.id) },
+                    onPostpone = { viewModel.showPostponeReasonDialog(task.id) },
+                    onCancel = { viewModel.showCancelReasonDialog(task.id) },
                     onStartFocus = { onNavigateToFocus() },
                     onClick = { onNavigateToTaskDetail(task.id) }
                 )
@@ -204,6 +206,24 @@ fun TodayScreen(
         onOpenSettings = {
             viewModel.hideLocationHelpDialog()
             // TODO: 打开位置设置页面
+        }
+    )
+
+    // 延期任务原因对话框
+    PostponeReasonDialog(
+        isVisible = uiState.showPostponeReasonDialog,
+        onDismiss = { viewModel.hidePostponeReasonDialog() },
+        onConfirm = { reason ->
+            viewModel.confirmPostponeTask(reason)
+        }
+    )
+
+    // 放弃任务原因对话框
+    CancelReasonDialog(
+        isVisible = uiState.showCancelReasonDialog,
+        onDismiss = { viewModel.hideCancelReasonDialog() },
+        onConfirm = { reason ->
+            viewModel.confirmCancelTask(reason)
         }
     )
 }
