@@ -19,6 +19,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import javax.inject.Inject
 import com.example.nextthingb1.domain.model.TaskTab
+import java.time.LocalDateTime
 
 data class TodayUiState(
     val allTasks: List<Task> = emptyList(),
@@ -38,7 +39,11 @@ data class TodayUiState(
     val errorMessage: String? = null,
     val weatherInfo: WeatherInfo? = null,
     val isWeatherLoading: Boolean = false,
-    val weatherError: String? = null
+    val weatherError: String? = null,
+    val showCancelReasonDialog: Boolean = false,
+    val cancelTaskId: String? = null,
+    val showPostponeReasonDialog: Boolean = false,
+    val postponeTaskId: String? = null
 )
 
 @HiltViewModel
@@ -82,8 +87,37 @@ class TodayViewModel @Inject constructor(
                 taskUseCases.getTodayTasks().collect { tasks ->
                     Timber.tag("DataFlow").d("━━━━━━ Flow回调收到数据 ━━━━━━")
                     Timber.tag("DataFlow").d("📊 收到 ${tasks.size} 个今日任务")
+
+                    // 🔍 检查并更新逾期任务状态
+                    val now = LocalDateTime.now()
+                    val tasksToUpdate = mutableListOf<Task>()
+
                     tasks.forEachIndexed { index, task ->
                         Timber.tag("DataFlow").d("  [$index] ${task.title} (${task.status})")
+
+                        // 检查是否应该标记为逾期
+                        if (task.status == TaskStatus.PENDING &&
+                            task.dueDate != null &&
+                            now.isAfter(task.dueDate.plusMinutes(5))) {
+
+                            Timber.tag("DataFlow").w("  ⚠️ 任务已逾期: ${task.title}, 截止时间: ${task.dueDate}")
+                            tasksToUpdate.add(task.copy(status = TaskStatus.OVERDUE))
+                        }
+                    }
+
+                    // 批量更新逾期任务
+                    if (tasksToUpdate.isNotEmpty()) {
+                        Timber.tag("DataFlow").d("🔄 发现 ${tasksToUpdate.size} 个任务需要更新为逾期状态")
+                        tasksToUpdate.forEach { task ->
+                            try {
+                                taskUseCases.updateTask(task)
+                                Timber.tag("DataFlow").d("  ✅ 已更新: ${task.title} → OVERDUE")
+                            } catch (e: Exception) {
+                                Timber.tag("DataFlow").e(e, "  ❌ 更新失败: ${task.title}")
+                            }
+                        }
+                        // 更新后重新返回，让 Flow 自动触发更新
+                        return@collect
                     }
 
                     val completed = tasks.filter { it.status == TaskStatus.COMPLETED }
@@ -154,50 +188,169 @@ class TodayViewModel @Inject constructor(
     }
     
 
-    fun postponeTask(taskId: String) {
+    /**
+     * 显示延期任务对话框
+     */
+    fun showPostponeReasonDialog(taskId: String) {
+        _uiState.value = _uiState.value.copy(
+            showPostponeReasonDialog = true,
+            postponeTaskId = taskId
+        )
+    }
+
+    /**
+     * 隐藏延期任务对话框
+     */
+    fun hidePostponeReasonDialog() {
+        _uiState.value = _uiState.value.copy(
+            showPostponeReasonDialog = false,
+            postponeTaskId = null
+        )
+    }
+
+    /**
+     * 确认延期任务，并将延期原因追加到任务描述中
+     */
+    fun confirmPostponeTask(reason: String) {
         viewModelScope.launch {
             try {
-                // 延期任务：使用 DeferTaskUseCase 将截止日期推迟一天并更新状态为 DEFERRED
-                taskUseCases.deferTask(taskId).fold(
+                val taskId = _uiState.value.postponeTaskId
+                if (taskId == null) {
+                    Timber.w("confirmPostponeTask: taskId 为空")
+                    return@launch
+                }
+
+                val task = _uiState.value.allTasks.find { it.id == taskId }
+                if (task == null) {
+                    Timber.w("confirmPostponeTask: 找不到任务 $taskId")
+                    return@launch
+                }
+
+                // 将延期原因追加到任务描述中
+                val updatedDescription = if (task.description.isBlank()) {
+                    "【延期原因】\n$reason"
+                } else {
+                    "${task.description}\n\n【延期原因】\n$reason"
+                }
+
+                Timber.d("延期任务: ${task.title}, 原因: $reason")
+
+                // 先更新描述
+                taskUseCases.updateTask(
+                    task.copy(
+                        description = updatedDescription,
+                        updatedAt = LocalDateTime.now()
+                    )
+                ).fold(
                     onSuccess = {
-                        loadTodayTasks()
+                        // 更新描述成功后，再调用延期任务 UseCase
+                        taskUseCases.deferTask(taskId).fold(
+                            onSuccess = {
+                                Timber.d("任务已延期: ${task.title}")
+                                hidePostponeReasonDialog()
+                                loadTodayTasks()
+                            },
+                            onFailure = { error ->
+                                Timber.e("延期任务失败: ${error.message}")
+                                _uiState.value = _uiState.value.copy(
+                                    errorMessage = error.message
+                                )
+                                hidePostponeReasonDialog()
+                            }
+                        )
                     },
                     onFailure = { error ->
+                        Timber.e("更新任务描述失败: ${error.message}")
                         _uiState.value = _uiState.value.copy(
                             errorMessage = error.message
                         )
+                        hidePostponeReasonDialog()
                     }
                 )
             } catch (e: Exception) {
+                Timber.e(e, "延期任务异常")
                 _uiState.value = _uiState.value.copy(
                     errorMessage = e.message
                 )
+                hidePostponeReasonDialog()
             }
         }
     }
     
-    fun cancelTask(taskId: String) {
+    /**
+     * 显示放弃任务对话框
+     */
+    fun showCancelReasonDialog(taskId: String) {
+        _uiState.value = _uiState.value.copy(
+            showCancelReasonDialog = true,
+            cancelTaskId = taskId
+        )
+    }
+
+    /**
+     * 隐藏放弃任务对话框
+     */
+    fun hideCancelReasonDialog() {
+        _uiState.value = _uiState.value.copy(
+            showCancelReasonDialog = false,
+            cancelTaskId = null
+        )
+    }
+
+    /**
+     * 确认放弃任务，并将放弃原因追加到任务描述中
+     */
+    fun confirmCancelTask(reason: String) {
         viewModelScope.launch {
             try {
-                val task = _uiState.value.allTasks.find { it.id == taskId }
-                task?.let {
-                    taskUseCases.updateTask(
-                        it.copy(status = TaskStatus.CANCELLED)
-                    ).fold(
-                        onSuccess = {
-                            loadTodayTasks()
-                        },
-                        onFailure = { error ->
-                            _uiState.value = _uiState.value.copy(
-                                errorMessage = error.message
-                            )
-                        }
-                    )
+                val taskId = _uiState.value.cancelTaskId
+                if (taskId == null) {
+                    Timber.w("confirmCancelTask: taskId 为空")
+                    return@launch
                 }
+
+                val task = _uiState.value.allTasks.find { it.id == taskId }
+                if (task == null) {
+                    Timber.w("confirmCancelTask: 找不到任务 $taskId")
+                    return@launch
+                }
+
+                // 将放弃原因追加到任务描述中
+                val updatedDescription = if (task.description.isBlank()) {
+                    "【放弃原因】\n$reason"
+                } else {
+                    "${task.description}\n\n【放弃原因】\n$reason"
+                }
+
+                Timber.d("放弃任务: ${task.title}, 原因: $reason")
+
+                // 更新任务状态为已取消，并更新描述
+                taskUseCases.updateTask(
+                    task.copy(
+                        status = TaskStatus.CANCELLED,
+                        description = updatedDescription,
+                        updatedAt = LocalDateTime.now()
+                    )
+                ).fold(
+                    onSuccess = {
+                        Timber.d("任务已放弃: ${task.title}")
+                        hideCancelReasonDialog()
+                        loadTodayTasks()
+                    },
+                    onFailure = { error ->
+                        Timber.e("放弃任务失败: ${error.message}")
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = error.message
+                        )
+                        hideCancelReasonDialog()
+                    }
+                )
             } catch (e: Exception) {
+                Timber.e(e, "放弃任务异常")
                 _uiState.value = _uiState.value.copy(
                     errorMessage = e.message
                 )
+                hideCancelReasonDialog()
             }
         }
     }
@@ -549,6 +702,10 @@ class TodayViewModel @Inject constructor(
         }
 
         Timber.tag("LocationUpdate").d("✅ 初始化已完成，继续执行onScreenResumed逻辑")
+
+        // 🔄 刷新任务数据，确保任务状态是最新的（例如逾期状态）
+        Timber.tag("DataFlow").d("🔄 onScreenResumed: 刷新任务数据")
+        loadTodayTasks()
 
         val oldPermission = _uiState.value.hasLocationPermission
         val oldLocationEnabled = _uiState.value.isLocationEnabled

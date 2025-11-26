@@ -52,6 +52,35 @@ android {
             )
         }
     }
+
+    // 配置 APK 输出文件名并自动复制到项目根目录
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                val buildType = variant.buildType.name
+                if (buildType == "release") {
+                    output.outputFileName = "NextThing-release.apk"
+                }
+            }
+
+        // Release 构建完成后自动复制 APK 到项目根目录
+        if (variant.buildType.name == "release") {
+            variant.assembleProvider?.configure {
+                doLast {
+                    val apkFile = file("${buildDir}/outputs/apk/release/NextThing-release.apk")
+                    val destFile = file("${rootProject.projectDir}/NextThing-release.apk")
+                    if (apkFile.exists()) {
+                        apkFile.copyTo(destFile, overwrite = true)
+                        println("✅ APK 已复制到项目根目录: ${destFile.absolutePath}")
+                    } else {
+                        println("⚠️ APK 文件不存在: ${apkFile.absolutePath}")
+                    }
+                }
+            }
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
