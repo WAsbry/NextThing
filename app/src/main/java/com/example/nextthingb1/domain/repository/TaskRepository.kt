@@ -45,4 +45,8 @@ interface TaskRepository {
     suspend fun syncTasks(): Result<Unit>
     suspend fun exportTasks(): Result<String> // 返回导出文件路径
     suspend fun importTasks(filePath: String): Result<Int> // 返回导入任务数量
+
+    // 重复任务相关
+    suspend fun getTemplateTasks(): List<Task>
+    suspend fun hasInstanceForDate(templateId: String, date: LocalDateTime): Boolean
 } 

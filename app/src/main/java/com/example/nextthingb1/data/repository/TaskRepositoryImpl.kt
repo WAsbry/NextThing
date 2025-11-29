@@ -239,4 +239,16 @@ class TaskRepositoryImpl @Inject constructor(
         Log.d("weekCount", "Repository: 转换后的最早任务LocalDate: $earliestDate")
         return earliestDate
     }
+
+    override suspend fun getTemplateTasks(): List<Task> {
+        timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTemplateTasks ━━━━━━")
+        val templates = taskDao.getTemplateTasks().map { it.toDomain() }
+        timber.log.Timber.tag(TAG).d("找到 ${templates.size} 个模板任务")
+        return templates
+    }
+
+    override suspend fun hasInstanceForDate(templateId: String, date: LocalDateTime): Boolean {
+        timber.log.Timber.tag(TAG).v("检查模板任务 $templateId 在 ${date.toLocalDate()} 是否已有实例")
+        return taskDao.hasInstanceForDate(templateId, date)
+    }
 } 

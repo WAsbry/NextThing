@@ -26,7 +26,7 @@ import java.time.LocalDateTime
 
 @Database(
     entities = [TaskEntity::class, CategoryEntity::class, LocationEntity::class, NotificationStrategyEntity::class, UserEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -43,6 +43,31 @@ abstract class TaskDatabase : RoomDatabase() {
 
         @Volatile
         private var INSTANCE: TaskDatabase? = null
+
+        // 数据库迁移：Version 2 -> Version 3
+        // 添加重复任务相关字段
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                timber.log.Timber.tag("Migration").d("开始数据库迁移：Version 2 -> 3")
+
+                try {
+                    // 添加新字段
+                    database.execSQL("ALTER TABLE tasks ADD COLUMN isTemplate INTEGER NOT NULL DEFAULT 0")
+                    database.execSQL("ALTER TABLE tasks ADD COLUMN templateTaskId TEXT")
+                    database.execSQL("ALTER TABLE tasks ADD COLUMN instanceDate TEXT")
+
+                    // 创建索引
+                    database.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_templateTaskId ON tasks(templateTaskId)")
+                    database.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_instanceDate ON tasks(instanceDate)")
+                    database.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_isTemplate ON tasks(isTemplate)")
+
+                    timber.log.Timber.tag("Migration").d("✅✅✅ 数据库迁移完成：Version 2 -> 3")
+                } catch (e: Exception) {
+                    timber.log.Timber.tag("Migration").e(e, "❌ 数据库迁移失败")
+                    throw e
+                }
+            }
+        }
 
         // 数据库迁移：Version 1 -> Version 2
         // 添加分类表，并将任务表的 category 字段迁移到 categoryId
@@ -159,7 +184,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2) // 添加迁移策略
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3) // 添加迁移策略
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
