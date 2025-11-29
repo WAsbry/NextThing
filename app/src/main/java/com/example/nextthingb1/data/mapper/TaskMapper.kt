@@ -39,7 +39,10 @@ fun TaskWithCategory.toDomain(): Task {
         repeatFrequency = parseRepeatFrequency(entity.repeatFrequencyJson),
         locationInfo = parseLocationInfo(entity.locationInfoJson),
         importanceUrgency = parseImportanceUrgency(entity.importanceUrgencyJson),
-        notificationStrategyId = entity.notificationStrategyId
+        notificationStrategyId = entity.notificationStrategyId,
+        isTemplate = entity.isTemplate,
+        templateTaskId = entity.templateTaskId,
+        instanceDate = entity.instanceDate
     )
 }
 
@@ -66,7 +69,10 @@ fun Task.toEntity(): TaskEntity {
         repeatFrequencyJson = gson.toJson(repeatFrequency),
         locationInfoJson = locationInfo?.let { gson.toJson(it) },
         importanceUrgencyJson = importanceUrgency?.let { gson.toJson(it) },
-        notificationStrategyId = notificationStrategyId
+        notificationStrategyId = notificationStrategyId,
+        isTemplate = isTemplate,
+        templateTaskId = templateTaskId,
+        instanceDate = instanceDate
     )
 }
 

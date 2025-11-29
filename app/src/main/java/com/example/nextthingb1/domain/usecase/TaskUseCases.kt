@@ -29,6 +29,7 @@ data class TaskUseCases @Inject constructor(
     val getTasksByCategory: GetTasksByCategoryUseCase,
     val getUrgentTasks: GetUrgentTasksUseCase,
     val getEarliestTaskDate: GetEarliestTaskDateUseCase,
+    val generateRecurringTasks: GenerateRecurringTasksUseCase,
     val locationRepository: LocationRepository
 )
 
@@ -92,6 +93,9 @@ class CreateTaskUseCase @Inject constructor(
                 val finalDueDate = dueDate ?: LocalDateTime.now().toLocalDate().atTime(23, 59, 59)
 
                 val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                // 判断是否为重复任务(需要创建为模板)
+                val isRecurringTask = repeatFrequency.type != com.example.nextthingb1.domain.model.RepeatFrequencyType.NONE
+
                 Timber.tag(TAG).d("准备创建Task对象:")
                 Timber.tag(TAG).d("   标题: $title")
                 Timber.tag(TAG).d("   描述: $description")
@@ -99,6 +103,7 @@ class CreateTaskUseCase @Inject constructor(
                 Timber.tag(TAG).d("   截止时间: ${finalDueDate.format(formatter)}")
                 Timber.tag(TAG).d("   通知策略ID: $notificationStrategyId")
                 Timber.tag(TAG).d("   重复频率: ${repeatFrequency.type}")
+                Timber.tag(TAG).d("   是否重复任务: $isRecurringTask")
 
                 val task = Task(
                     title = title.trim(),
@@ -110,7 +115,10 @@ class CreateTaskUseCase @Inject constructor(
                     imageUri = imageUri,
                     repeatFrequency = repeatFrequency,
                     notificationStrategyId = notificationStrategyId,
-                    importanceUrgency = importanceUrgency
+                    importanceUrgency = importanceUrgency,
+                    isTemplate = isRecurringTask, // 重复任务创建为模板
+                    templateTaskId = null,
+                    instanceDate = null
                 )
 
                 Timber.tag(TAG).d("正在保存任务到数据库...")
@@ -319,5 +327,150 @@ class GetEarliestTaskDateUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(): LocalDate? {
         return repository.getEarliestTaskDate()
+    }
+}
+
+/**
+ * 生成重复任务实例UseCase
+ *
+ * 根据模板任务的重复频率,为指定日期生成任务实例
+ */
+class GenerateRecurringTasksUseCase @Inject constructor(
+    private val repository: TaskRepository
+) {
+    companion object {
+        private const val TAG = "RecurringTask"
+    }
+
+    /**
+     * 为指定日期生成所有需要的重复任务实例
+     *
+     * @param targetDate 目标日期
+     * @return 生成的任务数量
+     */
+    suspend operator fun invoke(targetDate: LocalDate = LocalDate.now()): Result<Int> {
+        return try {
+            Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            Timber.tag(TAG).d("开始生成重复任务实例")
+            Timber.tag(TAG).d("目标日期: $targetDate")
+
+            // 1. 获取所有模板任务
+            val templates = repository.getTemplateTasks()
+            Timber.tag(TAG).d("找到 ${templates.size} 个模板任务")
+
+            var generatedCount = 0
+
+            // 2. 遍历每个模板任务
+            templates.forEach { template ->
+                Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                Timber.tag(TAG).d("处理模板任务: ${template.title}")
+                Timber.tag(TAG).d("  模板ID: ${template.id}")
+                Timber.tag(TAG).d("  重复类型: ${template.repeatFrequency.type}")
+
+                // 3. 检查是否需要为这个日期生成任务
+                if (shouldGenerateForDate(template, targetDate)) {
+                    Timber.tag(TAG).d("  ✅ 需要为 $targetDate 生成任务")
+
+                    // 4. 检查是否已经存在实例
+                    val instanceDate = targetDate.atStartOfDay()
+                    if (!repository.hasInstanceForDate(template.id, instanceDate)) {
+                        Timber.tag(TAG).d("  ✅ 该日期尚未生成实例,开始生成...")
+
+                        // 5. 从模板创建实例任务
+                        val instance = createInstanceFromTemplate(template, targetDate)
+                        repository.insertTask(instance)
+
+                        generatedCount++
+                        Timber.tag(TAG).d("  ✅ 实例任务创建成功")
+                        Timber.tag(TAG).d("    实例ID: ${instance.id}")
+                        Timber.tag(TAG).d("    实例日期: ${instance.instanceDate}")
+                    } else {
+                        Timber.tag(TAG).d("  ⏭️ 该日期已存在实例,跳过")
+                    }
+                } else {
+                    Timber.tag(TAG).d("  ⏭️ 不需要为 $targetDate 生成任务")
+                }
+            }
+
+            Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            Timber.tag(TAG).d("✅ 重复任务生成完成")
+            Timber.tag(TAG).d("  生成数量: $generatedCount")
+            Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+            Result.success(generatedCount)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "❌ 生成重复任务失败")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 判断是否应该为指定日期生成任务
+     */
+    private fun shouldGenerateForDate(template: Task, date: LocalDate): Boolean {
+        val repeatFreq = template.repeatFrequency
+
+        return when (repeatFreq.type) {
+            com.example.nextthingb1.domain.model.RepeatFrequencyType.NONE -> {
+                // 单次任务,不生成重复实例
+                false
+            }
+            com.example.nextthingb1.domain.model.RepeatFrequencyType.DAILY -> {
+                // 每日任务,总是生成
+                true
+            }
+            com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY -> {
+                // 每周任务,检查星期几
+                val dayOfWeek = date.dayOfWeek.value // 1=周一, 7=周日
+                repeatFreq.weekdays.contains(dayOfWeek)
+            }
+            com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY -> {
+                // 每月任务,检查日期
+                val dayOfMonth = date.dayOfMonth
+                val lengthOfMonth = date.lengthOfMonth() // 当月天数
+
+                // 直接匹配
+                if (repeatFreq.monthDays.contains(dayOfMonth)) {
+                    return true
+                }
+
+                // 处理月末日期: 如果用户选择的日期大于当月天数,在当月最后一天生成
+                // 例如: 用户选择31日,2月只有28/29天,则在2月最后一天生成
+                val isLastDayOfMonth = dayOfMonth == lengthOfMonth
+                if (isLastDayOfMonth) {
+                    // 检查是否有任何选择的日期大于当月天数
+                    val hasLargerDay = repeatFreq.monthDays.any { it > lengthOfMonth }
+                    return hasLargerDay
+                }
+
+                false
+            }
+        }
+    }
+
+    /**
+     * 从模板创建任务实例
+     */
+    private fun createInstanceFromTemplate(template: Task, date: LocalDate): Task {
+        // 计算实例的截止时间
+        val instanceDueDate = if (template.dueDate != null) {
+            // 如果模板有截止时间,使用相同的时分秒
+            date.atTime(template.dueDate.toLocalTime())
+        } else {
+            // 否则默认为当天23:59
+            date.atTime(23, 59, 59)
+        }
+
+        return template.copy(
+            id = java.util.UUID.randomUUID().toString(), // 新ID
+            isTemplate = false, // 不是模板
+            templateTaskId = template.id, // 指向模板
+            instanceDate = date.atStartOfDay(), // 实例日期
+            dueDate = instanceDueDate, // 实例的截止时间
+            status = TaskStatus.PENDING, // 初始状态为待办
+            completedAt = null, // 未完成
+            createdAt = LocalDateTime.now(), // 创建时间
+            updatedAt = LocalDateTime.now() // 更新时间
+        )
     }
 } 

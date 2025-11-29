@@ -79,6 +79,15 @@ class NextThingApplication : Application(), Configuration.Provider {
             Timber.e(e, "❌ [Application] 倒计时更新 TaskWorkScheduler 初始化失败")
         }
 
+        // 重复任务生成调度
+        try {
+            TaskWorkScheduler.scheduleRecurringTaskGeneration(this)
+            TaskWorkScheduler.triggerImmediateRecurringTaskGeneration(this)
+            Timber.d("✅ [Application] 重复任务生成 TaskWorkScheduler 初始化成功")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ [Application] 重复任务生成 TaskWorkScheduler 初始化失败")
+        }
+
         Timber.d("🎉 [Application] NextThingApplication 初始化完成")
     }
 

@@ -57,12 +57,39 @@ class TodayViewModel @Inject constructor(
     val uiState: StateFlow<TodayUiState> = _uiState.asStateFlow()
 
     init {
+        // 生成今日重复任务实例
+        generateTodayRecurringTasks()
         loadTodayTasks()
         checkLocationPermissionAndStatus()
         // 先从数据库加载缓存位置
         loadCachedLocationFromDatabase()
         // 自动开始获取位置
         autoStartLocationUpdate()
+    }
+
+    /**
+     * 生成今日重复任务实例
+     */
+    private fun generateTodayRecurringTasks() {
+        viewModelScope.launch {
+            try {
+                Timber.tag("RecurringTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                Timber.tag("RecurringTask").d("【TodayViewModel】开始生成今日重复任务")
+
+                taskUseCases.generateRecurringTasks(java.time.LocalDate.now()).fold(
+                    onSuccess = { count ->
+                        Timber.tag("RecurringTask").d("✅ 成功生成 $count 个重复任务实例")
+                        Timber.tag("RecurringTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    },
+                    onFailure = { error ->
+                        Timber.tag("RecurringTask").e("❌ 生成重复任务失败: ${error.message}")
+                        Timber.tag("RecurringTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    }
+                )
+            } catch (e: Exception) {
+                Timber.tag("RecurringTask").e(e, "💥 生成重复任务异常")
+            }
+        }
     }
 
     // 位置缓存
