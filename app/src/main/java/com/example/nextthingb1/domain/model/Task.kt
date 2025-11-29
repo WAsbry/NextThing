@@ -22,7 +22,10 @@ data class Task(
     val repeatFrequency: RepeatFrequency = RepeatFrequency(), // 重复频次
     val locationInfo: LocationInfo? = null, // 地理位置信息
     val importanceUrgency: TaskImportanceUrgency? = null, // 重要程度
-    val notificationStrategyId: String? = null // 通知策略ID
+    val notificationStrategyId: String? = null, // 通知策略ID
+    val isTemplate: Boolean = false, // 是否为模板任务（用于重复任务）
+    val templateTaskId: String? = null, // 如果是实例任务，指向模板任务的ID
+    val instanceDate: LocalDateTime? = null // 如果是实例任务，对应的日期
 )
 
 data class Subtask(

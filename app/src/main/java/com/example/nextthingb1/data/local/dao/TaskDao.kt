@@ -32,6 +32,7 @@ interface TaskDao {
     @Query("""
         SELECT * FROM tasks
         WHERE date(dueDate) = date('now', 'localtime')
+        AND isTemplate = 0
         ORDER BY dueDate ASC
     """)
     fun getTodayTasks(): Flow<List<TaskWithCategory>>
@@ -124,6 +125,26 @@ interface TaskDao {
         ORDER BY createdAt ASC
     """)
     suspend fun getTasksInWeek(weekStart: LocalDateTime, weekEnd: LocalDateTime): List<TaskEntity>
+
+    // ========== 重复任务相关查询 ==========
+
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE isTemplate = 1")
+    suspend fun getTemplateTasks(): List<TaskWithCategory>
+
+    @Transaction
+    @Query("""
+        SELECT * FROM tasks
+        WHERE templateTaskId = :templateId AND date(instanceDate) = date(:date)
+        LIMIT 1
+    """)
+    suspend fun getTaskInstance(templateId: String, date: LocalDateTime): TaskWithCategory?
+
+    @Query("""
+        SELECT COUNT(*) FROM tasks
+        WHERE templateTaskId = :templateId AND date(instanceDate) = date(:date)
+    """)
+    suspend fun hasInstanceForDate(templateId: String, date: LocalDateTime): Boolean
 }
 
 /**

@@ -20,6 +20,7 @@ object TaskWorkScheduler {
     private const val DELAYED_CONVERT_WORK_NAME = "convert_delayed_tasks"
     private const val TASK_NOTIFICATION_WORK_NAME = "task_notifications"
     private const val COUNTDOWN_UPDATE_WORK_NAME = "countdown_notifications"
+    private const val RECURRING_TASKS_WORK_NAME = "generate_recurring_tasks"
 
     /**
      * Schedule daily overdue task check.
@@ -202,6 +203,62 @@ object TaskWorkScheduler {
     }
 
     /**
+     * Schedule daily recurring task generation.
+     *
+     * This schedules a periodic worker that runs once per day at 00:00:00
+     * to generate recurring task instances for the current day.
+     *
+     * @param context Application context
+     */
+    fun scheduleRecurringTaskGeneration(context: Context) {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(false)
+            .build()
+
+        // Calculate initial delay to run at 00:00:00 AM
+        val initialDelay = calculateInitialDelay(targetHour = 0, targetMinute = 0)
+
+        val recurringTasksRequest = PeriodicWorkRequestBuilder<GenerateRecurringTasksWorker>(
+            repeatInterval = 1,
+            repeatIntervalTimeUnit = TimeUnit.DAYS
+        )
+            .setConstraints(constraints)
+            .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                WorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS
+            )
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            RECURRING_TASKS_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            recurringTasksRequest
+        )
+
+        Timber.i("Scheduled recurring task generation to run daily at 00:00:00 (initial delay: ${initialDelay}ms)")
+    }
+
+    /**
+     * Trigger an immediate recurring task generation (useful for app startup).
+     *
+     * @param context Application context
+     */
+    fun triggerImmediateRecurringTaskGeneration(context: Context) {
+        val recurringTasksRequest = OneTimeWorkRequestBuilder<GenerateRecurringTasksWorker>()
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "${RECURRING_TASKS_WORK_NAME}_immediate",
+            ExistingWorkPolicy.REPLACE,
+            recurringTasksRequest
+        )
+
+        Timber.d("Triggered immediate recurring task generation")
+    }
+
+    /**
      * Cancel all scheduled task work.
      *
      * @param context Application context
@@ -211,6 +268,7 @@ object TaskWorkScheduler {
         WorkManager.getInstance(context).cancelUniqueWork(DELAYED_CONVERT_WORK_NAME)
         WorkManager.getInstance(context).cancelUniqueWork(TASK_NOTIFICATION_WORK_NAME)
         WorkManager.getInstance(context).cancelUniqueWork(COUNTDOWN_UPDATE_WORK_NAME)
+        WorkManager.getInstance(context).cancelUniqueWork(RECURRING_TASKS_WORK_NAME)
         Timber.i("Cancelled all task work")
     }
 
