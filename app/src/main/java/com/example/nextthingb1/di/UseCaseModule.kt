@@ -35,6 +35,7 @@ object UseCaseModule {
             getTasksByCategory = GetTasksByCategoryUseCase(repository),
             getUrgentTasks = GetUrgentTasksUseCase(repository),
             getEarliestTaskDate = GetEarliestTaskDateUseCase(repository),
+            generateRecurringTasks = GenerateRecurringTasksUseCase(repository),
             locationRepository = locationRepository
         )
     }

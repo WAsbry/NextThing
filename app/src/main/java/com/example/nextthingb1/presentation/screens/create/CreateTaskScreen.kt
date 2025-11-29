@@ -2111,6 +2111,13 @@ internal fun RepeatFrequencyConfigCard(
     var selectedMonthDays by remember { mutableStateOf(repeatFrequency.monthDays) }
     var selectedType by remember { mutableStateOf(repeatFrequency.type) }
 
+    // 同步外部传入的repeatFrequency到本地状态
+    LaunchedEffect(repeatFrequency) {
+        selectedWeekdays = repeatFrequency.weekdays
+        selectedMonthDays = repeatFrequency.monthDays
+        selectedType = repeatFrequency.type
+    }
+
     Column(modifier = modifier) {
         // 主卡片
         Card(
@@ -2290,11 +2297,16 @@ internal fun RepeatFrequencyConfigCard(
 
                         Button(
                             onClick = {
-                                if ((selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY && selectedWeekdays.isEmpty()) ||
-                                    (selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY && selectedMonthDays.isEmpty())) {
-                                    // TODO: 显示错误提示
-                                } else {
-                                    onExpandToggle()
+                                when {
+                                    selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.WEEKLY && selectedWeekdays.isEmpty() -> {
+                                        ToastHelper.showDebouncedToast(context, "请至少选择一个星期")
+                                    }
+                                    selectedType == com.example.nextthingb1.domain.model.RepeatFrequencyType.MONTHLY && selectedMonthDays.isEmpty() -> {
+                                        ToastHelper.showDebouncedToast(context, "请至少选择一个日期")
+                                    }
+                                    else -> {
+                                        onExpandToggle()
+                                    }
                                 }
                             },
                             modifier = Modifier
