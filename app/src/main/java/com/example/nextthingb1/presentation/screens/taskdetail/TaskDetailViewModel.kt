@@ -17,10 +17,13 @@ import com.example.nextthingb1.domain.repository.NotificationStrategyRepository
 import com.example.nextthingb1.domain.service.CategoryPreferencesManager
 import com.example.nextthingb1.domain.usecase.LocationUseCases
 import com.example.nextthingb1.domain.model.NotificationStrategy
+import com.example.nextthingb1.domain.model.TaskGeofence
+import com.example.nextthingb1.domain.usecase.GeofenceUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.LocalDate
@@ -29,6 +32,7 @@ import javax.inject.Inject
 
 data class TaskDetailUiState(
     val task: Task? = null,
+    val taskGeofence: TaskGeofence? = null, // 任务的地理围栏信息
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val isEditMode: Boolean = false,
@@ -76,7 +80,8 @@ class TaskDetailViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val categoryPreferencesManager: CategoryPreferencesManager,
     private val locationUseCases: LocationUseCases,
-    private val notificationStrategyRepository: NotificationStrategyRepository
+    private val notificationStrategyRepository: NotificationStrategyRepository,
+    private val geofenceUseCases: GeofenceUseCases
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TaskDetailUiState())
@@ -185,8 +190,20 @@ class TaskDetailViewModel @Inject constructor(
                         Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     }
 
+                    // 加载任务的地理围栏信息
+                    var taskGeofence: TaskGeofence? = null
+                    if (task != null) {
+                        try {
+                            taskGeofence = geofenceUseCases.getTaskGeofence.invoke(taskId).first()
+                            Timber.tag("TaskGeofence").d("📍 任务地理围栏: ${taskGeofence?.let { "已启用 - ${it.geofenceLocation.locationInfo.locationName}" } ?: "未启用"}")
+                        } catch (e: Exception) {
+                            Timber.tag("TaskGeofence").e(e, "加载任务地理围栏失败")
+                        }
+                    }
+
                     _uiState.value = _uiState.value.copy(
                         task = task,
+                        taskGeofence = taskGeofence,
                         isLoading = false,
                         errorMessage = if (task == null) "任务不存在" else null
                     )

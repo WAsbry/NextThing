@@ -13,7 +13,7 @@ interface TaskDao {
     // ========== 联表查询方法（推荐使用） ==========
 
     @Transaction
-    @Query("SELECT * FROM tasks ORDER BY createdAt DESC")
+    @Query("SELECT * FROM tasks WHERE isTemplate = 0 ORDER BY createdAt DESC")
     fun getAllTasks(): Flow<List<TaskWithCategory>>
 
     @Transaction
@@ -21,11 +21,11 @@ interface TaskDao {
     suspend fun getTaskById(taskId: String): TaskWithCategory?
 
     @Transaction
-    @Query("SELECT * FROM tasks WHERE status = :status ORDER BY createdAt DESC")
+    @Query("SELECT * FROM tasks WHERE status = :status AND isTemplate = 0 ORDER BY createdAt DESC")
     fun getTasksByStatus(status: TaskStatus): Flow<List<TaskWithCategory>>
 
     @Transaction
-    @Query("SELECT * FROM tasks WHERE categoryId = :categoryId ORDER BY createdAt DESC")
+    @Query("SELECT * FROM tasks WHERE categoryId = :categoryId AND isTemplate = 0 ORDER BY createdAt DESC")
     fun getTasksByCategoryId(categoryId: String): Flow<List<TaskWithCategory>>
 
     @Transaction
@@ -40,19 +40,19 @@ interface TaskDao {
     @Transaction
     @Query("""
         SELECT * FROM tasks
-        WHERE dueDate < :currentTime AND status != 'COMPLETED'
+        WHERE dueDate < :currentTime AND status != 'COMPLETED' AND isTemplate = 0
         ORDER BY dueDate ASC
     """)
     fun getOverdueTasks(currentTime: LocalDateTime = LocalDateTime.now()): Flow<List<TaskWithCategory>>
 
     @Transaction
-    @Query("SELECT * FROM tasks WHERE isUrgent = 1 AND status != 'COMPLETED' ORDER BY dueDate ASC")
+    @Query("SELECT * FROM tasks WHERE isUrgent = 1 AND status != 'COMPLETED' AND isTemplate = 0 ORDER BY dueDate ASC")
     fun getUrgentTasks(): Flow<List<TaskWithCategory>>
 
     @Transaction
     @Query("""
         SELECT * FROM tasks
-        WHERE createdAt BETWEEN :startDate AND :endDate
+        WHERE createdAt BETWEEN :startDate AND :endDate AND isTemplate = 0
         ORDER BY createdAt DESC
     """)
     fun getTasksByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<TaskWithCategory>>
@@ -60,7 +60,7 @@ interface TaskDao {
     @Transaction
     @Query("""
         SELECT * FROM tasks
-        WHERE title LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%'
+        WHERE (title LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%') AND isTemplate = 0
         ORDER BY createdAt DESC
     """)
     fun searchTasks(query: String): Flow<List<TaskWithCategory>>
@@ -90,21 +90,22 @@ interface TaskDao {
     suspend fun bulkUpdateTaskCategory(taskIds: List<String>, categoryId: String)
     
     // 统计查询
-    @Query("SELECT COUNT(*) FROM tasks")
+    @Query("SELECT COUNT(*) FROM tasks WHERE isTemplate = 0")
     suspend fun getTotalTasksCount(): Int
-    
-    @Query("SELECT COUNT(*) FROM tasks WHERE status = 'COMPLETED'")
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE status = 'COMPLETED' AND isTemplate = 0")
     suspend fun getCompletedTasksCount(): Int
-    
-    @Query("SELECT COUNT(*) FROM tasks WHERE status = 'PENDING'")
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE status = 'PENDING' AND isTemplate = 0")
     suspend fun getPendingTasksCount(): Int
-    
-    @Query("SELECT COUNT(*) FROM tasks WHERE status = 'OVERDUE'")
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE status = 'OVERDUE' AND isTemplate = 0")
     suspend fun getOverdueTasksCount(): Int
     
     @Query("""
         SELECT categoryId, COUNT(*) as count
         FROM tasks
+        WHERE isTemplate = 0
         GROUP BY categoryId
     """)
     suspend fun getCategoryTaskCounts(): List<CategoryTaskCount>
@@ -112,16 +113,16 @@ interface TaskDao {
     @Query("""
         SELECT AVG(actualDuration)
         FROM tasks
-        WHERE status = 'COMPLETED' AND actualDuration > 0
+        WHERE status = 'COMPLETED' AND actualDuration > 0 AND isTemplate = 0
     """)
     suspend fun getAverageCompletionTime(): Double?
 
-    @Query("SELECT MIN(createdAt) FROM tasks")
+    @Query("SELECT MIN(createdAt) FROM tasks WHERE isTemplate = 0")
     suspend fun getEarliestTaskDate(): LocalDateTime?
 
     @Query("""
         SELECT * FROM tasks
-        WHERE createdAt >= :weekStart AND createdAt <= :weekEnd
+        WHERE createdAt >= :weekStart AND createdAt <= :weekEnd AND isTemplate = 0
         ORDER BY createdAt ASC
     """)
     suspend fun getTasksInWeek(weekStart: LocalDateTime, weekEnd: LocalDateTime): List<TaskEntity>

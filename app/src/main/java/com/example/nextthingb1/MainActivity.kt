@@ -90,6 +90,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// 我注意到，此页面同样存在，顶部没有贴紧屏幕顶部的问题，需要你进行解决这个问题
+
 @Composable
 fun NextThingApp(
     userUseCases: UserUseCases,

@@ -15,7 +15,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -463,5 +462,60 @@ class LocationServiceImpl @Inject constructor(
         Timber.d("💾 [LocationService] 更新位置缓存: ${locationInfo.locationName}")
         cachedLocation = locationInfo
         lastLocationUpdateTime = System.currentTimeMillis()
+    }
+
+    // ========== 服务状态检测 ==========
+
+    override suspend fun isServiceAvailable(): Boolean {
+        return try {
+            if (!hasLocationPermission()) {
+                Timber.d("服务不可用: 缺少位置权限")
+                return false
+            }
+            if (!isLocationEnabled()) {
+                Timber.d("服务不可用: 位置服务未启用")
+                return false
+            }
+            // Google服务通常都可用（除非没有GMS）
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "检查服务可用性失败")
+            false
+        }
+    }
+
+    override suspend fun getServiceStatus(): com.example.nextthingb1.domain.service.LocationServiceStatus {
+        val hasPermission = hasLocationPermission()
+        val isEnabled = isLocationEnabled()
+
+        return com.example.nextthingb1.domain.service.LocationServiceStatus(
+            isAvailable = hasPermission && isEnabled,
+            amapInitialized = false, // Google服务不使用高德地图
+            hasPermission = hasPermission,
+            isLocationEnabled = isEnabled,
+            lastErrorMessage = when {
+                !hasPermission -> "缺少位置权限"
+                !isEnabled -> "位置服务未启用"
+                else -> null
+            }
+        )
+    }
+
+    override fun getLocationSource(locationType: Int): com.example.nextthingb1.domain.service.LocationSource {
+        // Google Play Services的FusedLocationProvider会自动选择最佳来源
+        // 我们无法直接获取具体来源，返回UNKNOWN
+        // 如果需要更详细的来源信息，需要使用LocationManager
+        return com.example.nextthingb1.domain.service.LocationSource.UNKNOWN
+    }
+
+    override fun getAccuracyLevel(accuracy: Float?): com.example.nextthingb1.domain.service.AccuracyLevel {
+        return when {
+            accuracy == null -> com.example.nextthingb1.domain.service.AccuracyLevel.UNAVAILABLE
+            accuracy < 10f -> com.example.nextthingb1.domain.service.AccuracyLevel.EXCELLENT
+            accuracy < 50f -> com.example.nextthingb1.domain.service.AccuracyLevel.GOOD
+            accuracy < 100f -> com.example.nextthingb1.domain.service.AccuracyLevel.FAIR
+            accuracy < 500f -> com.example.nextthingb1.domain.service.AccuracyLevel.POOR
+            else -> com.example.nextthingb1.domain.service.AccuracyLevel.UNAVAILABLE
+        }
     }
 } 

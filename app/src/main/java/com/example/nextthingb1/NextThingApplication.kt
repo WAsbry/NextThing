@@ -4,10 +4,17 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.example.nextthingb1.domain.repository.TaskRepository
+import com.example.nextthingb1.domain.usecase.GeofenceUseCases
+import com.example.nextthingb1.domain.service.GeofenceManager
+import com.example.nextthingb1.domain.service.GeofenceData
 import com.example.nextthingb1.util.SyncScheduler
 import com.example.nextthingb1.work.TaskWorkScheduler
 
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -16,6 +23,11 @@ class NextThingApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var taskRepository: TaskRepository
+    @Inject lateinit var geofenceUseCases: GeofenceUseCases
+    @Inject lateinit var geofenceManager: GeofenceManager
+
+    // 应用级协程作用域
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
@@ -88,7 +100,74 @@ class NextThingApplication : Application(), Configuration.Provider {
             Timber.e(e, "❌ [Application] 重复任务生成 TaskWorkScheduler 初始化失败")
         }
 
+        // 地理围栏初始化
+        try {
+            initializeGeofences()
+            Timber.d("✅ [Application] 地理围栏初始化开始")
+        } catch (e: Exception) {
+            Timber.e(e, "❌ [Application] 地理围栏初始化失败")
+        }
+
         Timber.d("🎉 [Application] NextThingApplication 初始化完成")
+    }
+
+    /**
+     * 初始化地理围栏
+     * 在应用启动时注册所有已保存的地理围栏到系统
+     */
+    private fun initializeGeofences() {
+        applicationScope.launch {
+            try {
+                Timber.d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                Timber.d("🌍 [Geofence] 开始初始化地理围栏...")
+
+                // 检查位置权限
+                if (!geofenceManager.hasLocationPermission()) {
+                    Timber.w("⚠️ [Geofence] 缺少位置权限，跳过地理围栏初始化")
+                    return@launch
+                }
+
+                // 获取所有地理围栏地点
+                val geofenceLocations = geofenceUseCases.getGeofenceLocations.getAllOnce()
+
+                if (geofenceLocations.isEmpty()) {
+                    Timber.d("ℹ️ [Geofence] 没有需要注册的地理围栏")
+                    Timber.d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    return@launch
+                }
+
+                Timber.d("📍 [Geofence] 找到 ${geofenceLocations.size} 个地理围栏地点")
+
+                // 获取默认配置
+                val config = geofenceUseCases.getGeofenceConfig.getOrDefault()
+
+                // 构建地理围栏数据列表
+                val geofenceDataList = geofenceLocations.map { location ->
+                    val radius = (location.customRadius ?: config.defaultRadius).toFloat()
+                    GeofenceData(
+                        locationId = location.locationInfo.id,
+                        latitude = location.locationInfo.latitude,
+                        longitude = location.locationInfo.longitude,
+                        radius = radius
+                    )
+                }
+
+                // 批量注册地理围栏
+                val result = geofenceManager.registerGeofences(geofenceDataList)
+
+                if (result.isSuccess) {
+                    val count = result.getOrNull() ?: 0
+                    Timber.d("✅ [Geofence] 成功注册 $count 个系统地理围栏")
+                } else {
+                    Timber.e("❌ [Geofence] 地理围栏注册失败: ${result.exceptionOrNull()?.message}")
+                }
+
+                Timber.d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ [Geofence] 地理围栏初始化异常")
+                Timber.d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            }
+        }
     }
 
     override fun onTerminate() {

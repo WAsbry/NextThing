@@ -45,6 +45,10 @@ import com.example.nextthingb1.presentation.screens.taskdetail.TaskDetailScreen
 import com.example.nextthingb1.presentation.screens.taskdetail.TaskDetailViewModel
 import com.example.nextthingb1.presentation.screens.userinfo.UserInfoScreen
 import com.example.nextthingb1.presentation.screens.login.LoginScreen
+import com.example.nextthingb1.presentation.screens.geofence.config.GeofenceConfigScreen
+import com.example.nextthingb1.presentation.screens.geofence.detail.GeofenceLocationDetailScreen
+import com.example.nextthingb1.presentation.screens.geofence.add.AddGeofenceLocationScreen
+import com.example.nextthingb1.presentation.screens.mappicker.MapPickerScreen
 import com.example.nextthingb1.presentation.components.BottomNavigationBar
 import androidx.compose.runtime.LaunchedEffect
 import com.example.nextthingb1.domain.usecase.UserUseCases
@@ -152,15 +156,73 @@ fun NextThingNavigation(
                     },
                     onNavigateToCreateNotificationStrategy = {
                         navController.navigate(Screen.CreateNotificationStrategy.route)
+                    },
+                    onNavigateToGeofenceAdd = {
+                        navController.navigate("geofence_location_add")
                     }
                 )
             }
 
             composable(Screen.CreateLocation.route) {
                 val viewModel: CreateLocationViewModel = hiltViewModel()
+
+                // 监听从地图选择返回的数据
+                val savedStateHandle = it.savedStateHandle
+                LaunchedEffect(Unit) {
+                    // 检查是否有从地图选择返回的数据
+                    savedStateHandle.get<Double>("selected_latitude")?.let { lat ->
+                        savedStateHandle.get<Double>("selected_longitude")?.let { lng ->
+                            val address = savedStateHandle.get<String>("selected_address") ?: ""
+
+                            // 更新ViewModel
+                            viewModel.updateFromMapPicker(
+                                latitude = lat,
+                                longitude = lng,
+                                address = address
+                            )
+
+                            // 清除数据，避免重复处理
+                            savedStateHandle.remove<Double>("selected_latitude")
+                            savedStateHandle.remove<Double>("selected_longitude")
+                            savedStateHandle.remove<String>("selected_address")
+                        }
+                    }
+                }
+
                 CreateLocationScreen(
                     viewModel = viewModel,
                     onBackPressed = {
+                        navController.popBackStack()
+                    },
+                    onNavigateToMapPicker = {
+                        navController.navigate("map_picker")
+                    }
+                )
+            }
+
+            composable("map_picker") { backStackEntry ->
+                // 从导航参数中获取初始位置（如果有的话）
+                val initialLat = navController.previousBackStackEntry?.savedStateHandle?.get<Double>("initial_latitude")
+                val initialLng = navController.previousBackStackEntry?.savedStateHandle?.get<Double>("initial_longitude")
+
+                // 如果有初始位置，设置到当前页面的 savedStateHandle 供 ViewModel 读取
+                if (initialLat != null && initialLng != null) {
+                    backStackEntry.savedStateHandle["initial_latitude"] = initialLat
+                    backStackEntry.savedStateHandle["initial_longitude"] = initialLng
+                    // 清除 previous 的数据
+                    navController.previousBackStackEntry?.savedStateHandle?.remove<Double>("initial_latitude")
+                    navController.previousBackStackEntry?.savedStateHandle?.remove<Double>("initial_longitude")
+                }
+
+                MapPickerScreen(
+                    onBackPressed = {
+                        navController.popBackStack()
+                    },
+                    onLocationSelected = { latitude, longitude, address ->
+                        // 将选择的位置数据传回CreateLocationScreen
+                        navController.previousBackStackEntry?.savedStateHandle?.set("selected_latitude", latitude)
+                        navController.previousBackStackEntry?.savedStateHandle?.set("selected_longitude", longitude)
+                        navController.previousBackStackEntry?.savedStateHandle?.set("selected_address", address)
                         navController.popBackStack()
                     }
                 )
@@ -187,7 +249,30 @@ fun NextThingNavigation(
                     viewModel = viewModel,
                     onNavigateToUserInfo = {
                         navController.navigate(Screen.UserInfo.route)
+                    },
+                    onNavigateToGeofence = {
+                        navController.navigate("geofence_config")
                     }
+                )
+            }
+
+            composable("geofence_config") {
+                GeofenceConfigScreen(navController = navController)
+            }
+
+            composable("geofence_location_detail/{locationId}") { backStackEntry ->
+                val locationId = backStackEntry.arguments?.getString("locationId") ?: ""
+                GeofenceLocationDetailScreen(navController = navController)
+            }
+
+            composable("geofence_location_add") {
+                AddGeofenceLocationScreen(navController = navController)
+            }
+
+            composable("geofence_related_tasks/{locationId}") { backStackEntry ->
+                val locationId = backStackEntry.arguments?.getString("locationId") ?: ""
+                com.example.nextthingb1.presentation.screens.geofence.relatedtasks.RelatedTasksScreen(
+                    navController = navController
                 )
             }
 
@@ -219,7 +304,8 @@ fun NextThingNavigation(
                         navController.popBackStack()
                     },
                     onEditTask = {
-                        // TODO: 导航到编辑任务页面
+                        // 暂不支持编辑,可以在详情页直接编辑各个字段
+                        // 如需独立编辑页面,可导航到 "edit_task/$taskId"
                     }
                 )
             }

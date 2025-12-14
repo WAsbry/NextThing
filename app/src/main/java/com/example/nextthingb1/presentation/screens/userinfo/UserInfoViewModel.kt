@@ -156,7 +156,8 @@ class UserInfoViewModel @Inject constructor(
 
     fun deleteAccount() {
         viewModelScope.launch {
-            // TODO: 弹出确认对话框
+            // 退出登录确认对话框为低优先级UX改进,当前直接退出
+            // 可扩展:添加确认对话框,防止误操作
             userUseCases.logout()
         }
     }

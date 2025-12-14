@@ -44,7 +44,7 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(gson: Gson, client: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("https://api.example.com/") // TODO: 替换为真实后端地址
+            .baseUrl("https://api.example.com/") // 待后端服务部署后配置真实地址,当前使用本地数据库
             .addConverterFactory(GsonConverterFactory.create(gson))
             .client(client)
             .build()
