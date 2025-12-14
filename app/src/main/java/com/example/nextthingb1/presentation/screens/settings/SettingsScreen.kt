@@ -27,7 +27,8 @@ import com.example.nextthingb1.presentation.theme.*
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
-    onNavigateToUserInfo: () -> Unit = {}
+    onNavigateToUserInfo: () -> Unit = {},
+    onNavigateToGeofence: () -> Unit = {}
 ) {
     val uiState: SettingsUiState by viewModel.uiState.collectAsState()
 
@@ -51,7 +52,13 @@ fun SettingsScreen(
             SettingsSection(
                 section = section,
                 uiState = uiState,
-                onSettingClick = { setting -> viewModel.onSettingClick(setting) }
+                onSettingClick = { setting ->
+                    if (setting.id == "geofence") {
+                        onNavigateToGeofence()
+                    } else {
+                        viewModel.onSettingClick(setting)
+                    }
+                }
             )
         }
     }
