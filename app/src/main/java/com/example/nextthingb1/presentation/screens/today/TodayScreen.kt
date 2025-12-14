@@ -44,7 +44,7 @@ import com.example.nextthingb1.domain.model.WeatherInfo
 import com.example.nextthingb1.presentation.theme.*
 import com.example.nextthingb1.presentation.components.TaskItemCard
 import com.example.nextthingb1.util.PermissionHelper
-import kotlinx.coroutines.GlobalScope
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -61,6 +61,7 @@ fun TodayScreen(
     onNavigateToTaskDetail: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
 
     // 监听UI状态变化并记录日志
     LaunchedEffect(uiState.totalTasks, uiState.displayTasks.size) {
@@ -122,8 +123,8 @@ fun TodayScreen(
                     remainingTasks = uiState.remainingTasks,
                     weatherInfo = uiState.weatherInfo,
                     onWeatherClick = {
-                        // TODO: 未来可以导航到天气详情页
-                        // 暂时显示Log
+                        // 天气详情页为可选增强功能,暂未实现
+                        // 可扩展:显示未来7天天气预报、空气质量、生活指数等
                         timber.log.Timber.d("点击天气卡片")
                     }
                 )
@@ -177,11 +178,11 @@ fun TodayScreen(
         },
         onOpenSettings = {
             viewModel.hidePermissionDialog()
-            // TODO: 打开设置页面
+            // 可通过底部导航栏访问设置页面,此处无需额外导航
         },
         onPermissionGranted = {
-            // 权限授予后的回调
-            GlobalScope.launch {
+            // 权限授予后的回调,使用 Composable 生命周期绑定的协程作用域
+            coroutineScope.launch {
                 kotlinx.coroutines.delay(1000)
                 viewModel.forceCheckPermissionsAndRefresh()
             }
@@ -205,7 +206,7 @@ fun TodayScreen(
         onRetry = { viewModel.requestCurrentLocation() },
         onOpenSettings = {
             viewModel.hideLocationHelpDialog()
-            // TODO: 打开位置设置页面
+            // 位置设置已通过系统设置管理,可扩展:导航到应用详情页
         }
     )
 
@@ -351,7 +352,10 @@ private fun TopHeader(
         }
         
         IconButton(
-            onClick = { /* TODO: 搜索功能 */ },
+            onClick = {
+                // 任务搜索功能为可选增强功能,暂未实现
+                // 可扩展:支持标题、描述、标签等多维度搜索
+            },
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)

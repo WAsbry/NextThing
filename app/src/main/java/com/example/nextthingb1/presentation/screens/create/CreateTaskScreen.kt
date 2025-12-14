@@ -96,12 +96,15 @@ fun CreateTaskScreen(
     onBackPressed: () -> Unit,
     onNavigateToCreateLocation: () -> Unit,
     onNavigateToCreateNotificationStrategy: () -> Unit,
+    onNavigateToGeofenceAdd: () -> Unit = {},
+    onNavigateToGeofenceSettings: () -> Unit = {},
     viewModel: CreateTaskViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val savedLocations by viewModel.savedLocations.collectAsState()
     val showCreateCategoryDialog by viewModel.showCreateCategoryDialog.collectAsState()
+    val availableGeofenceLocations by viewModel.availableGeofenceLocations.collectAsState()
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
@@ -109,6 +112,7 @@ fun CreateTaskScreen(
     // 折叠状态管理 - 使用单一状态追踪当前展开的卡片
     var expandedCard by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
+    var isGeofenceExpanded by remember { mutableStateOf(false) }
 
     // 日期选择状态
     var showDatePicker by remember { mutableStateOf(false) }
@@ -185,6 +189,26 @@ fun CreateTaskScreen(
             onRepeatWeekdaysChange = { viewModel.updateRepeatWeekdays(it) },
             onRepeatMonthDaysChange = { viewModel.updateRepeatMonthDays(it) }
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 地理围栏配置区
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            TaskGeofenceCard(
+                geofenceEnabled = uiState.geofenceEnabled,
+                onGeofenceEnabledChange = { viewModel.updateGeofenceEnabled(it) },
+                availableLocations = availableGeofenceLocations,
+                selectedLocationId = uiState.selectedGeofenceLocationId,
+                onLocationSelected = { viewModel.updateSelectedGeofenceLocation(it) },
+                onNavigateToAddLocation = onNavigateToGeofenceAdd,
+                onNavigateToGeofenceSettings = onNavigateToGeofenceSettings,
+                isEditMode = true
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -355,7 +379,10 @@ private fun CoreInputSection(
                         color = Color(0xFF2196F3),
                         fontSize = 14.sp,
                         modifier = Modifier
-                            .clickable { /* TODO: AI 分析 */ }
+                            .clickable {
+                                // AI 智能分析功能计划中,需要集成 LLM API
+                                // 功能设计:自动解析任务描述,提取时间、地点、优先级等信息
+                            }
                             .padding(4.dp)
                     )
                 }

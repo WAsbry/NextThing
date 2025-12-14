@@ -3,6 +3,9 @@ package com.example.nextthingb1.di
 import com.example.nextthingb1.domain.repository.TaskRepository
 import com.example.nextthingb1.domain.repository.LocationRepository
 import com.example.nextthingb1.domain.repository.UserRepository
+import com.example.nextthingb1.domain.repository.GeofenceConfigRepository
+import com.example.nextthingb1.domain.repository.GeofenceLocationRepository
+import com.example.nextthingb1.domain.repository.TaskGeofenceRepository
 import com.example.nextthingb1.domain.usecase.*
 import dagger.Module
 import dagger.Provides
@@ -59,6 +62,30 @@ object UseCaseModule {
             updateWechatId = UpdateWechatIdUseCase(repository),
             updateQqId = UpdateQqIdUseCase(repository),
             logout = LogoutUseCase(repository)
+        )
+    }
+
+    @Provides
+    @Singleton
+    fun provideGeofenceUseCases(
+        configRepository: GeofenceConfigRepository,
+        locationRepository: GeofenceLocationRepository,
+        taskGeofenceRepository: TaskGeofenceRepository,
+        geofenceManager: com.example.nextthingb1.domain.service.GeofenceManager
+    ): GeofenceUseCases {
+        return GeofenceUseCases(
+            getGeofenceConfig = GetGeofenceConfigUseCase(configRepository),
+            updateGeofenceConfig = UpdateGeofenceConfigUseCase(configRepository),
+            getGeofenceLocations = GetGeofenceLocationsUseCase(locationRepository),
+            createGeofenceLocation = CreateGeofenceLocationUseCase(locationRepository, geofenceManager, configRepository),
+            updateGeofenceLocation = UpdateGeofenceLocationUseCase(locationRepository, geofenceManager, configRepository),
+            deleteGeofenceLocation = DeleteGeofenceLocationUseCase(locationRepository, taskGeofenceRepository, geofenceManager),
+            getTaskGeofence = GetTaskGeofenceUseCase(taskGeofenceRepository),
+            createTaskGeofence = CreateTaskGeofenceUseCase(taskGeofenceRepository, locationRepository),
+            updateFrequentLocations = UpdateFrequentLocationsUseCase(locationRepository),
+            updateLocationUsage = com.example.nextthingb1.domain.usecase.geofence.UpdateGeofenceLocationUsageUseCase(locationRepository),
+            updateTaskGeofenceCheckResult = com.example.nextthingb1.domain.usecase.geofence.UpdateTaskGeofenceCheckResultUseCase(taskGeofenceRepository),
+            updateLocationCheckStatistics = com.example.nextthingb1.domain.usecase.geofence.UpdateLocationCheckStatisticsUseCase(locationRepository)
         )
     }
 } 

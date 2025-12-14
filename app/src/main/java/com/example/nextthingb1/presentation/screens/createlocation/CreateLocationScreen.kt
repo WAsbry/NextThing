@@ -25,6 +25,7 @@ import com.example.nextthingb1.presentation.theme.*
 @Composable
 fun CreateLocationScreen(
     onBackPressed: () -> Unit,
+    onNavigateToMapPicker: () -> Unit = {},
     viewModel: CreateLocationViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -74,7 +75,8 @@ fun CreateLocationScreen(
             LocationSelectionSection(
                 uiState = uiState,
                 onModeSelected = { viewModel.updateSelectedMode(it) },
-                onGetCurrentLocation = { viewModel.getCurrentLocation() }
+                onGetCurrentLocation = { viewModel.getCurrentLocation() },
+                onNavigateToMapPicker = onNavigateToMapPicker
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -216,7 +218,8 @@ private fun LocationNameSection(
 private fun LocationSelectionSection(
     uiState: CreateLocationUiState,
     onModeSelected: (LocationSelectionMode) -> Unit,
-    onGetCurrentLocation: () -> Unit
+    onGetCurrentLocation: () -> Unit,
+    onNavigateToMapPicker: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -248,21 +251,27 @@ private fun LocationSelectionSection(
                     onGetCurrentLocation()
                 },
                 isLoading = uiState.isLoadingLocation && uiState.selectedMode == LocationSelectionMode.REAL_TIME,
-                locationName = uiState.address,
-                latitude = uiState.latitude,
-                longitude = uiState.longitude
+                locationName = if (uiState.selectedMode == LocationSelectionMode.REAL_TIME) uiState.address else "",
+                latitude = if (uiState.selectedMode == LocationSelectionMode.REAL_TIME) uiState.latitude else null,
+                longitude = if (uiState.selectedMode == LocationSelectionMode.REAL_TIME) uiState.longitude else null
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // 地图选择选项
-            LocationModeCard(
+            MapSelectionCard(
                 title = "地图选择",
                 subtitle = "从地图中选择位置",
                 icon = Icons.Default.LocationOn,
                 isSelected = uiState.selectedMode == LocationSelectionMode.MAP_SELECT,
-                onClick = { onModeSelected(LocationSelectionMode.MAP_SELECT) },
-                enabled = false // 暂时禁用，后续可以集成地图选择功能
+                onClick = {
+                    onModeSelected(LocationSelectionMode.MAP_SELECT)
+                    onNavigateToMapPicker()
+                },
+                locationName = if (uiState.selectedMode == LocationSelectionMode.MAP_SELECT) uiState.address else "",
+                latitude = if (uiState.selectedMode == LocationSelectionMode.MAP_SELECT) uiState.latitude else null,
+                longitude = if (uiState.selectedMode == LocationSelectionMode.MAP_SELECT) uiState.longitude else null,
+                enabled = true
             )
 
             // 删除底部位置信息卡片，位置信息现在显示在实时位置卡片上
@@ -295,12 +304,12 @@ private fun RealTimeLocationCard(
         ),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // 主要内容区域
+            // 标题行
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -316,31 +325,16 @@ private fun RealTimeLocationCard(
                     modifier = Modifier.size(24.dp)
                 )
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        color = if (enabled) Color(0xFF424242) else Color(0xFFBDBDBD),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                Text(
+                    text = title,
+                    color = if (enabled) Color(0xFF424242) else Color(0xFFBDBDBD),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
 
-                    // 经纬度信息显示在标题下方
-                    if (latitude != null && longitude != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "经度: ${String.format("%.6f", longitude)}",
-                            color = Color(0xFF666666),
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            text = "纬度: ${String.format("%.6f", latitude)}",
-                            color = Color(0xFF666666),
-                            fontSize = 12.sp
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.weight(1f))
 
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -351,16 +345,179 @@ private fun RealTimeLocationCard(
                 }
             }
 
-            // 地点名称显示在右上角
-            if (locationName.isNotBlank()) {
-                Text(
-                    text = locationName,
-                    color = Color(0xFF2196F3),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.align(Alignment.TopEnd),
-                    maxLines = 1
+            // 位置信息（仅在选中且有数据时显示）
+            if (isSelected && latitude != null && longitude != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 地址信息
+                if (locationName.isNotBlank()) {
+                    Text(
+                        text = locationName,
+                        color = Color(0xFF424242),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // 经纬度信息
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "经度",
+                            color = Color(0xFF999999),
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = String.format("%.6f", longitude),
+                            color = Color(0xFF424242),
+                            fontSize = 14.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "纬度",
+                            color = Color(0xFF999999),
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = String.format("%.6f", latitude),
+                            color = Color(0xFF424242),
+                            fontSize = 14.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapSelectionCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    locationName: String = "",
+    latitude: Double? = null,
+    longitude: Double? = null,
+    enabled: Boolean = true
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) Color(0xFFE3F2FD) else Color.White
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isSelected) Color(0xFF2196F3) else Color(0xFFE0E0E0)
+        ),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // 标题行
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (enabled) {
+                        if (isSelected) Color(0xFF2196F3) else Color(0xFF666666)
+                    } else {
+                        Color(0xFFBDBDBD)
+                    },
+                    modifier = Modifier.size(24.dp)
                 )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        color = if (enabled) Color(0xFF424242) else Color(0xFFBDBDBD),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    // 如果没有选中或没有位置数据，显示副标题
+                    if (!isSelected || latitude == null || longitude == null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (enabled) subtitle else "暂不可用",
+                            color = if (enabled) Color(0xFF999999) else Color(0xFFBDBDBD),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
+            // 位置信息（仅在选中且有数据时显示）
+            if (isSelected && latitude != null && longitude != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 地址信息
+                if (locationName.isNotBlank()) {
+                    Text(
+                        text = locationName,
+                        color = Color(0xFF424242),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // 经纬度信息
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "经度",
+                            color = Color(0xFF999999),
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = String.format("%.6f", longitude),
+                            color = Color(0xFF424242),
+                            fontSize = 14.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "纬度",
+                            color = Color(0xFF999999),
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = String.format("%.6f", latitude),
+                            color = Color(0xFF424242),
+                            fontSize = 14.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
             }
         }
     }

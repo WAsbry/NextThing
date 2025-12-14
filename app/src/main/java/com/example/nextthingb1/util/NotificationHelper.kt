@@ -544,6 +544,89 @@ class NotificationHelper @Inject constructor(
     }
 
     /**
+     * 显示低优先级通知
+     *
+     * 用于地理围栏功能：当用户不在目标地点范围内时发送的提醒通知
+     * 特点：
+     * - 低优先级（PRIORITY_DEFAULT）
+     * - 静默通知（无声音和震动）
+     * - 可被用户滑动清除
+     *
+     * @param taskId 任务ID（用于通知ID）
+     * @param title 通知标题
+     * @param content 通知内容（简短）
+     * @param fullContent 通知完整内容（展开时显示）
+     */
+    fun showLowPriorityNotification(
+        taskId: String,
+        title: String,
+        content: String,
+        fullContent: String
+    ) {
+        Timber.tag(TAG).d("━━━━━━ 显示低优先级通知 ━━━━━━")
+        Timber.tag(TAG).d("任务ID: $taskId")
+        Timber.tag(TAG).d("标题: $title")
+
+        // 检查通知权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasPermission) {
+                Timber.tag(TAG).e("缺少POST_NOTIFICATIONS权限")
+                return
+            }
+        }
+
+        // 创建点击通知的Intent
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("taskId", taskId)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            taskId.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // 构建 BigTextStyle
+        val bigTextStyle = NotificationCompat.BigTextStyle()
+            .bigText(fullContent)
+            .setBigContentTitle(title)
+
+        // 构建低优先级通知
+        val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setStyle(bigTextStyle)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // 低优先级
+            .setCategory(NotificationCompat.CATEGORY_REMINDER) // 提醒类别
+            .setAutoCancel(true) // 点击后自动消失
+            .setContentIntent(pendingIntent)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOnlyAlertOnce(true) // 只在第一次提醒（静默）
+            .setSilent(true) // 静默通知（无声音和震动）
+
+        // 显示通知
+        try {
+            NotificationManagerCompat.from(context).notify(
+                taskId.hashCode(),
+                notificationBuilder.build()
+            )
+            Timber.tag(TAG).d("✅ 低优先级通知已显示")
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "显示低优先级通知失败")
+        }
+    }
+
+    /**
      * 取消所有通知
      */
     fun cancelAllNotifications() {
