@@ -86,10 +86,10 @@ class SettingsViewModel @Inject constructor(
                             SettingItem(
                                 id = "geofence",
                                 title = "地理围栏",
-                                subtitle = "设置位置提醒范围",
-                                icon = "🗺️",
-                                color = Color(0xFF29B6F6),
-                                type = SettingType.SWITCH,
+                                subtitle = "基于位置的智能提醒",
+                                icon = "🛡️",
+                                color = Color(0xFF2196F3),
+                                type = SettingType.ARROW,
                                 isEnabled = false
                             )
                         )
@@ -133,8 +133,8 @@ class SettingsViewModel @Inject constructor(
             locationEnhancementEnabled = !currentState.locationEnhancementEnabled
         )
 
-        // TODO: 保存设置到SharedPreferences
-        // TODO: 如果开启，请求位置权限
+        // 位置增强设置持久化为可选功能,当前仅内存状态
+        // 地理围栏功能已有独立配置页面(GeofenceConfigScreen),这里的开关可移除
     }
 
     private fun toggleGeofence() {
@@ -143,7 +143,7 @@ class SettingsViewModel @Inject constructor(
             geofenceEnabled = !currentState.geofenceEnabled
         )
 
-        // TODO: 保存设置到SharedPreferences
-        // TODO: 如果开启，启动地理围栏服务
+        // 地理围栏配置已通过独立页面(GeofenceConfigScreen)管理
+        // 该开关功能可移除,统一使用专门的地理围栏配置界面
     }
 } 

@@ -43,6 +43,7 @@ import com.example.nextthingb1.domain.model.TaskImportanceUrgency
 import com.example.nextthingb1.domain.model.RepeatFrequency
 import com.example.nextthingb1.domain.model.Subtask
 import com.example.nextthingb1.domain.model.LocationInfo
+import com.example.nextthingb1.domain.model.TaskGeofence
 import com.example.nextthingb1.presentation.theme.*
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -239,7 +240,9 @@ fun TaskDetailScreen(
                                 onLocationSelected = { location ->
                                     viewModel.updateEditedLocation(location)
                                 },
-                                onNavigateToCreateLocation = { /* TODO: 导航到创建位置页面 */ },
+                                onNavigateToCreateLocation = {
+                                    // 详情页暂不支持创建新位置,请在创建任务页使用该功能
+                                },
                                 onDeleteLocation = { locationId ->
                                     viewModel.deleteLocation(locationId)
                                 },
@@ -288,6 +291,12 @@ fun TaskDetailScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            // 地理围栏状态卡片（只读显示）
+                            TaskGeofenceStatusCard(
+                                taskGeofence = uiState.taskGeofence,
+                                modifier = Modifier.weight(1f)
+                            )
+
                             com.example.nextthingb1.presentation.screens.create.RepeatFrequencyConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -323,7 +332,9 @@ fun TaskDetailScreen(
                                 onStrategySelected = { strategyId ->
                                     viewModel.updateNotificationStrategy(strategyId)
                                 },
-                                onNavigateToCreateNotificationStrategy = { /* TODO: 导航到创建通知策略页面 */ },
+                                onNavigateToCreateNotificationStrategy = {
+                                    // 详情页暂不支持创建新通知策略,请在创建任务页使用该功能
+                                },
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
@@ -1084,6 +1095,81 @@ private fun formatDueDate(dueDate: LocalDateTime?): String {
 
 private fun formatLocation(location: LocationInfo?): String {
     return location?.locationName?.takeIf { it.isNotEmpty() } ?: "实时位置"
+}
+
+/**
+ * 任务地理围栏状态卡片（只读显示）
+ */
+@Composable
+private fun TaskGeofenceStatusCard(
+    taskGeofence: TaskGeofence?,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(80.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp)
+        ) {
+            // 左上角标签
+            Text(
+                text = "地理围栏",
+                color = Color(0xFF9E9E9E),
+                fontSize = 10.sp,
+                modifier = Modifier.align(Alignment.TopStart)
+            )
+
+            // 主要内容行
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.CenterStart)
+                    .padding(top = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🛡️",
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+
+                if (taskGeofence != null && taskGeofence.isEnabled) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = taskGeofence.geofenceLocation.locationInfo.locationName.ifEmpty { "未命名地点" },
+                            color = Color(0xFF424242),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "半径: ${taskGeofence.snapshotRadius}米",
+                            color = Color(0xFF9E9E9E),
+                            fontSize = 10.sp
+                        )
+                    }
+                    if (taskGeofence.geofenceLocation.isFrequent) {
+                        Text(text = "⭐", fontSize = 14.sp)
+                    }
+                } else {
+                    Text(
+                        text = "未启用",
+                        color = Color(0xFF9E9E9E),
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

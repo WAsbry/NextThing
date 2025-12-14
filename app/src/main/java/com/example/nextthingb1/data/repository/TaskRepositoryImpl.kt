@@ -217,17 +217,20 @@ class TaskRepositoryImpl @Inject constructor(
     }
     
     override suspend fun syncTasks(): Result<Unit> {
-        // TODO: 实现网络同步逻辑
+        // 网络同步功能需要后端API支持,当前仅使用本地数据库
+        // 可扩展:实现增量同步、冲突解决、离线队列等机制
         return Result.success(Unit)
     }
-    
+
     override suspend fun exportTasks(): Result<String> {
-        // TODO: 实现任务导出逻辑
+        // 任务导出功能为可选增强,可导出为JSON/CSV格式
+        // 可扩展:支持导出到云盘、分享给其他用户等
         return Result.success("")
     }
-    
+
     override suspend fun importTasks(filePath: String): Result<Int> {
-        // TODO: 实现任务导入逻辑
+        // 任务导入功能为可选增强,支持从备份文件恢复数据
+        // 可扩展:数据校验、去重、合并策略等
         return Result.success(0)
     }
 

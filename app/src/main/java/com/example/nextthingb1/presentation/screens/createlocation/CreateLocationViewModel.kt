@@ -140,6 +140,19 @@ class CreateLocationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 从地图选择器接收位置数据
+     */
+    fun updateFromMapPicker(latitude: Double, longitude: Double, address: String) {
+        Timber.d("📍 从地图选择器更新位置: ($latitude, $longitude), 地址: $address")
+        _uiState.value = _uiState.value.copy(
+            latitude = latitude,
+            longitude = longitude,
+            address = address,
+            selectedMode = LocationSelectionMode.MAP_SELECT
+        )
+    }
+
     fun clearError() {
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }

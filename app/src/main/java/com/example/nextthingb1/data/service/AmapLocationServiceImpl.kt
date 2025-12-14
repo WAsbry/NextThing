@@ -10,7 +10,11 @@ import com.amap.api.location.AMapLocationClientOption
 import com.amap.api.location.AMapLocationListener
 import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.LocationType
+import com.example.nextthingb1.domain.repository.GeofenceConfigRepository
 import com.example.nextthingb1.domain.service.LocationService
+import com.example.nextthingb1.domain.service.LocationServiceStatus
+import com.example.nextthingb1.domain.service.LocationSource
+import com.example.nextthingb1.domain.service.AccuracyLevel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +37,8 @@ import kotlin.coroutines.resume
 @Singleton
 class AmapLocationServiceImpl @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val fallbackLocationService: LocationServiceImpl // Google服务作为回退
+    private val fallbackLocationService: LocationServiceImpl, // Google服务作为回退
+    private val geofenceConfigRepository: GeofenceConfigRepository // 地理围栏配置
 ) : LocationService {
 
     private var amapLocationClient: AMapLocationClient? = null
@@ -255,13 +260,31 @@ class AmapLocationServiceImpl @Inject constructor(
             val locationClient = amapLocationClient ?: return@withContext Result.failure(
                 IllegalStateException("高德定位客户端未初始化")
             )
-            
+
             Timber.d("🚀 [AmapLocationService] 启动极速定位模式...")
             Timber.d("🚀 [AmapLocationService] 🛠️ 配置定位参数...")
 
-            // 配置高德定位参数 - 极速模式
+            // 读取地理围栏配置
+            val geofenceConfig = try {
+                geofenceConfigRepository.getConfigOrDefault()
+            } catch (e: Exception) {
+                Timber.w(e, "⚠️ [AmapLocationService] 读取地理围栏配置失败，使用默认配置")
+                null
+            }
+
+            // 根据省电模式配置选择定位模式
+            val locationMode = if (geofenceConfig?.batteryOptimization == true) {
+                AMapLocationClientOption.AMapLocationMode.Battery_Saving
+            } else {
+                AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
+            }
+
+            val locationModeDesc = if (geofenceConfig?.batteryOptimization == true) "省电模式" else "高精度模式"
+            Timber.d("🔋 [AmapLocationService] 定位模式: $locationModeDesc (配置: batteryOptimization=${geofenceConfig?.batteryOptimization})")
+
+            // 配置高德定位参数
             val option = AMapLocationClientOption().apply {
-                locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy // 高精度模式
+                this.locationMode = locationMode // 根据配置动态设置
                 isOnceLocationLatest = true // 单次定位获取最新结果
                 isWifiScan = true // 强制扫描Wi-Fi（室内定位关键）
                 isNeedAddress = true // 需要地址信息
@@ -277,7 +300,7 @@ class AmapLocationServiceImpl @Inject constructor(
             locationClient.setLocationOption(option)
             Timber.d("🚀 [AmapLocationService] ✅ 定位参数配置完成")
             Timber.d("🚀 [AmapLocationService] 📋 配置摘要:")
-            Timber.d("🚀 [AmapLocationService] - 模式: 高精度")
+            Timber.d("🚀 [AmapLocationService] - 模式: $locationModeDesc")
             Timber.d("🚀 [AmapLocationService] - 超时: ${8000L/1000}秒")
             Timber.d("🚀 [AmapLocationService] - Wi-Fi扫描: 开启")
             Timber.d("🚀 [AmapLocationService] - 传感器: 开启")
@@ -459,6 +482,87 @@ class AmapLocationServiceImpl @Inject constructor(
     override suspend fun isLocationEnabled(): Boolean {
         // 委托给Google服务检查
         return fallbackLocationService.isLocationEnabled()
+    }
+
+    override suspend fun isServiceAvailable(): Boolean {
+        return try {
+            // 1. 检查权限
+            if (!hasLocationPermission()) {
+                Timber.d("🔍 [AmapLocationService] 服务不可用: 缺少位置权限")
+                return false
+            }
+
+            // 2. 检查位置服务是否启用
+            if (!isLocationEnabled()) {
+                Timber.d("🔍 [AmapLocationService] 服务不可用: 位置服务未启用")
+                return false
+            }
+
+            // 3. 检查高德地图客户端是否初始化
+            if (amapLocationClient == null) {
+                Timber.d("🔍 [AmapLocationService] 服务降级: 高德地图未初始化，使用Google服务")
+                return true // 返回true因为有Google服务兜底
+            }
+
+            Timber.d("✅ [AmapLocationService] 服务可用")
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "❌ [AmapLocationService] 检查服务可用性异常")
+            false
+        }
+    }
+
+    override suspend fun getServiceStatus():  LocationServiceStatus {
+        return try {
+            val hasPermission = hasLocationPermission()
+            val isEnabled = isLocationEnabled()
+            val amapInitialized = amapLocationClient != null
+
+            LocationServiceStatus(
+                isAvailable = hasPermission && isEnabled,
+                amapInitialized = amapInitialized,
+                hasPermission = hasPermission,
+                isLocationEnabled = isEnabled,
+                lastErrorMessage = when {
+                    !hasPermission -> "缺少位置权限"
+                    !isEnabled -> "位置服务未启用"
+                    !amapInitialized -> "高德地图服务未初始化，使用Google服务"
+                    else -> null
+                }
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "❌ [AmapLocationService] 获取服务状态异常")
+            LocationServiceStatus(
+                isAvailable = false,
+                amapInitialized = false,
+                hasPermission = false,
+                isLocationEnabled = false,
+                lastErrorMessage = "服务状态检查异常: ${e.message}"
+            )
+        }
+    }
+
+    override fun getLocationSource(locationType: Int): LocationSource {
+        return when (locationType) {
+            1 -> LocationSource.GPS        // GPS定位
+            2 -> LocationSource.NETWORK    // 网络定位
+            4 -> LocationSource.CACHE      // 缓存定位
+            5 -> LocationSource.WIFI       // Wi-Fi定位
+            6 -> LocationSource.CELL       // 基站定位
+            8 -> LocationSource.CACHE      // 离线定位（归类为缓存）
+            else -> LocationSource.UNKNOWN
+        }
+    }
+
+    override fun getAccuracyLevel(accuracy: Float?): AccuracyLevel {
+        return when {
+            accuracy == null -> AccuracyLevel.UNAVAILABLE
+            accuracy < 10f -> AccuracyLevel.EXCELLENT
+            accuracy < 50f -> AccuracyLevel.GOOD
+            accuracy < 100f -> AccuracyLevel.FAIR
+            accuracy < 500f -> AccuracyLevel.POOR
+            else -> AccuracyLevel.UNAVAILABLE
+        }
     }
 
     private fun updateLocationCache(locationInfo: LocationInfo) {

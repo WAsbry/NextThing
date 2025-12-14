@@ -17,6 +17,8 @@ import com.example.nextthingb1.domain.service.CategoryPreferencesManager
 import com.example.nextthingb1.domain.usecase.LocationUseCases
 import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.NotificationStrategy
+import com.example.nextthingb1.domain.model.GeofenceLocation
+import com.example.nextthingb1.domain.usecase.GeofenceUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +35,8 @@ class CreateTaskViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
     private val categoryPreferencesManager: CategoryPreferencesManager,
     private val locationUseCases: LocationUseCases,
-    private val notificationStrategyRepository: NotificationStrategyRepository
+    private val notificationStrategyRepository: NotificationStrategyRepository,
+    private val geofenceUseCases: GeofenceUseCases
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateTaskUiState())
@@ -48,10 +51,14 @@ class CreateTaskViewModel @Inject constructor(
     private val _savedLocations = MutableStateFlow<List<LocationInfo>>(emptyList())
     val savedLocations: StateFlow<List<LocationInfo>> = _savedLocations.asStateFlow()
 
+    private val _availableGeofenceLocations = MutableStateFlow<List<GeofenceLocation>>(emptyList())
+    val availableGeofenceLocations: StateFlow<List<GeofenceLocation>> = _availableGeofenceLocations.asStateFlow()
+
     init {
         initializeCategories()
         loadSavedLocations()
         loadNotificationStrategies()
+        loadAvailableGeofenceLocations()
     }
 
     private fun initializeCategories() {
@@ -125,6 +132,18 @@ class CreateTaskViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load notification strategies")
+            }
+        }
+    }
+
+    private fun loadAvailableGeofenceLocations() {
+        viewModelScope.launch {
+            try {
+                geofenceUseCases.getGeofenceLocations().collect { locations ->
+                    _availableGeofenceLocations.value = locations
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load geofence locations")
             }
         }
     }
@@ -307,6 +326,18 @@ class CreateTaskViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(notificationStrategyId = strategyId)
     }
 
+    fun updateGeofenceEnabled(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(geofenceEnabled = enabled)
+        // 如果禁用，清除选中的地点
+        if (!enabled) {
+            _uiState.value = _uiState.value.copy(selectedGeofenceLocationId = null)
+        }
+    }
+
+    fun updateSelectedGeofenceLocation(locationId: String?) {
+        _uiState.value = _uiState.value.copy(selectedGeofenceLocationId = locationId)
+    }
+
     fun createTask() {
         val currentState = _uiState.value
         if (currentState.title.isBlank()) {
@@ -382,8 +413,27 @@ class CreateTaskViewModel @Inject constructor(
                 )
 
                 if (result.isSuccess) {
+                    val taskId = result.getOrNull()
                     Timber.tag("NotificationTask").d("✅ 任务创建成功")
-                    Timber.tag("NotificationTask").d("  任务ID: ${result.getOrNull()}")
+                    Timber.tag("NotificationTask").d("  任务ID: $taskId")
+
+                    // 如果启用了地理围栏且选择了地点，创建TaskGeofence关联
+                    if (taskId != null && currentState.geofenceEnabled && currentState.selectedGeofenceLocationId != null) {
+                        try {
+                            val geofenceResult = geofenceUseCases.createTaskGeofence.invoke(
+                                taskId = taskId,
+                                geofenceLocationId = currentState.selectedGeofenceLocationId
+                            )
+                            if (geofenceResult.isSuccess) {
+                                Timber.tag("TaskGeofence").d("✅ 任务地理围栏关联创建成功")
+                            } else {
+                                Timber.tag("TaskGeofence").e("❌ 任务地理围栏关联创建失败")
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("TaskGeofence").e(e, "创建任务地理围栏关联异常")
+                        }
+                    }
+
                     Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     // 重置表单
                     _uiState.value = CreateTaskUiState()
@@ -412,6 +462,8 @@ data class CreateTaskUiState(
     val repeatFrequency: RepeatFrequency = RepeatFrequency(),
     val notificationStrategyId: String? = null, // 通知策略ID
     val availableNotificationStrategies: List<NotificationStrategy> = emptyList(), // 可用的通知策略列表
+    val geofenceEnabled: Boolean = false, // 是否启用地理围栏
+    val selectedGeofenceLocationId: String? = null, // 选中的地理围栏地点ID
     val errorMessage: String? = null
 ) {
     // 获取对应的Category，用于创建任务

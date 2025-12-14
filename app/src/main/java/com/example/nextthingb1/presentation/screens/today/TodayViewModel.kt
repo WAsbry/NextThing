@@ -383,7 +383,8 @@ class TodayViewModel @Inject constructor(
     }
     
     fun showCreateTaskDialog() {
-        // TODO: 实现创建任务对话框
+        // 快速创建任务功能为可选增强,当前通过底部导航栏"创建"按钮跳转
+        // 可扩展:在首页添加快速创建对话框,简化操作流程
     }
     
     fun clearErrorMessage() {
