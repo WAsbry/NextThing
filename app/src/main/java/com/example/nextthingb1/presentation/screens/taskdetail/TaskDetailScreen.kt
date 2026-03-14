@@ -14,7 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Warning
@@ -71,7 +71,6 @@ fun TaskDetailScreen(
     var isTimeExpanded by remember { mutableStateOf(false) }
     var isPreciseTimeExpanded by remember { mutableStateOf(false) }
     var isCategoryExpanded by remember { mutableStateOf(false) }
-    var isLocationExpanded by remember { mutableStateOf(false) }
     var isImportanceExpanded by remember { mutableStateOf(false) }
     var isImageExpanded by remember { mutableStateOf(false) }
     var isRepeatExpanded by remember { mutableStateOf(false) }
@@ -202,7 +201,7 @@ fun TaskDetailScreen(
                             )
                         }
 
-                        // 第二行：分类 + 位置
+                        // 第二行：分类选择 + 重要程度
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -212,7 +211,7 @@ fun TaskDetailScreen(
                                 screenWidth = screenWidth,
                                 isExpanded = isCategoryExpanded,
                                 onExpandToggle = { isCategoryExpanded = !isCategoryExpanded },
-                                selectedCategoryItem = if (uiState.isEditMode) uiState.editedCategoryItem else null,
+                                selectedCategoryItem = if (uiState.isEditMode) uiState.editedCategoryItem else uiState.categoryItem,
                                 categories = categories,
                                 onCategorySelected = { categoryItem ->
                                     viewModel.updateSelectedCategory(categoryItem)
@@ -230,32 +229,6 @@ fun TaskDetailScreen(
                                 isEditMode = uiState.isEditMode
                             )
 
-                            com.example.nextthingb1.presentation.screens.create.LocationConfigCard(
-                                screenHeight = screenHeight,
-                                screenWidth = screenWidth,
-                                isExpanded = isLocationExpanded,
-                                onExpandToggle = { isLocationExpanded = !isLocationExpanded },
-                                savedLocations = savedLocations,
-                                selectedLocation = if (uiState.isEditMode) uiState.editedLocation else uiState.task!!.locationInfo,
-                                onLocationSelected = { location ->
-                                    viewModel.updateEditedLocation(location)
-                                },
-                                onNavigateToCreateLocation = {
-                                    // 详情页暂不支持创建新位置,请在创建任务页使用该功能
-                                },
-                                onDeleteLocation = { locationId ->
-                                    viewModel.deleteLocation(locationId)
-                                },
-                                modifier = Modifier.weight(1f),
-                                isEditMode = uiState.isEditMode
-                            )
-                        }
-
-                        // 第三行：重要性 + 图片
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
                             com.example.nextthingb1.presentation.screens.create.ImportanceConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -268,7 +241,13 @@ fun TaskDetailScreen(
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
+                        }
 
+                        // 第三行：任务图片 + 重复频次
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             com.example.nextthingb1.presentation.screens.create.ImageConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -283,18 +262,6 @@ fun TaskDetailScreen(
                                 },
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
-                            )
-                        }
-
-                        // 第四行：重复频次 + 通知策略
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // 地理围栏状态卡片（只读显示）
-                            TaskGeofenceStatusCard(
-                                taskGeofence = uiState.taskGeofence,
-                                modifier = Modifier.weight(1f)
                             )
 
                             com.example.nextthingb1.presentation.screens.create.RepeatFrequencyConfigCard(
@@ -321,7 +288,13 @@ fun TaskDetailScreen(
                                 modifier = Modifier.weight(1f),
                                 isEditMode = uiState.isEditMode
                             )
+                        }
 
+                        // 第四行：通知策略（独占一行）
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             com.example.nextthingb1.presentation.screens.create.NotificationStrategyConfigCard(
                                 screenHeight = screenHeight,
                                 screenWidth = screenWidth,
@@ -335,8 +308,19 @@ fun TaskDetailScreen(
                                 onNavigateToCreateNotificationStrategy = {
                                     // 详情页暂不支持创建新通知策略,请在创建任务页使用该功能
                                 },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.fillMaxWidth(),
                                 isEditMode = uiState.isEditMode
+                            )
+                        }
+
+                        // 第五行：地理围栏状态（独占一行）
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            TaskGeofenceStatusCard(
+                                taskGeofence = uiState.taskGeofence,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -363,7 +347,7 @@ fun TaskDetailScreen(
             }
         }
 
-        // 删除确认弹窗
+        // 删除确认弹窗（普通任务）
         if (uiState.showDeleteConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { viewModel.hideDeleteConfirmDialog() },
@@ -382,6 +366,64 @@ fun TaskDetailScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.hideDeleteConfirmDialog() }) {
+                        Text("取消")
+                    }
+                }
+            )
+        }
+
+        // 重复任务删除选项对话框
+        if (uiState.showRecurringDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.hideRecurringDeleteDialog() },
+                title = { Text("删除重复任务") },
+                text = {
+                    Column {
+                        Text("这是一个重复任务，请选择删除方式：")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "• 仅删除此任务：只删除今天的任务，未来还会继续生成",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "• 删除所有重复任务：删除此任务的所有重复，未来不再生成",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                    }
+                },
+                confirmButton = {
+                    Column {
+                        // 删除所有重复任务按钮
+                        TextButton(
+                            onClick = {
+                                viewModel.deleteTask(
+                                    com.example.nextthingb1.domain.model.DeleteMode.DELETE_ALL_RECURRING
+                                )
+                                viewModel.hideRecurringDeleteDialog()
+                                onBackPressed()
+                            }
+                        ) {
+                            Text("删除所有重复任务", color = Color(0xFFEF5350))
+                        }
+                        // 仅删除此任务按钮
+                        TextButton(
+                            onClick = {
+                                viewModel.deleteTask(
+                                    com.example.nextthingb1.domain.model.DeleteMode.DELETE_THIS_ONLY
+                                )
+                                viewModel.hideRecurringDeleteDialog()
+                                onBackPressed()
+                            }
+                        ) {
+                            Text("仅删除此任务", color = Color(0xFFFF9800))
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.hideRecurringDeleteDialog() }) {
                         Text("取消")
                     }
                 }
@@ -438,7 +480,7 @@ private fun TaskDetailTopNavigation(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.ArrowBack,
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "返回",
                 tint = Color.White,
                 modifier = Modifier.size(20.dp)

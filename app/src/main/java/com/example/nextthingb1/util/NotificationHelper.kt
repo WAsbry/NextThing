@@ -15,6 +15,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -22,6 +23,7 @@ import com.example.nextthingb1.R
 import com.example.nextthingb1.domain.model.NotificationStrategy
 import com.example.nextthingb1.domain.model.PresetAudio
 import com.example.nextthingb1.domain.model.SoundSetting
+import com.example.nextthingb1.domain.model.SystemNotificationMode
 import com.example.nextthingb1.domain.model.VibrationSetting
 import com.example.nextthingb1.domain.model.Task
 import java.time.format.DateTimeFormatter
@@ -41,34 +43,49 @@ class NotificationHelper @Inject constructor(
     private val context: Context
 ) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    private val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
     private var mediaPlayer: MediaPlayer? = null
+
+    // 通知去重：记录已通知的 taskId -> 时间戳，防止 AlarmManager 和 WorkManager 重复触发
+    private val notifiedTasks = mutableMapOf<String, Long>()
+    private val DEDUP_WINDOW_MS = 15 * 60 * 1000L // 15 分钟内不重复通知
 
     companion object {
         private const val CHANNEL_ID = "task_notifications"
         private const val CHANNEL_NAME = "任务通知"
         private const val CHANNEL_DESCRIPTION = "任务到期和提醒通知"
+        private const val STATUS_BAR_CHANNEL_ID = "task_status_bar_notifications"
+        private const val STATUS_BAR_CHANNEL_NAME = "状态栏提醒"
+        private const val STATUS_BAR_CHANNEL_DESCRIPTION = "仅在状态栏显示的静默提醒"
+        private const val SILENT_CHANNEL_ID = "task_geofence_notifications"
+        private const val SILENT_CHANNEL_NAME = "地理围栏提醒"
+        private const val SILENT_CHANNEL_DESCRIPTION = "地理围栏触发的静默提醒通知"
         private const val TAG = "NotificationTask"
     }
 
     init {
         createNotificationChannel()
+        createStatusBarNotificationChannel()
+        createSilentNotificationChannel()
     }
 
     /**
      * 创建通知渠道（Android 8.0+）
+     * 只在首次安装时创建；已存在时跳过，保留用户对渠道的自定义设置
      */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // 渠道已存在则跳过，避免每次启动重置用户的自定义设置
+            if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) return
+
             Timber.tag(TAG).d("━━━━━━ 创建通知渠道 ━━━━━━")
             Timber.tag(TAG).d("Channel ID: $CHANNEL_ID")
             Timber.tag(TAG).d("Importance: IMPORTANCE_MAX")
-
-            // 先删除旧渠道(如果存在配置错误的旧渠道)
-            notificationManager.getNotificationChannel(CHANNEL_ID)?.let {
-                notificationManager.deleteNotificationChannel(CHANNEL_ID)
-                Timber.tag(TAG).d("已删除旧通知渠道")
-            }
 
             // 配置声音的AudioAttributes
             val audioAttributes = AudioAttributes.Builder()
@@ -107,6 +124,48 @@ class NotificationHelper @Inject constructor(
     }
 
     /**
+     * 创建低优先级状态栏通知渠道（STATUS_BAR 模式使用）
+     */
+    private fun createStatusBarNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (notificationManager.getNotificationChannel(STATUS_BAR_CHANNEL_ID) != null) return
+
+            val channel = NotificationChannel(
+                STATUS_BAR_CHANNEL_ID,
+                STATUS_BAR_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = STATUS_BAR_CHANNEL_DESCRIPTION
+                enableVibration(false)
+                setSound(null, null)
+            }
+            notificationManager.createNotificationChannel(channel)
+            Timber.tag(TAG).d("状态栏通知渠道已创建: $STATUS_BAR_CHANNEL_ID")
+        }
+    }
+
+    /**
+     * 创建低优先级静默通知渠道（用于地理围栏提醒）
+     */
+    private fun createSilentNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (notificationManager.getNotificationChannel(SILENT_CHANNEL_ID) != null) return
+
+            val channel = NotificationChannel(
+                SILENT_CHANNEL_ID,
+                SILENT_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = SILENT_CHANNEL_DESCRIPTION
+                enableVibration(false)
+                setSound(null, null)
+            }
+            notificationManager.createNotificationChannel(channel)
+            Timber.tag(TAG).d("✅ 静默通知渠道已创建: $SILENT_CHANNEL_ID")
+        }
+    }
+
+    /**
      * 显示带倒计时的任务通知
      *
      * @param task 任务对象
@@ -130,7 +189,6 @@ class NotificationHelper @Inject constructor(
 
     /**
      * 显示任务通知
-     * 【NotificationTest】显示通知的主函数
      *
      * @param task 任务对象
      * @param strategy 通知策略
@@ -140,6 +198,41 @@ class NotificationHelper @Inject constructor(
         strategy: NotificationStrategy
     ) {
         showTaskNotificationInternal(task, strategy, null, null)
+    }
+
+    /**
+     * 显示提前提醒通知
+     * @param advanceMinutes 提前多少分钟的提醒
+     */
+    fun showAdvanceReminderNotification(
+        task: Task,
+        strategy: NotificationStrategy,
+        advanceMinutes: Int
+    ) {
+        val reminderText = when {
+            advanceMinutes >= 1440 -> "${advanceMinutes / 1440}天后到期"
+            advanceMinutes >= 60 -> "${advanceMinutes / 60}小时后到期"
+            else -> "${advanceMinutes}分钟后到期"
+        }
+        showTaskNotificationInternal(task, strategy, reminderText, advanceMinutes * 60L)
+    }
+
+    /**
+     * 检查任务是否在去重窗口内已经被通知过
+     * @return true 表示已通知过，应该跳过
+     */
+    fun isRecentlyNotified(taskId: String): Boolean {
+        val now = System.currentTimeMillis()
+        // 清理过期记录
+        notifiedTasks.entries.removeAll { now - it.value > DEDUP_WINDOW_MS }
+        return notifiedTasks.containsKey(taskId)
+    }
+
+    /**
+     * 标记任务已通知（供外部调用方使用）
+     */
+    fun markAsNotified(taskId: String) {
+        notifiedTasks[taskId] = System.currentTimeMillis()
     }
 
     /**
@@ -154,6 +247,13 @@ class NotificationHelper @Inject constructor(
         Timber.tag(TAG).d("━━━━━━ 显示通知开始 ━━━━━━")
         Timber.tag(TAG).d("任务: ${task.title}")
         Timber.tag(TAG).d("通知策略: ${strategy.name}")
+        Timber.tag(TAG).d("通知模式: ${strategy.systemNotificationMode.displayName}")
+
+        // 去重检查（倒计时更新通知不做去重，允许反复刷新）
+        if (countdownText == null && isRecentlyNotified(task.id)) {
+            Timber.tag(TAG).d("任务 ${task.id} 在15分钟内已通知过，跳过")
+            return
+        }
 
         // 检查通知权限
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -161,8 +261,6 @@ class NotificationHelper @Inject constructor(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
-
-            Timber.tag(TAG).d("POST_NOTIFICATIONS权限: ${if (hasPermission) "✅已授权" else "❌未授权"}")
 
             if (!hasPermission) {
                 Timber.tag(TAG).e("缺少POST_NOTIFICATIONS权限")
@@ -183,7 +281,7 @@ class NotificationHelper @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 创建 FullScreenIntent（用于 Heads-up notification）
+        // 创建 FullScreenIntent（用于 BANNER / DIALOG 模式）
         val fullScreenIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("taskId", task.id)
@@ -191,7 +289,7 @@ class NotificationHelper @Inject constructor(
 
         val fullScreenPendingIntent = PendingIntent.getActivity(
             context,
-            task.id.hashCode() + 1000, // 使用不同的 requestCode
+            task.id.hashCode() + 1000,
             fullScreenIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -199,9 +297,9 @@ class NotificationHelper @Inject constructor(
         // 构建详细的通知内容
         val notificationContent = buildNotificationContent(task, countdownText)
 
-        // 构建通知标题（包含倒计时）
+        // 构建通知标题
         val notificationTitle = if (countdownText != null) {
-            "⏰ ${task.title} - $countdownText"
+            "${task.title} - $countdownText"
         } else {
             task.title
         }
@@ -210,76 +308,83 @@ class NotificationHelper @Inject constructor(
             .bigText(notificationContent)
             .setBigContentTitle(notificationTitle)
 
-        // 构建通知
-        Timber.tag(TAG).d("━━━━━━ 构建通知 ━━━━━━")
-        Timber.tag(TAG).d("Priority: PRIORITY_MAX")
-        Timber.tag(TAG).d("Category: CATEGORY_ALARM")
-        Timber.tag(TAG).d("FullScreenIntent: 已设置")
+        // 根据 SystemNotificationMode 选择渠道和行为
+        val channelId: String
+        val priority: Int
+        val useFullScreenIntent: Boolean
+        val isOngoing: Boolean
 
-        val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+        when (strategy.systemNotificationMode) {
+            SystemNotificationMode.STATUS_BAR -> {
+                channelId = STATUS_BAR_CHANNEL_ID
+                priority = NotificationCompat.PRIORITY_LOW
+                useFullScreenIntent = false
+                isOngoing = false
+                Timber.tag(TAG).d("模式: STATUS_BAR (低优先级，仅状态栏)")
+            }
+            SystemNotificationMode.BANNER -> {
+                channelId = CHANNEL_ID
+                priority = NotificationCompat.PRIORITY_MAX
+                useFullScreenIntent = true
+                isOngoing = false
+                Timber.tag(TAG).d("模式: BANNER (高优先级，横幅弹出)")
+            }
+            SystemNotificationMode.DIALOG -> {
+                channelId = CHANNEL_ID
+                priority = NotificationCompat.PRIORITY_MAX
+                useFullScreenIntent = true
+                isOngoing = true  // 需要用户手动关闭
+                Timber.tag(TAG).d("模式: DIALOG (最高优先级，弹窗通知)")
+            }
+        }
+
+        val notificationBuilder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(notificationTitle)
             .setContentText(countdownText ?: notificationContent)
             .setStyle(bigTextStyle)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setPriority(priority)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setAutoCancel(true)
+            .setAutoCancel(!isOngoing)
+            .setOngoing(isOngoing)
             .setContentIntent(pendingIntent)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
-        // 如果有倒计时，设置为持续通知（不自动消失）
-        if (countdownText != null) {
-            notificationBuilder.setOngoing(false)  // 允许用户滑动清除
-            notificationBuilder.setAutoCancel(true)
+        if (useFullScreenIntent) {
+            notificationBuilder.setFullScreenIntent(fullScreenPendingIntent, true)
         }
 
-        // 设置震动和默认效果
-        if (strategy.vibrationSetting != VibrationSetting.NONE) {
-            notificationBuilder.setVibrate(strategy.vibrationSetting.pattern)
-            notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_LIGHTS)
-            Timber.tag(TAG).d("震动: 已设置 ${strategy.vibrationSetting.displayName}")
+        // STATUS_BAR 模式静默，不设置震动和声音
+        if (strategy.systemNotificationMode != SystemNotificationMode.STATUS_BAR) {
+            if (strategy.vibrationSetting != VibrationSetting.NONE) {
+                notificationBuilder.setVibrate(strategy.vibrationSetting.pattern)
+                notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_LIGHTS)
+            } else {
+                notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_LIGHTS)
+            }
         } else {
-            notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_LIGHTS)
-            Timber.tag(TAG).d("震动: 无")
+            notificationBuilder.setSilent(true)
         }
 
         val notification = notificationBuilder.build()
         val notificationId = task.id.hashCode()
 
-        // 检查通知渠道状态
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
-            Timber.tag(TAG).d("━━━━━━ 通知渠道状态检查 ━━━━━━")
-            Timber.tag(TAG).d("Channel Importance: ${channel?.importance} (期望: ${NotificationManager.IMPORTANCE_MAX})")
-            Timber.tag(TAG).d("Channel能否弹出: ${channel?.importance == NotificationManager.IMPORTANCE_HIGH || channel?.importance == NotificationManager.IMPORTANCE_MAX}")
-            Timber.tag(TAG).d("通知是否已启用: ${notificationManager.areNotificationsEnabled()}")
-            Timber.tag(TAG).d("渠道震动已启用: ${channel?.shouldVibrate()}")
-            Timber.tag(TAG).d("渠道震动模式: ${channel?.vibrationPattern?.contentToString()}")
-            Timber.tag(TAG).d("渠道AudioAttributes: ${channel?.audioAttributes}")
-        }
-
         try {
-            Timber.tag(TAG).d("━━━━━━ 发送通知 ━━━━━━")
-            Timber.tag(TAG).d("通知ID: $notificationId")
-            Timber.tag(TAG).d("标题: ${task.title}")
-
             NotificationManagerCompat.from(context).notify(notificationId, notification)
-
-            Timber.tag(TAG).d("✅ 通知已发送到系统")
-            Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━")
+            // 记录已通知（去重）
+            markAsNotified(task.id)
+            Timber.tag(TAG).d("通知已发送: ID=$notificationId, 标题=${task.title}")
         } catch (e: Exception) {
-            Timber.tag(TAG).e("❌ 显示通知失败: ${e.message}")
-            e.printStackTrace()
+            Timber.tag(TAG).e("显示通知失败: ${e.message}")
         }
 
-        // 执行震动
-        executeVibration(strategy.vibrationSetting)
-
-        // 播放声音
-        playSound(strategy)
+        // STATUS_BAR 模式不执行额外的震动和声音
+        if (strategy.systemNotificationMode != SystemNotificationMode.STATUS_BAR) {
+            executeVibration(strategy.vibrationSetting)
+            playSound(strategy)
+        }
     }
 
     /**
@@ -598,8 +703,8 @@ class NotificationHelper @Inject constructor(
             .bigText(fullContent)
             .setBigContentTitle(title)
 
-        // 构建低优先级通知
-        val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+        // 构建低优先级通知（使用静默渠道，让渠道级别决定声音/震动行为）
+        val notificationBuilder = NotificationCompat.Builder(context, SILENT_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(content)

@@ -17,6 +17,7 @@ data class NotificationStrategy(
     val customAudioName: String? = null, // 自定义音频文件的备注名称
     val presetAudioName: String? = null, // 预置音频资源名称
     val systemNotificationMode: SystemNotificationMode = SystemNotificationMode.STATUS_BAR,
+    val advanceReminderMinutes: List<Int> = emptyList(), // 提前提醒时间列表（分钟），如 [5, 15, 30, 60]
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now(),
     val usageCount: Int = 0,

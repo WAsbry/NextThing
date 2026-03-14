@@ -11,6 +11,7 @@ import com.example.nextthingb1.domain.service.GeofenceCheckService
 import com.example.nextthingb1.domain.model.GeofenceCheckResult
 import com.example.nextthingb1.domain.usecase.GeofenceUseCases
 import com.example.nextthingb1.util.NotificationHelper
+import com.example.nextthingb1.util.TaskAlarmManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -29,7 +30,8 @@ class TaskNotificationWorker @AssistedInject constructor(
     private val notificationStrategyRepository: NotificationStrategyRepository,
     private val notificationHelper: NotificationHelper,
     private val geofenceCheckService: GeofenceCheckService,
-    private val geofenceUseCases: GeofenceUseCases
+    private val geofenceUseCases: GeofenceUseCases,
+    private val taskAlarmManager: TaskAlarmManager
 ) : CoroutineWorker(context, params) {
 
     companion object {
@@ -65,8 +67,8 @@ class TaskNotificationWorker @AssistedInject constructor(
             }.filter { task ->
                 val dueDate = task.dueDate!!
                 val minutesUntilDue = java.time.Duration.between(now, dueDate).toMinutes()
-                // 在截止时间前3分钟到截止时间这个窗口内发送通知
-                minutesUntilDue in 0..3
+                // 在截止时间前15分钟到截止时间这个窗口内发送通知（WorkManager最小周期为15分钟）
+                minutesUntilDue in 0..15
             }
 
             if (tasksToNotify.isEmpty()) {
@@ -81,7 +83,7 @@ class TaskNotificationWorker @AssistedInject constructor(
             val taskGeofenceMap = mutableMapOf<String, com.example.nextthingb1.domain.model.TaskGeofence>()
             tasksToNotify.forEach { task ->
                 try {
-                    val taskGeofence = geofenceUseCases.getTaskGeofence.invoke(task.id).first()
+                    val taskGeofence = geofenceUseCases.getTaskGeofence.getByTaskIdOnce(task.id)
                     if (taskGeofence != null && taskGeofence.isEnabled) {
                         taskGeofenceMap[task.id] = taskGeofence
                     }
@@ -126,19 +128,26 @@ class TaskNotificationWorker @AssistedInject constructor(
                         GeofenceCheckResult.OUTSIDE_GEOFENCE -> {
                             // 在围栏外，根据配置决定行为
                             val notifyWhenOutside = geofenceConfig?.notifyWhenOutside ?: false
+                            val MAX_DEFER_COUNT = 3
 
                             if (notifyWhenOutside) {
                                 // 发送低优先级提醒通知
                                 Timber.tag(TAG_GEOFENCE).i("📢 用户在围栏外，发送低优先级提醒")
                                 sendLowPriorityGeofenceNotification(task, geofenceStatus, strategies, now, dueDate)
                                 notificationCount++
+                            } else if (taskGeofence.geofenceDeferCount >= MAX_DEFER_COUNT) {
+                                // 超过最大延期次数，强制发送通知，防止任务被无限静默延期
+                                Timber.tag(TAG_GEOFENCE).w("⚠️ 已延期${taskGeofence.geofenceDeferCount}次，强制发送通知")
+                                sendNotification(task, strategies, now, dueDate)
+                                notificationCount++
+                                geofenceUseCases.createTaskGeofence.resetDeferCount(task.id)
                             } else {
-                                // 延期任务（原有逻辑）
-                                Timber.tag(TAG_GEOFENCE).w("⚠️ 用户在围栏外，延期任务")
+                                // 延期任务
+                                Timber.tag(TAG_GEOFENCE).w("⚠️ 用户在围栏外，延期任务（第${taskGeofence.geofenceDeferCount + 1}次）")
                                 handleOutsideGeofence(task, geofenceStatus)
+                                geofenceUseCases.createTaskGeofence.incrementDeferCount(task.id)
+                                geofenceDelayCount++
                             }
-
-                            geofenceDelayCount++
 
                             // 注意：检查结果已由 GeofenceCheckService 自动记录，无需重复更新
                         }
@@ -186,21 +195,24 @@ class TaskNotificationWorker @AssistedInject constructor(
         now: LocalDateTime,
         dueDate: LocalDateTime
     ) {
+        // 去重：如果 AlarmManager 已经触发过通知，跳过
+        if (notificationHelper.isRecentlyNotified(task.id)) {
+            Timber.tag(TAG).d("任务 ${task.title} 已被 AlarmManager 通知过，跳过")
+            return
+        }
+
         val strategy = strategies.find { it.id == task.notificationStrategyId }
 
         if (strategy != null) {
-            // 计算精确的倒计时（秒）
             val secondsUntilDue = java.time.Duration.between(now, dueDate).seconds
-
-            // 显示通知，传递倒计时信息
             notificationHelper.showTaskNotificationWithCountdown(
                 task = task,
                 strategy = strategy,
                 secondsUntilDue = secondsUntilDue
             )
-            Timber.tag(TAG).d("📨 通知已发送: ${task.title}")
+            Timber.tag(TAG).d("通知已发送 (WorkManager兜底): ${task.title}")
         } else {
-            Timber.tag(TAG).w("⚠️ 找不到通知策略: strategyId=${task.notificationStrategyId}")
+            Timber.tag(TAG).w("找不到通知策略: strategyId=${task.notificationStrategyId}")
         }
     }
 
@@ -277,7 +289,7 @@ class TaskNotificationWorker @AssistedInject constructor(
 
     /**
      * 处理用户在围栏外的情况
-     * 将任务延期，并在描述中添加系统提示
+     * 将任务延期30分钟，并在描述中添加系统提示，同时重新调度闹钟
      */
     private suspend fun handleOutsideGeofence(
         task: com.example.nextthingb1.domain.model.Task,
@@ -285,18 +297,29 @@ class TaskNotificationWorker @AssistedInject constructor(
     ) {
         try {
             val distanceText = String.format("%.0f", status.distance)
-            val systemNote = "\n\n【系统提示 ${LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm"))}】" +
-                    "提醒时间时您不在目标地点范围内(距离${distanceText}米)，已自动延期。"
+            val now = LocalDateTime.now()
+            val deferredDueDate = now.plusMinutes(30)
+            val systemNote = "\n\n【系统提示 ${now.format(java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm"))}】" +
+                    "提醒时间时您不在目标地点范围内(距离${distanceText}米)，已自动延期30分钟。"
 
             val updatedTask = task.copy(
                 status = TaskStatus.DELAYED,
+                dueDate = deferredDueDate,
                 description = task.description + systemNote,
-                updatedAt = LocalDateTime.now()
+                updatedAt = now
             )
 
             taskRepository.updateTask(updatedTask)
-            Timber.tag(TAG_GEOFENCE).i("✅ 任务已延期: ${task.title}")
+
+            // 取消旧闹钟并按延期后的时间重新调度
+            taskAlarmManager.cancelTaskAlarm(task.id)
+            if (task.notificationStrategyId != null) {
+                taskAlarmManager.scheduleTaskAlarm(updatedTask)
+            }
+
+            Timber.tag(TAG_GEOFENCE).i("✅ 任务已延期30分钟: ${task.title}")
             Timber.tag(TAG_GEOFENCE).d("   距离: ${distanceText}米")
+            Timber.tag(TAG_GEOFENCE).d("   新截止: $deferredDueDate")
             Timber.tag(TAG_GEOFENCE).d("   新状态: DELAYED")
         } catch (e: Exception) {
             Timber.tag(TAG_GEOFENCE).e(e, "❌ 处理围栏外任务异常")

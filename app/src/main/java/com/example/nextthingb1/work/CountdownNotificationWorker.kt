@@ -35,9 +35,11 @@ class CountdownNotificationWorker @AssistedInject constructor(
             val strategies = notificationStrategyRepository.getAllStrategies().first()
             var updateCount = 0
 
-            // 遍历所有未完成且有截止时间的任务
+            // 遍历所有未完成且有截止时间的任务（包含 DELAYED/OVERDUE，覆盖延期后重新调度的场景）
             tasks.filter { task ->
-                task.status == TaskStatus.PENDING &&
+                (task.status == TaskStatus.PENDING ||
+                 task.status == TaskStatus.DELAYED ||
+                 task.status == TaskStatus.OVERDUE) &&
                 task.dueDate != null &&
                 task.notificationStrategyId != null
             }.forEach { task ->
@@ -46,8 +48,8 @@ class CountdownNotificationWorker @AssistedInject constructor(
                 // 计算距离截止时间还有多少分钟
                 val minutesUntilDue = java.time.Duration.between(now, dueDate).toMinutes()
 
-                // 只更新在3分钟倒计时窗口内的任务
-                if (minutesUntilDue in 0..3) {
+                // 只更新在15分钟倒计时窗口内的任务（与WorkManager最小周期保持一致）
+                if (minutesUntilDue in 0..15) {
                     val strategy = strategies.find { it.id == task.notificationStrategyId }
 
                     if (strategy != null) {

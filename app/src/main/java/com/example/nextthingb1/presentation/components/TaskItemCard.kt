@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -137,7 +138,58 @@ fun TaskItemCard(
             }
 
             // 任务内容（描述）
-            if (task.description.isNotBlank()) {
+            // 检查是否包含延期或放弃原因
+            val postponeReasonPrefix = "【延期原因】"
+            val cancelReasonPrefix = "【放弃原因】"
+            val hasPostponeReason = task.description.contains(postponeReasonPrefix)
+            val hasCancelReason = task.description.contains(cancelReasonPrefix)
+
+            // 如果有延期原因或放弃原因，显示特殊格式
+            if (hasPostponeReason || hasCancelReason) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 提取延期/放弃信息
+                when {
+                    hasPostponeReason -> {
+                        val startIndex = task.description.indexOf(postponeReasonPrefix)
+                        // 提取【延期原因】之后的第一行作为原因
+                        val afterPrefix = task.description.substring(startIndex + postponeReasonPrefix.length).trim()
+                        val actualReason = afterPrefix.split("\n").firstOrNull()?.trim() ?: afterPrefix.take(50)
+
+                        Text(
+                            text = "延期到明天：$postponeReasonPrefix",
+                            fontSize = 13.sp,
+                            color = Warning,  // 延期使用橙黄色
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (actualReason.isNotBlank()) {
+                            Text(
+                                text = actualReason,
+                                fontSize = 13.sp,
+                                color = Warning,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    hasCancelReason -> {
+                        val startIndex = task.description.indexOf(cancelReasonPrefix)
+                        // 提取【放弃原因】之后的第一行作为原因
+                        val afterPrefix = task.description.substring(startIndex + cancelReasonPrefix.length).trim()
+                        val actualReason = afterPrefix.split("\n").firstOrNull()?.trim() ?: afterPrefix.take(50)
+
+                        Text(
+                            text = "放弃任务$cancelReasonPrefix：$actualReason",
+                            fontSize = 13.sp,
+                            color = Danger,  // 放弃使用红色
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            } else if (task.description.isNotBlank()) {
+                // 正常描述显示
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = task.description,
@@ -260,6 +312,7 @@ private fun getStatusEmoji(status: TaskStatus): String {
     }
 }
 
+@Composable @ReadOnlyComposable
 private fun getStatusBackgroundColor(status: TaskStatus): Color {
     return when (status) {
         TaskStatus.PENDING -> Color(0xFFF5F5F5)
@@ -280,6 +333,7 @@ private fun getImportanceDisplayText(importanceUrgency: TaskImportanceUrgency?):
     }
 }
 
+@Composable @ReadOnlyComposable
 private fun getImportanceBackgroundColor(importanceUrgency: TaskImportanceUrgency?): Color {
     return when (importanceUrgency) {
         TaskImportanceUrgency.IMPORTANT_URGENT -> Danger.copy(alpha = 0.1f)
@@ -290,6 +344,7 @@ private fun getImportanceBackgroundColor(importanceUrgency: TaskImportanceUrgenc
     }
 }
 
+@Composable @ReadOnlyComposable
 private fun getImportanceTextColor(importanceUrgency: TaskImportanceUrgency?): Color {
     return when (importanceUrgency) {
         TaskImportanceUrgency.IMPORTANT_URGENT -> Danger
@@ -357,6 +412,7 @@ private fun formatRelativeTime(dateTime: LocalDateTime): String {
 
 data class TimeInfo(val text: String, val color: Color)
 
+@Composable @ReadOnlyComposable
 private fun formatTimeInfo(dueDate: LocalDateTime, status: TaskStatus): TimeInfo {
     val now = LocalDateTime.now()
     val days = ChronoUnit.DAYS.between(now.toLocalDate(), dueDate.toLocalDate())

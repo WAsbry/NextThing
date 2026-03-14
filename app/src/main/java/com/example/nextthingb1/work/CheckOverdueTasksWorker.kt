@@ -15,8 +15,10 @@ import java.time.LocalDateTime
 /**
  * WorkManager worker that checks for overdue tasks and updates their status automatically.
  *
- * This worker runs periodically (typically daily) to scan all tasks and update any
- * PENDING tasks that have passed their due date to OVERDUE status.
+ * 修复：
+ * 1. 删除从未使用的 yesterdayEnd 变量
+ * 2. 新增对 DELAYED 任务的兜底处理：若 Worker 某天未执行导致 DELAYED 任务
+ *    未被 ConvertDelayedTasksWorker 转换，且 dueDate 已过期，直接标记为 OVERDUE
  */
 @HiltWorker
 class CheckOverdueTasksWorker @AssistedInject constructor(
@@ -29,33 +31,32 @@ class CheckOverdueTasksWorker @AssistedInject constructor(
         return try {
             Timber.d("CheckOverdueTasksWorker: Starting overdue task check")
 
-            // Get all tasks from repository
             val tasks = taskRepository.getAllTasks().first()
             val now = LocalDateTime.now()
-            val today = now.toLocalDate()
-            val yesterdayEnd = today.minusDays(1).atTime(23, 59, 59)
             var updatedCount = 0
 
-            // Find and update overdue tasks
             tasks.forEach { task ->
-                // 逾期的严格定义（根据用户需求）：
-                // 1. 任务状态必须是 PENDING（未完成）
-                // 2. 任务存在非空的截止时间（dueDate != null）
-                // 3. 当前时间超过 dueDate 5分钟后才算逾期
-                //
-                // 注意：没有设置 dueDate 的任务永远不会逾期！
-                if (task.status == TaskStatus.PENDING &&
-                    task.dueDate != null &&
-                    now.isAfter(task.dueDate.plusMinutes(5))) {
+                if (task.dueDate == null) return@forEach
 
-                    val updatedTask = task.copy(
-                        status = TaskStatus.OVERDUE,
-                        updatedAt = LocalDateTime.now()
-                    )
-                    taskRepository.updateTask(updatedTask)
-                    updatedCount++
+                val isExpired = now.isAfter(task.dueDate.plusMinutes(5))
 
-                    Timber.d("Updated task '${task.title}' to OVERDUE (dueDate: ${task.dueDate}, now: $now)")
+                when {
+                    // PENDING 任务过期 → OVERDUE
+                    task.status == TaskStatus.PENDING && isExpired -> {
+                        taskRepository.updateTask(
+                            task.copy(status = TaskStatus.OVERDUE, updatedAt = LocalDateTime.now())
+                        )
+                        updatedCount++
+                        Timber.d("Updated PENDING task '${task.title}' to OVERDUE")
+                    }
+                    // 兜底：DELAYED 任务若 dueDate 已过期（ConvertDelayedTasksWorker 未处理）→ OVERDUE
+                    task.status == TaskStatus.DELAYED && isExpired -> {
+                        taskRepository.updateTask(
+                            task.copy(status = TaskStatus.OVERDUE, updatedAt = LocalDateTime.now())
+                        )
+                        updatedCount++
+                        Timber.d("Updated stale DELAYED task '${task.title}' to OVERDUE")
+                    }
                 }
             }
 

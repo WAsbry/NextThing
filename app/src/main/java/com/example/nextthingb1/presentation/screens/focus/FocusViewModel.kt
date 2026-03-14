@@ -110,66 +110,71 @@ class FocusViewModel @Inject constructor(
     
     private fun onTimerComplete() {
         timerJob?.cancel()
-        
+
         // 更新统计数据
         val sessionDuration = (System.currentTimeMillis() - sessionStartTime) / 1000 / 60 // 分钟
         val currentState = _uiState.value
-        
+        val prevFocusCount = currentState.focusCount
+        val prevTodayFocusTime = currentState.todayFocusTime
+
         _uiState.value = currentState.copy(
             isRunning = false,
             todayFocusTime = currentState.todayFocusTime + sessionDuration.toInt(),
             focusCount = currentState.focusCount + 1
         )
-        
-        // 检查成就
-        checkAchievements()
+
+        // 检查成就（传入更新前的值，确保只在边界触发一次）
+        checkAchievements(prevFocusCount, prevTodayFocusTime)
     }
-    
+
     fun adjustTime(minutes: Int) {
         if (!_uiState.value.isRunning) {
             val currentState = _uiState.value
-            val newTime = (currentState.timeRemaining + minutes * 60).coerceAtLeast(60) // 最少1分钟
-            val newTotalTime = (currentState.totalTime + minutes * 60).coerceAtLeast(60)
-            
+            val newRemaining = (currentState.timeRemaining + minutes * 60).coerceAtLeast(60)
+            // 未开始计时时（remaining == total）同步更新总时长；暂停中只调整剩余，保持总时长不变
+            val newTotal = if (currentState.timeRemaining == currentState.totalTime) {
+                newRemaining
+            } else {
+                currentState.totalTime.coerceAtLeast(newRemaining)
+            }
             _uiState.value = currentState.copy(
-                timeRemaining = newTime,
-                totalTime = newTotalTime
+                timeRemaining = newRemaining,
+                totalTime = newTotal
             )
         }
     }
     
-    private fun checkAchievements() {
+    private fun checkAchievements(prevFocusCount: Int, prevTodayFocusTime: Int) {
         val currentState = _uiState.value
-        
-        // 检查各种成就条件
-        when {
-            currentState.focusCount == 1 -> {
-                showAchievement(
-                    Achievement(
-                        title = "初次专注",
-                        description = "恭喜完成第一次专注！",
-                        icon = "🎯"
-                    )
+
+        // 各条件独立判断，避免 when 短路导致某些成就永远无法触发
+        // 仅在边界时触发一次，避免重复弹出
+        if (prevFocusCount == 0 && currentState.focusCount == 1) {
+            showAchievement(
+                Achievement(
+                    title = "初次专注",
+                    description = "恭喜完成第一次专注！",
+                    icon = "🎯"
                 )
-            }
-            currentState.focusCount == 10 -> {
-                showAchievement(
-                    Achievement(
-                        title = "专注达人",
-                        description = "已完成10次专注，继续保持！",
-                        icon = "🏆"
-                    )
+            )
+        }
+        if (prevFocusCount == 9 && currentState.focusCount == 10) {
+            showAchievement(
+                Achievement(
+                    title = "专注达人",
+                    description = "已完成10次专注，继续保持！",
+                    icon = "🏆"
                 )
-            }
-            currentState.todayFocusTime >= 120 -> {
-                showAchievement(
-                    Achievement(
-                        title = "今日专注王",
-                        description = "今天专注时间超过2小时！",
-                        icon = "👑"
-                    )
+            )
+        }
+        if (prevTodayFocusTime < 120 && currentState.todayFocusTime >= 120) {
+            showAchievement(
+                Achievement(
+                    title = "今日专注王",
+                    description = "今天专注时间超过2小时！",
+                    icon = "👑"
                 )
-            }
+            )
         }
     }
     

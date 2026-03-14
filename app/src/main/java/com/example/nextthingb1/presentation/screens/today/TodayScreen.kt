@@ -16,14 +16,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,16 +41,23 @@ import com.example.nextthingb1.presentation.components.PostponeReasonDialog
 import com.example.nextthingb1.domain.model.WeatherInfo
 import com.example.nextthingb1.presentation.theme.*
 import com.example.nextthingb1.presentation.components.TaskItemCard
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.example.nextthingb1.util.PermissionHelper
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.example.nextthingb1.presentation.components.ParticleExplosionEffect
 
 @Composable
 fun TodayScreen(
@@ -61,7 +66,6 @@ fun TodayScreen(
     onNavigateToTaskDetail: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val coroutineScope = rememberCoroutineScope()
 
     // 监听UI状态变化并记录日志
     LaunchedEffect(uiState.totalTasks, uiState.displayTasks.size) {
@@ -75,28 +79,46 @@ fun TodayScreen(
     val showLocationDetailDialog by viewModel.showLocationDetailDialog.collectAsState()
     val showLocationHelpDialog by viewModel.showLocationHelpDialog.collectAsState()
     val permissionLauncher = LocalPermissionLauncher.current
-    
-    // 当屏幕可见时刷新位置信息
-    LaunchedEffect(Unit) {
-        viewModel.onScreenResumed()
-        
-        // 定期检查权限状态变化（降低频率避免性能问题）
-        while (true) {
-            kotlinx.coroutines.delay(5000) // 5秒检查一次
-            viewModel.forceCheckPermissionsAndRefresh()
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // 每次 ON_RESUME（首次进入/从后台返回/从设置页返回）时统一触发权限检查与位置刷新
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onScreenResumed()
+            }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    
-    // 处理权限请求结果
+
+    // 权限授予后只需关闭对话框，位置获取由 ON_RESUME 统一处理
     LaunchedEffect(uiState.hasLocationPermission) {
         if (uiState.hasLocationPermission) {
             viewModel.hidePermissionDialog()
-            // 权限授予后立即触发位置获取
-            kotlinx.coroutines.delay(300)
-            viewModel.onPermissionGranted()
         }
     }
-    
+
+    // 粒子爆炸动画全局状态
+    var explodingTaskId by remember { mutableStateOf<String?>(null) }
+    var explodingColor by remember { mutableStateOf(Color.Transparent) }
+    val successColor = Success
+    val warningColor = Warning
+    val dangerColor = Danger
+    var pendingCompleteTaskId by remember { mutableStateOf<String?>(null) }
+    var pendingPostponeTaskId by remember { mutableStateOf<String?>(null) }
+    var pendingPostponeReason by remember { mutableStateOf<String?>(null) }
+    var pendingCancelTaskId by remember { mutableStateOf<String?>(null) }
+    var pendingCancelReason by remember { mutableStateOf<String?>(null) }
+
+    // 当 explodingTaskId 对应的任务从列表中消失后，清理爆炸状态
+    LaunchedEffect(explodingTaskId, uiState.displayTasks) {
+        if (explodingTaskId != null && uiState.displayTasks.none { it.id == explodingTaskId }) {
+            explodingTaskId = null
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -107,7 +129,7 @@ fun TodayScreen(
             uiState = uiState,
             viewModel = viewModel
         )
-        
+
         // 内容区域
         LazyColumn(
             modifier = Modifier
@@ -129,7 +151,7 @@ fun TodayScreen(
                     }
                 )
             }
-            
+
             item {
                 // 今日任务标题
                 TodaySectionHeader(
@@ -137,7 +159,7 @@ fun TodayScreen(
                     pendingCount = uiState.remainingTasks
                 )
             }
-            
+
             item {
                 // 任务标签页
                 TaskTabs(
@@ -145,7 +167,7 @@ fun TodayScreen(
                     onTabSelected = { viewModel.selectTab(it) }
                 )
             }
-            
+
             // 任务列表
             items(
                 items = uiState.displayTasks,
@@ -153,21 +175,46 @@ fun TodayScreen(
             ) { task ->
                 TaskItem(
                     task = task,
-                    onToggleStatus = { viewModel.toggleTaskStatus(task.id) },
+                    isExploding = explodingTaskId == task.id,
+                    explosionColor = if (explodingTaskId == task.id) explodingColor else Success,
+                    onExplosionFinished = {
+                        when {
+                            pendingCompleteTaskId != null -> {
+                                viewModel.toggleTaskStatus(pendingCompleteTaskId!!)
+                                pendingCompleteTaskId = null
+                            }
+                            pendingPostponeTaskId != null && pendingPostponeReason != null -> {
+                                viewModel.executePostponeTask(pendingPostponeTaskId!!, pendingPostponeReason!!)
+                                pendingPostponeTaskId = null
+                                pendingPostponeReason = null
+                            }
+                            pendingCancelTaskId != null && pendingCancelReason != null -> {
+                                viewModel.executeCancelTask(pendingCancelTaskId!!, pendingCancelReason!!)
+                                pendingCancelTaskId = null
+                                pendingCancelReason = null
+                            }
+                        }
+                        // 不清除 explodingTaskId，保持 Item 隐藏直到 Flow 更新将任务从列表移除
+                    },
+                    onToggleStatus = {
+                        pendingCompleteTaskId = task.id
+                        explodingTaskId = task.id
+                        explodingColor = successColor
+                    },
                     onPostpone = { viewModel.showPostponeReasonDialog(task.id) },
                     onCancel = { viewModel.showCancelReasonDialog(task.id) },
                     onStartFocus = { onNavigateToFocus() },
                     onClick = { onNavigateToTaskDetail(task.id) }
                 )
             }
-            
+
             // 底部间距
             item {
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
-    
+
     // 位置权限对话框
     LocationPermissionDialog(
         isVisible = showPermissionDialog,
@@ -178,17 +225,12 @@ fun TodayScreen(
         },
         onOpenSettings = {
             viewModel.hidePermissionDialog()
-            // 可通过底部导航栏访问设置页面,此处无需额外导航
         },
         onPermissionGranted = {
-            // 权限授予后的回调,使用 Composable 生命周期绑定的协程作用域
-            coroutineScope.launch {
-                kotlinx.coroutines.delay(1000)
-                viewModel.forceCheckPermissionsAndRefresh()
-            }
+            // 权限授予后 Activity ON_RESUME 会触发 onScreenResumed() 统一处理
         }
     )
-    
+
     // 位置详情对话框
     LocationDetailDialog(
         isVisible = showLocationDetailDialog,
@@ -197,7 +239,7 @@ fun TodayScreen(
         onDismiss = { viewModel.hideLocationDetailDialog() },
         onRefresh = { viewModel.requestCurrentLocation() }
     )
-    
+
     // 位置帮助对话框
     LocationHelpDialog(
         isVisible = showLocationHelpDialog,
@@ -212,19 +254,33 @@ fun TodayScreen(
 
     // 延期任务原因对话框
     PostponeReasonDialog(
-        isVisible = uiState.showPostponeReasonDialog,
+        isVisible = uiState.showPostponeReasonDialog && explodingTaskId == null,
         onDismiss = { viewModel.hidePostponeReasonDialog() },
         onConfirm = { reason ->
-            viewModel.confirmPostponeTask(reason)
+            val taskId = uiState.postponeTaskId
+            if (taskId != null) {
+                pendingPostponeTaskId = taskId
+                pendingPostponeReason = reason
+                viewModel.hidePostponeReasonDialog()
+                explodingTaskId = taskId
+                explodingColor = warningColor
+            }
         }
     )
 
     // 放弃任务原因对话框
     CancelReasonDialog(
-        isVisible = uiState.showCancelReasonDialog,
+        isVisible = uiState.showCancelReasonDialog && explodingTaskId == null,
         onDismiss = { viewModel.hideCancelReasonDialog() },
         onConfirm = { reason ->
-            viewModel.confirmCancelTask(reason)
+            val taskId = uiState.cancelTaskId
+            if (taskId != null) {
+                pendingCancelTaskId = taskId
+                pendingCancelReason = reason
+                viewModel.hideCancelReasonDialog()
+                explodingTaskId = taskId
+                explodingColor = dangerColor
+            }
         }
     )
 }
@@ -285,7 +341,7 @@ private fun LocationIcon(
                 modifier = Modifier.size(16.dp)
             )
         }
-        
+
         if (currentLocation.isNotBlank()) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(
@@ -331,7 +387,7 @@ private fun TopHeader(
                 isLoading = uiState.isLocationLoading,
                 hasPermission = uiState.hasLocationPermission,
                 isLocationEnabled = uiState.isLocationEnabled,
-                onClick = { 
+                onClick = {
                     if (!uiState.hasLocationPermission) {
                         viewModel.requestLocationPermission()
                     } else if (uiState.currentLocation != null && !uiState.isLocationLoading) {
@@ -350,7 +406,7 @@ private fun TopHeader(
                 }
             )
         }
-        
+
         IconButton(
             onClick = {
                 // 任务搜索功能为可选增强功能,暂未实现
@@ -415,25 +471,25 @@ private fun ProgressOverviewCard(
                         color = Color.White,
                         fontSize = 16.sp
                     )
-                    
+
                     // 右侧：天气信息区域
                     WeatherInfoSection(
                         weatherInfo = weatherInfo,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 Text(
                     text = "${(completionRate * 100).toInt()}%",
                     color = Color.White,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -486,14 +542,14 @@ private fun WeatherInfoSection(
                     fontSize = 16.sp,
                     color = Color(weatherInfo.condition.color)
                 )
-                
+
                 // 天气状态
                 Text(
                     text = weatherInfo.condition.displayName,
                     color = Color.White,
                     fontSize = 12.sp
                 )
-                
+
                 // 温度
                 Text(
                     text = "${weatherInfo.temperature}°C",
@@ -502,16 +558,16 @@ private fun WeatherInfoSection(
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             // 湿度信息
             Text(
                 text = "湿度 ${weatherInfo.humidity}%",
                 color = Color.White.copy(alpha = 0.8f),
                 fontSize = 11.sp
             )
-            
+
             // 生活建议（如果有紧急建议）
             weatherInfo.getPrioritySuggestion()?.let { suggestion ->
                 if (suggestion.isUrgent) {
@@ -524,7 +580,7 @@ private fun WeatherInfoSection(
                     )
                 }
             }
-            
+
         } else {
             // 加载状态
             Row(
@@ -562,7 +618,7 @@ private fun TodaySectionHeader(completedCount: Int, pendingCount: Int) {
             fontWeight = FontWeight.SemiBold,
             color = TextPrimary
         )
-        
+
         Row {
             Text(
                 text = "完成 ${completedCount}项",
@@ -622,12 +678,26 @@ private fun TaskItem(
     onPostpone: () -> Unit,
     onCancel: () -> Unit,
     onStartFocus: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isExploding: Boolean = false,
+    explosionColor: Color = Success,
+    onExplosionFinished: () -> Unit = {}
 ) {
     var offsetX by remember { mutableFloatStateOf(0f) }
     val actionWidth = 72.dp
     val actionWidthPx = with(LocalDensity.current) { actionWidth.toPx() }
-    val maxOffset = actionWidthPx * 3 // 三个操作按钮的总宽度
+    val maxOffset = actionWidthPx * 3
+
+    val hapticFeedback = LocalHapticFeedback.current
+
+    // Item 尺寸（用于计算爆炸中心）
+    var itemWidth by remember { mutableFloatStateOf(0f) }
+    var itemHeight by remember { mutableFloatStateOf(0f) }
+
+    // 爆炸开始时归位卡片
+    LaunchedEffect(isExploding) {
+        if (isExploding) offsetX = 0f
+    }
 
     Column(
         modifier = Modifier.padding(horizontal = 16.dp)
@@ -636,8 +706,13 @@ private fun TaskItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
+                .onGloballyPositioned { coords ->
+                    itemWidth = coords.size.width.toFloat()
+                    itemHeight = coords.size.height.toFloat()
+                }
         ) {
-        // 背景操作按钮 - 使用圆角和更柔和的颜色
+        if (!isExploding) {
+        // 背景操作按钮
         Row(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
@@ -654,30 +729,23 @@ private fun TaskItem(
                             colors = listOf(Success.copy(alpha = 0.9f), Success)
                         )
                     )
-                    .clickable { 
+                    .clickable {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         onToggleStatus()
-                        offsetX = 0f
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         painter = painterResource(id = android.R.drawable.checkbox_on_background),
                         contentDescription = "完成",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
-                    Text(
-                        text = "完成",
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Text(text = "完成", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
                 }
             }
-            
+
             // 延期按钮
             Box(
                 modifier = Modifier
@@ -688,30 +756,23 @@ private fun TaskItem(
                             colors = listOf(Warning.copy(alpha = 0.9f), Warning)
                         )
                     )
-                    .clickable { 
+                    .clickable {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         onPostpone()
-                        offsetX = 0f
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         painter = painterResource(id = android.R.drawable.ic_menu_recent_history),
                         contentDescription = "延期",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
-                    Text(
-                        text = "延期",
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Text(text = "延期", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
                 }
             }
-            
+
             // 放弃按钮
             Box(
                 modifier = Modifier
@@ -722,63 +783,84 @@ private fun TaskItem(
                             colors = listOf(Danger.copy(alpha = 0.9f), Danger)
                         )
                     )
-                    .clickable { 
+                    .clickable {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         onCancel()
-                        offsetX = 0f
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
                         contentDescription = "放弃",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
-                    Text(
-                        text = "放弃",
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Text(text = "放弃", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }
-        
-        // 主要内容卡片 - 新的简洁设计
+        }
+
+        // 主卡片
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset { IntOffset(offsetX.roundToInt(), 0) }
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            // 决定滑动后的最终位置
-                            offsetX = when {
-                                offsetX < -maxOffset / 3 -> -maxOffset
-                                offsetX > maxOffset / 6 -> 0f
-                                else -> 0f
+                .then(
+                    if (isExploding) Modifier.graphicsLayer {
+                        alpha = 0f
+                    }
+                    else Modifier.offset { IntOffset(offsetX.roundToInt(), 0) }
+                )
+                .pointerInput(isExploding) {
+                    if (!isExploding) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                offsetX = when {
+                                    offsetX < -maxOffset / 3 -> -maxOffset
+                                    offsetX > maxOffset / 6 -> 0f
+                                    else -> 0f
+                                }
                             }
+                        ) { _, dragAmount ->
+                            val newOffset = offsetX + dragAmount
+                            offsetX = newOffset.coerceIn(-maxOffset, 0f)
                         }
-                    ) { _, dragAmount ->
-                        val newOffset = offsetX + dragAmount
-                        offsetX = newOffset.coerceIn(-maxOffset, 0f)
                     }
                 }
         ) {
             TaskItemCard(
                 task = task,
-                onClick = onClick
+                onClick = { if (!isExploding) onClick() }
             )
+        }
+
+        // 粒子爆炸效果层
+        if (isExploding) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .zIndex(10f)
+            ) {
+                ParticleExplosionEffect(
+                    isActive = true,
+                    originX = itemWidth / 2f,
+                    originY = itemHeight / 2f,
+                    baseColor = explosionColor,
+                    particleCount = 200,
+                    durationMs = 1400L,
+                    onFinished = onExplosionFinished
+                )
+            }
         }
         }
 
-        // 分割线
-        HorizontalDivider(
-            thickness = 1.dp,
-            color = Color(0xFFE0E0E0)
-        )
+        if (!isExploding) {
+            // 分割线
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = Color(0xFFE0E0E0)
+            )
+        }
     }
-} 
+}

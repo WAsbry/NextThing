@@ -39,7 +39,8 @@ fun TaskGeofenceCard(
     onNavigateToAddLocation: () -> Unit,
     onNavigateToGeofenceSettings: () -> Unit,
     modifier: Modifier = Modifier,
-    isEditMode: Boolean = true
+    isEditMode: Boolean = true,
+    defaultRadius: Int = 200
 ) {
     var showDialog by remember { mutableStateOf(false) }
     val selectedLocation = availableLocations.find { it.id == selectedLocationId }
@@ -93,7 +94,7 @@ fun TaskGeofenceCard(
                     // 显示选中地点的半径
                     if (geofenceEnabled && selectedLocation != null) {
                         Text(
-                            text = "半径: ${selectedLocation.customRadius ?: 200}m",
+                            text = "半径: ${selectedLocation.customRadius ?: defaultRadius}m",
                             color = TextSecondary,
                             fontSize = 11.sp
                         )
@@ -149,7 +150,8 @@ fun TaskGeofenceCard(
                     onLocationSelected = onLocationSelected,
                     onNavigateToAddLocation = onNavigateToAddLocation,
                     onNavigateToGeofenceSettings = onNavigateToGeofenceSettings,
-                    onDismiss = { showDialog = false }
+                    onDismiss = { showDialog = false },
+                    defaultRadius = defaultRadius
                 )
             }
         }
@@ -168,7 +170,8 @@ private fun GeofenceConfigBottomSheet(
     onLocationSelected: (String?) -> Unit,
     onNavigateToAddLocation: () -> Unit,
     onNavigateToGeofenceSettings: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    defaultRadius: Int = 200
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         // 固定的标题栏（不滚动）
@@ -191,7 +194,7 @@ private fun GeofenceConfigBottomSheet(
             }
         }
 
-        Divider(color = Color(0xFFE0E0E0))
+        HorizontalDivider(color = Color(0xFFE0E0E0))
 
         // 可滚动的内容区域
         LazyColumn(
@@ -233,7 +236,7 @@ private fun GeofenceConfigBottomSheet(
             // 地点选择器（仅在启用时显示）
             if (geofenceEnabled) {
                 item {
-                    Divider(color = Color(0xFFE0E0E0))
+                    HorizontalDivider(color = Color(0xFFE0E0E0))
                 }
 
                 if (availableLocations.isEmpty()) {
@@ -312,7 +315,7 @@ private fun GeofenceConfigBottomSheet(
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
-                                        text = "半径: ${location.customRadius ?: 200}m",
+                                        text = "半径: ${location.customRadius ?: defaultRadius}m",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = TextSecondary,
                                         fontSize = 10.sp
@@ -356,7 +359,7 @@ private fun GeofenceConfigBottomSheet(
 
                     // 添加新地点按钮
                     item {
-                        Divider(color = Color(0xFFE0E0E0))
+                        HorizontalDivider(color = Color(0xFFE0E0E0))
                     }
 
                     item {

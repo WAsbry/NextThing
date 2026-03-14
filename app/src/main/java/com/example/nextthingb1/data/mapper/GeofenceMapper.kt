@@ -104,6 +104,7 @@ fun TaskGeofenceEntity.toDomain(geofenceLocation: GeofenceLocation): TaskGeofenc
         lastCheckDistance = lastCheckDistance,
         lastCheckUserLatitude = lastCheckUserLatitude,
         lastCheckUserLongitude = lastCheckUserLongitude,
+        geofenceDeferCount = geofenceDeferCount,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -121,6 +122,7 @@ fun TaskGeofence.toEntity(): TaskGeofenceEntity {
         lastCheckDistance = lastCheckDistance,
         lastCheckUserLatitude = lastCheckUserLatitude,
         lastCheckUserLongitude = lastCheckUserLongitude,
+        geofenceDeferCount = geofenceDeferCount,
         createdAt = createdAt,
         updatedAt = updatedAt
     )

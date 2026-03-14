@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -40,9 +41,12 @@ fun GeofenceConfigScreen(
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
+        val activity = context as? android.app.Activity
+        val shouldShowRationale = !granted && activity != null &&
+            ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)
         viewModel.onLocationPermissionResult(
             granted = granted,
-            shouldShowRationale = !granted
+            shouldShowRationale = shouldShowRationale
         )
         // 如果位置权限授予成功，自动请求后台权限（Android 10+）
         if (granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -54,9 +58,12 @@ fun GeofenceConfigScreen(
     val backgroundLocationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
+        val activity = context as? android.app.Activity
+        val shouldShowRationale = !granted && activity != null &&
+            ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         viewModel.onBackgroundLocationPermissionResult(
             granted = granted,
-            shouldShowRationale = !granted
+            shouldShowRationale = shouldShowRationale
         )
     }
 
@@ -350,7 +357,7 @@ private fun GlobalEnableCard(
             // 系统地理围栏状态
             if (hasPermission) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = Border)
+                HorizontalDivider(color = Border)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
@@ -443,7 +450,7 @@ private fun StatisticsCard(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Divider(color = Border)
+            HorizontalDivider(color = Border)
             Spacer(modifier = Modifier.height(16.dp))
 
             // 第二行：2个统计项
@@ -618,7 +625,7 @@ private fun AdvancedSettingsCard(
 
             // 展开的内容
             if (isExpanded) {
-                Divider(color = Border)
+                HorizontalDivider(color = Border)
 
                 // 默认半径
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
@@ -651,7 +658,7 @@ private fun AdvancedSettingsCard(
                     )
                 }
 
-                Divider(color = Border)
+                HorizontalDivider(color = Border)
 
                 // 精度阈值
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
@@ -684,7 +691,7 @@ private fun AdvancedSettingsCard(
                     )
                 }
 
-                Divider(color = Border)
+                HorizontalDivider(color = Border)
 
                 // 省电模式
                 Row(
@@ -716,7 +723,7 @@ private fun AdvancedSettingsCard(
                     )
                 }
 
-                Divider(color = Border)
+                HorizontalDivider(color = Border)
 
                 // 离开通知
                 Row(
@@ -848,7 +855,7 @@ private fun PermissionRequestCard(
             // 后台位置权限按钮（Android 10+）
             if (uiState.hasLocationPermission && !uiState.hasBackgroundLocationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Divider(color = Color(0xFFFFCC80))
+                HorizontalDivider(color = Color(0xFFFFCC80))
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(

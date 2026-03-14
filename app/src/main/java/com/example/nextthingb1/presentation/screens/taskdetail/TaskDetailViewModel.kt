@@ -33,6 +33,7 @@ import javax.inject.Inject
 data class TaskDetailUiState(
     val task: Task? = null,
     val taskGeofence: TaskGeofence? = null, // 任务的地理围栏信息
+    val categoryItem: CategoryItem? = null, // 任务的分类（转换为CategoryItem格式）
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val isEditMode: Boolean = false,
@@ -51,8 +52,7 @@ data class TaskDetailUiState(
     val editedCategoryItem: CategoryItem? = null,
     val editedImportanceUrgency: TaskImportanceUrgency? = null,
 
-    // 位置和附件编辑
-    val editedLocation: LocationInfo? = null,
+    // 附件编辑
     val editedImageUri: String? = null,
 
     // 标签和子任务编辑
@@ -67,6 +67,7 @@ data class TaskDetailUiState(
 
     // UI 状态
     val showDeleteConfirmDialog: Boolean = false,
+    val showRecurringDeleteDialog: Boolean = false, // 显示重复任务删除选项对话框
     val showDatePicker: Boolean = false,
     val showRepeatFrequencyDialog: Boolean = false,
 
@@ -110,9 +111,11 @@ class TaskDetailViewModel @Inject constructor(
     private fun loadNotificationStrategies() {
         viewModelScope.launch {
             try {
-                notificationStrategyRepository.getAllStrategies().collect { strategies ->
-                    _availableNotificationStrategies.value = strategies
-                }
+                Timber.tag("TaskDetailPerf").d("开始加载通知策略...")
+                // 使用 first() 只加载一次，不持续监听
+                val strategies = notificationStrategyRepository.getAllStrategies().first()
+                _availableNotificationStrategies.value = strategies
+                Timber.tag("TaskDetailPerf").d("通知策略加载完成: ${strategies.size} 个")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load notification strategies")
             }
@@ -122,23 +125,25 @@ class TaskDetailViewModel @Inject constructor(
     private fun loadCategories() {
         viewModelScope.launch {
             try {
+                Timber.tag("TaskDetailPerf").d("开始加载分类...")
                 categoryRepository.initializeSystemCategories()
-                categoryRepository.getAllCategories().collect { categories ->
-                    // 将Category转换为CategoryItem
-                    val categoryItems = categories.map { category ->
-                        CategoryItem(
-                            id = category.id,
-                            displayName = category.name,
-                            colorHex = category.colorHex,
-                            icon = category.icon,
-                            isPinned = false,
-                            order = category.sortOrder,
-                            isSystemDefault = (category.type == CategoryType.PRESET)
-                        )
-                    }
-                    val sortedCategories = categoryPreferencesManager.sortCategoriesByUsage(categoryItems)
-                    _categories.value = sortedCategories
+                // 使用 first() 只加载一次，不持续监听
+                val categories = categoryRepository.getAllCategories().first()
+                // 将Category转换为CategoryItem
+                val categoryItems = categories.map { category ->
+                    CategoryItem(
+                        id = category.id,
+                        displayName = category.name,
+                        colorHex = category.colorHex,
+                        icon = category.icon,
+                        isPinned = false,
+                        order = category.sortOrder,
+                        isSystemDefault = (category.type == CategoryType.PRESET)
+                    )
                 }
+                val sortedCategories = categoryPreferencesManager.sortCategoriesByUsage(categoryItems)
+                _categories.value = sortedCategories
+                Timber.tag("TaskDetailPerf").d("分类加载完成: ${sortedCategories.size} 个")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load categories")
             }
@@ -148,9 +153,11 @@ class TaskDetailViewModel @Inject constructor(
     private fun loadSavedLocations() {
         viewModelScope.launch {
             try {
-                locationUseCases.getAllSavedLocations().collect { locations ->
-                    _savedLocations.value = locations
-                }
+                Timber.tag("TaskDetailPerf").d("开始加载保存的位置...")
+                // 使用 first() 只加载一次，不持续监听
+                val locations = locationUseCases.getAllSavedLocations().first()
+                _savedLocations.value = locations
+                Timber.tag("TaskDetailPerf").d("位置加载完成: ${locations.size} 个")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load saved locations")
             }
@@ -158,56 +165,91 @@ class TaskDetailViewModel @Inject constructor(
     }
 
     fun loadTask(taskId: String) {
+        val loadStartTime = System.currentTimeMillis()
         Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Timber.tag("NotificationTask").d("【详情页】loadTask 被调用")
         Timber.tag("NotificationTask").d("  taskId: $taskId")
+        Timber.tag("TaskDetailPerf").d("[${loadStartTime}] 开始加载任务详情")
 
         currentTaskId = taskId
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
             try {
-                taskUseCases.getAllTasks().collect { tasks ->
-                    val task = tasks.find { it.id == taskId }
+                // 使用 getTaskById 直接获取单个任务，性能更好
+                val taskStartTime = System.currentTimeMillis()
+                Timber.tag("TaskDetailPerf").d("[${taskStartTime}] 开始查询任务数据")
+                val task = taskUseCases.getTaskById(taskId)
+                val taskEndTime = System.currentTimeMillis()
+                Timber.tag("TaskDetailPerf").d("[${taskEndTime}] 任务查询完成，耗时: ${taskEndTime - taskStartTime}ms")
 
-                    if (task != null) {
-                        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                        Timber.tag("NotificationTask").d("✅ 从数据库加载到的任务信息:")
-                        Timber.tag("NotificationTask").d("  ID: ${task.id}")
-                        Timber.tag("NotificationTask").d("  标题: ${task.title}")
-                        Timber.tag("NotificationTask").d("  描述: ${task.description}")
-                        Timber.tag("NotificationTask").d("  分类: ${task.category.displayName}")
-                        Timber.tag("NotificationTask").d("  截止时间: ${task.dueDate?.format(formatter) ?: "null"}")
-                        Timber.tag("NotificationTask").d("  通知策略ID: ${task.notificationStrategyId ?: "null"}")
-                        Timber.tag("NotificationTask").d("  状态: ${task.status}")
+                if (task != null) {
+                    val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                    Timber.tag("NotificationTask").d("✅ 从数据库加载到的任务信息:")
+                    Timber.tag("NotificationTask").d("  ID: ${task.id}")
+                    Timber.tag("NotificationTask").d("  标题: ${task.title}")
+                    Timber.tag("NotificationTask").d("  描述: ${task.description}")
+                    Timber.tag("NotificationTask").d("  分类: ${task.category.displayName}")
+                    Timber.tag("NotificationTask").d("  截止时间: ${task.dueDate?.format(formatter) ?: "null"}")
+                    Timber.tag("NotificationTask").d("  通知策略ID: ${task.notificationStrategyId ?: "null"}")
+                    Timber.tag("NotificationTask").d("  状态: ${task.status}")
 
-                        if (task.dueDate != null) {
-                            Timber.tag("NotificationTask").d("  精确时间: ${task.dueDate.hour}:${String.format("%02d", task.dueDate.minute)}")
-                        }
-                        Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    } else {
-                        Timber.tag("NotificationTask").w("❌ 未找到任务")
-                        Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    if (task.dueDate != null) {
+                        Timber.tag("NotificationTask").d("  精确时间: ${task.dueDate.hour}:${String.format("%02d", task.dueDate.minute)}")
                     }
-
-                    // 加载任务的地理围栏信息
-                    var taskGeofence: TaskGeofence? = null
-                    if (task != null) {
-                        try {
-                            taskGeofence = geofenceUseCases.getTaskGeofence.invoke(taskId).first()
-                            Timber.tag("TaskGeofence").d("📍 任务地理围栏: ${taskGeofence?.let { "已启用 - ${it.geofenceLocation.locationInfo.locationName}" } ?: "未启用"}")
-                        } catch (e: Exception) {
-                            Timber.tag("TaskGeofence").e(e, "加载任务地理围栏失败")
-                        }
-                    }
-
-                    _uiState.value = _uiState.value.copy(
-                        task = task,
-                        taskGeofence = taskGeofence,
-                        isLoading = false,
-                        errorMessage = if (task == null) "任务不存在" else null
-                    )
+                    Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                } else {
+                    Timber.tag("NotificationTask").w("❌ 未找到任务")
+                    Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 }
+
+                // 加载任务的地理围栏信息
+                var taskGeofence: TaskGeofence? = null
+                if (task != null) {
+                    try {
+                        val geofenceStartTime = System.currentTimeMillis()
+                        Timber.tag("TaskDetailPerf").d("[${geofenceStartTime}] 开始加载地理围栏信息...")
+
+                        // 使用 getByTaskIdOnce 直接获取，不使用 Flow
+                        taskGeofence = geofenceUseCases.getTaskGeofence.getByTaskIdOnce(taskId)
+
+                        val geofenceEndTime = System.currentTimeMillis()
+                        Timber.tag("TaskDetailPerf").d("[${geofenceEndTime}] 地理围栏加载完成，耗时: ${geofenceEndTime - geofenceStartTime}ms")
+                        Timber.tag("TaskGeofence").d("📍 任务地理围栏: ${taskGeofence?.let { "已启用 - ${it.geofenceLocation.locationInfo.locationName}" } ?: "未启用"}")
+                    } catch (e: Exception) {
+                        Timber.tag("TaskGeofence").e(e, "加载任务地理围栏失败")
+                    }
+                }
+
+                val uiUpdateStartTime = System.currentTimeMillis()
+                Timber.tag("TaskDetailPerf").d("[${uiUpdateStartTime}] 准备更新 UI 状态...")
+
+                // 将任务的category转换为CategoryItem用于显示
+                val categoryItem = task?.let { t ->
+                    _categories.value.find { it.id == t.category.id }
+                        ?: CategoryItem(
+                            id = t.category.id,
+                            displayName = t.category.name,
+                            colorHex = t.category.colorHex,
+                            icon = t.category.icon,
+                            isPinned = false,
+                            order = t.category.sortOrder,
+                            isSystemDefault = (t.category.type == CategoryType.PRESET)
+                        )
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    task = task,
+                    taskGeofence = taskGeofence,
+                    categoryItem = categoryItem,
+                    isLoading = false,
+                    errorMessage = if (task == null) "任务不存在" else null
+                )
+                val uiUpdateEndTime = System.currentTimeMillis()
+                Timber.tag("TaskDetailPerf").d("[${uiUpdateEndTime}] UI 状态更新完成，耗时: ${uiUpdateEndTime - uiUpdateStartTime}ms")
+
+                val totalTime = System.currentTimeMillis() - loadStartTime
+                Timber.tag("TaskDetailPerf").d("[${System.currentTimeMillis()}] ✅ 详情页加载完成，总耗时: ${totalTime}ms")
             } catch (e: Exception) {
                 Timber.tag("NotificationTask").e("❌ 加载任务失败: ${e.message}")
                 Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -281,13 +323,14 @@ class TaskDetailViewModel @Inject constructor(
         }
     }
 
-    fun deleteTask() {
+    fun deleteTask(deleteMode: com.example.nextthingb1.domain.model.DeleteMode =
+        com.example.nextthingb1.domain.model.DeleteMode.DELETE_THIS_ONLY) {
         val taskId = currentTaskId ?: return
         viewModelScope.launch {
             try {
-                taskUseCases.deleteTask(taskId).fold(
+                taskUseCases.deleteTask(taskId, deleteMode).fold(
                     onSuccess = {
-                        Timber.d("Task deleted successfully")
+                        Timber.d("Task deleted successfully with mode: $deleteMode")
                         _uiState.value = _uiState.value.copy(
                             task = null,
                             errorMessage = "任务已删除"
@@ -338,7 +381,6 @@ class TaskDetailViewModel @Inject constructor(
             editedActualDuration = task.actualDuration,
             editedCategoryItem = categoryItem,
             editedImportanceUrgency = task.importanceUrgency,
-            editedLocation = task.locationInfo,
             editedImageUri = task.imageUri,
             editedTags = task.tags,
             editedSubtasks = task.subtasks,
@@ -358,7 +400,6 @@ class TaskDetailViewModel @Inject constructor(
             editedActualDuration = 0,
             editedCategoryItem = null,
             editedImportanceUrgency = null,
-            editedLocation = null,
             editedImageUri = null,
             editedTags = emptyList(),
             editedSubtasks = emptyList(),
@@ -410,29 +451,6 @@ class TaskDetailViewModel @Inject constructor(
         }
     }
 
-    fun deleteLocation(locationId: String) {
-        viewModelScope.launch {
-            try {
-                locationUseCases.deleteLocation(locationId).fold(
-                    onSuccess = {
-                        if (_uiState.value.editedLocation?.id == locationId) {
-                            _uiState.value = _uiState.value.copy(editedLocation = null)
-                        }
-                    },
-                    onFailure = { error ->
-                        _uiState.value = _uiState.value.copy(errorMessage = "删除地点失败: ${error.message}")
-                    }
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(errorMessage = "删除地点时发生错误: ${e.message}")
-            }
-        }
-    }
-
-    fun updateEditedLocation(location: LocationInfo?) {
-        _uiState.value = _uiState.value.copy(editedLocation = location)
-    }
-
     fun updateEditedImagePath(imagePath: String?) {
         _uiState.value = _uiState.value.copy(editedImageUri = imagePath)
     }
@@ -467,11 +485,26 @@ class TaskDetailViewModel @Inject constructor(
     }
 
     fun showDeleteConfirmDialog() {
-        _uiState.value = _uiState.value.copy(showDeleteConfirmDialog = true)
+        val task = _uiState.value.task
+        // 如果是重复任务的实例，显示重复任务删除选项对话框
+        if (task?.templateTaskId != null) {
+            _uiState.value = _uiState.value.copy(showRecurringDeleteDialog = true)
+        } else {
+            // 普通任务，显示普通删除确认对话框
+            _uiState.value = _uiState.value.copy(showDeleteConfirmDialog = true)
+        }
     }
 
     fun hideDeleteConfirmDialog() {
         _uiState.value = _uiState.value.copy(showDeleteConfirmDialog = false)
+    }
+
+    fun showRecurringDeleteDialog() {
+        _uiState.value = _uiState.value.copy(showRecurringDeleteDialog = true)
+    }
+
+    fun hideRecurringDeleteDialog() {
+        _uiState.value = _uiState.value.copy(showRecurringDeleteDialog = false)
     }
 
     fun showDatePicker() {
@@ -572,6 +605,9 @@ class TaskDetailViewModel @Inject constructor(
             }
         }
 
+        // 位置信息优先从地理围栏获取，无围栏时保留任务原有位置信息，避免清空
+        val locationInfoToSave = state.taskGeofence?.geofenceLocation?.locationInfo ?: task.locationInfo
+
         val updatedTask = task.copy(
             title = state.editedTitle,
             description = state.editedDescription,
@@ -581,7 +617,7 @@ class TaskDetailViewModel @Inject constructor(
             actualDuration = state.editedActualDuration,
             category = category,
             importanceUrgency = state.editedImportanceUrgency,
-            locationInfo = state.editedLocation,
+            locationInfo = locationInfoToSave,
             imageUri = state.editedImageUri,
             tags = state.editedTags,
             subtasks = state.editedSubtasks,

@@ -21,6 +21,22 @@ enum class StatsTab(val title: String) {
     EFFICIENCY("效率")
 }
 
+// 概览页面时间维度
+enum class OverviewTimeRange(val displayName: String) {
+    TODAY("今日"),
+    THIS_WEEK("本周"),
+    THIS_MONTH("本月"),
+    ALL("全部")
+}
+
+// 任务列表类型
+enum class TaskListType(val title: String) {
+    PENDING("待办任务"),
+    IMPORTANT_URGENT("重要紧急"),
+    OVERDUE("逾期任务"),
+    COMPLETED("已完成")
+}
+
 data class StatsUiState(
     val selectedTab: StatsTab = StatsTab.OVERVIEW,
     val currentMonth: String = "",
@@ -39,6 +55,17 @@ data class StatsUiState(
     val notImportantNotUrgentCount: Int = 0,
     // 智能洞察
     val insights: List<InsightData> = emptyList(),
+    val selectedOverviewTimeRange: OverviewTimeRange = OverviewTimeRange.TODAY, // 概览时间维度
+    // 核心指标（根据时间维度动态计算）
+    val coreMetricPending: Int = 0,           // 待办任务数
+    val coreMetricImportantUrgent: Int = 0,   // 重要紧急任务数
+    val coreMetricOverdue: Int = 0,           // 逾期任务数
+    val coreMetricProgress: String = "0",     // 进度指标（今日显示数量，其他显示百分比）
+    val coreMetricProgressType: String = "count", // "count" 或 "rate"
+    // 任务列表弹窗相关
+    val showTaskListSheet: Boolean = false,   // 是否显示任务列表弹窗
+    val taskListType: TaskListType? = null,   // 任务列表类型
+    val filteredTasks: List<com.example.nextthingb1.domain.model.Task> = emptyList(), // 筛选后的任务列表
     // 任务健康度
     val healthScore: Int = 0,
     val healthLevel: HealthLevel = HealthLevel.GOOD,
@@ -52,6 +79,8 @@ data class StatsUiState(
     val categoryEfficiencyRanking: List<CategoryEfficiencyData> = emptyList(),
     // 新增：分类×星期热力图数据
     val categoryWeekdayHeatmap: Map<Category, Map<Int, Int>> = emptyMap(),
+    // 新增：分类页面时间维度选择
+    val selectedCategoryTimeRange: OverviewTimeRange = OverviewTimeRange.ALL,
     // 趋势数据
     val weeklyTrend: List<DailyTrendData> = emptyList(),
     val allWeeklyTrend: List<DailyTrendData> = emptyList(), // 新增：保存完整未过滤的趋势数据
@@ -61,12 +90,15 @@ data class StatsUiState(
     val selectedTimeRange: TimeRange = TimeRange.WEEK_7,
     val customStartDate: LocalDate? = null,
     val customEndDate: LocalDate? = null,
+    // 新增：趋势页面时间范围选择
+    val selectedTrendTimeRange: OverviewTimeRange = OverviewTimeRange.THIS_WEEK,
     // 新增：月历热力图（GitHub风格）
     val calendarHeatmap: List<CalendarHeatmapData> = emptyList(),
     val allCalendarHeatmap: List<CalendarHeatmapData> = emptyList(), // 保存完整未过滤的热力图数据
     val calendarStats: CalendarHeatmapStats? = null,
     // 新增：任务积压趋势
     val backlogTrend: List<BacklogTrendData> = emptyList(),
+    val allBacklogTrend: List<BacklogTrendData> = emptyList(), // 保存完整未过滤的积压趋势数据
     val backlogThreshold: Int = 20,  // 积压预警阈值
     // 新增：完成速度加速度
     val velocityAcceleration: List<VelocityAccelerationData> = emptyList(),
@@ -163,7 +195,23 @@ data class WeekComparisonData(
     val completionRateChange: Float,
     val thisWeekAvgDuration: Double,
     val lastWeekAvgDuration: Double,
-    val avgDurationChange: Double
+    val avgDurationChange: Double,
+    // 新增：任务总数对比
+    val thisWeekTotalTasks: Int,
+    val lastWeekTotalTasks: Int,
+    val totalTasksChange: Int,
+    // 新增：延期任务对比
+    val thisWeekDelayedTasks: Int,
+    val lastWeekDelayedTasks: Int,
+    val delayedTasksChange: Int,
+    // 新增：放弃任务对比
+    val thisWeekCancelledTasks: Int,
+    val lastWeekCancelledTasks: Int,
+    val cancelledTasksChange: Int,
+    // 新增：逾期任务对比
+    val thisWeekOverdueTasks: Int,
+    val lastWeekOverdueTasks: Int,
+    val overdueTasksChange: Int
 )
 
 // 分类效率排行数据
@@ -174,6 +222,17 @@ data class CategoryEfficiencyData(
     val completionRate: Float,
     val avgDuration: Double,
     val overdueRate: Float
+)
+
+// 任务状态分布数据（基于时间维度）
+data class StatusDistributionData(
+    val total: Int,
+    val pending: Int,
+    val completed: Int,
+    val deferred: Int,
+    val overdue: Int,
+    val cancelled: Int,
+    val completionRate: Float
 )
 
 // 趋势Tab新增数据结构
@@ -295,6 +354,15 @@ class StatsViewModel @Inject constructor(
     private val currentDate = LocalDate.now()
     private var currentMonthDate = currentDate
 
+    // 创建单独的时间维度 Flow，用于监听变化
+    private val _selectedTimeRange = MutableStateFlow(OverviewTimeRange.TODAY)
+
+    // 创建分类页面时间维度 Flow
+    private val _selectedCategoryTimeRange = MutableStateFlow(OverviewTimeRange.ALL)
+
+    // 创建趋势页面时间维度 Flow（加入 combine，确保任务数据更新时使用正确的趋势范围）
+    private val _selectedTrendTimeRange = MutableStateFlow(OverviewTimeRange.THIS_WEEK)
+
     init {
         updateCurrentMonth()
         observeTaskChanges()
@@ -308,20 +376,27 @@ class StatsViewModel @Inject constructor(
     }
 
     /**
-     * 关键改进：使用 Flow 监听任务变化，实现响应式更新
+     * 关键改进：使用 combine 监听任务和时间维度变化，实现响应式更新
      */
     private fun observeTaskChanges() {
         viewModelScope.launch {
-            // 监听所有任务变化
-            taskUseCases.getAllTasks()
+            // 同时监听任务变化、概览时间维度变化、分类时间维度变化、趋势时间维度变化
+            combine(
+                taskUseCases.getAllTasks(),
+                _selectedTimeRange,
+                _selectedCategoryTimeRange,
+                _selectedTrendTimeRange
+            ) { tasks, timeRange, categoryTimeRange, trendTimeRange ->
+                quadruple(tasks, timeRange, categoryTimeRange, trendTimeRange)
+            }
                 .catch { e ->
                     _uiState.value = _uiState.value.copy(
                         errorMessage = e.message,
                         isLoading = false
                     )
                 }
-                .collectLatest { tasks ->
-                    // 任务数据变化时自动重新计算统计
+                .collectLatest { (tasks, timeRange, categoryTimeRange, trendTimeRange) ->
+                    // 任务数据或时间维度变化时自动重新计算统计
                     _uiState.value = _uiState.value.copy(isLoading = true)
 
                     try {
@@ -335,14 +410,33 @@ class StatsViewModel @Inject constructor(
 
                         val completionRate = if (total > 0) (completed.toFloat() / total) * 100f else 0f
 
-                        // 重要程度分布
-                        val importantUrgent = tasks.count { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT }
-                        val importantNotUrgent = tasks.count { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_NOT_URGENT }
-                        val notImportantUrgent = tasks.count { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_URGENT }
-                        val notImportantNotUrgent = tasks.count { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT }
+                        // 重要程度分布（按当前时间维度过滤，与概览统计保持一致）
+                        val todayForImportance = LocalDate.now()
+                        val (impStart, impEnd) = when (timeRange) {
+                            OverviewTimeRange.TODAY -> todayForImportance to todayForImportance
+                            OverviewTimeRange.THIS_WEEK -> {
+                                val ws = todayForImportance.with(java.time.DayOfWeek.MONDAY)
+                                ws to todayForImportance.with(java.time.DayOfWeek.SUNDAY)
+                            }
+                            OverviewTimeRange.THIS_MONTH -> {
+                                val ms = todayForImportance.withDayOfMonth(1)
+                                ms to todayForImportance.withDayOfMonth(todayForImportance.lengthOfMonth())
+                            }
+                            OverviewTimeRange.ALL -> {
+                                val earliest = tasks.minByOrNull { it.createdAt }?.createdAt?.toLocalDate() ?: todayForImportance
+                                earliest to todayForImportance
+                            }
+                        }
+                        val importanceFilteredTasks = tasks.filter { task ->
+                            task.createdAt.toLocalDate() in impStart..impEnd
+                        }
+                        val importantUrgent = importanceFilteredTasks.count { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT }
+                        val importantNotUrgent = importanceFilteredTasks.count { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_NOT_URGENT }
+                        val notImportantUrgent = importanceFilteredTasks.count { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_URGENT }
+                        val notImportantNotUrgent = importanceFilteredTasks.count { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT }
 
-                        // 分类统计
-                        val categoryStatsMap = calculateCategoryStats(tasks)
+                        // 分类统计（根据分类时间维度过滤）
+                        val categoryStatsMap = calculateCategoryStats(tasks, categoryTimeRange)
 
                         // 趋势数据
                         val weeklyTrend = calculateWeeklyTrend(tasks)
@@ -352,8 +446,8 @@ class StatsViewModel @Inject constructor(
                         val timeByImportance = calculateTimeByImportance(tasks)
                         val (onTimeRate, overdueRate) = calculateOnTimeRate(tasks)
 
-                        // 新增：本周vs上周对比
-                        val weekComparison = calculateWeekComparison(tasks)
+                        // 新增：本周vs上周对比（使用传入的 timeRange）
+                        val weekComparison = calculateWeekComparison(tasks, timeRange)
 
                         // 新增：重要紧急任务统计
                         val importantUrgentCompleted = tasks.count {
@@ -370,15 +464,22 @@ class StatsViewModel @Inject constructor(
                             importantUrgentCompletionRate = importantUrgentCompletionRate
                         )
 
-                        // 新增：智能洞察生成
+                        // 新增：智能洞察生成（使用传入的 timeRange）
                         val insights = generateInsights(
                             tasks = tasks,
-                            completionRate = completionRate,
-                            overdueTasks = overdue,
-                            importantUrgentCompleted = importantUrgentCompleted,
-                            importantUrgentTotal = importantUrgent,
-                            thisWeekCompleted = weekComparison.thisWeekCompleted,
-                            lastWeekCompleted = weekComparison.lastWeekCompleted
+                            timeRange = timeRange
+                        )
+
+                        // 新增：核心指标计算（根据时间维度动态计算）
+                        val coreMetrics = calculateCoreMetrics(
+                            tasks = tasks,
+                            timeRange = timeRange
+                        )
+
+                        // 新增：任务状态分布计算（根据时间维度）
+                        val statusDistribution = calculateStatusDistribution(
+                            tasks = tasks,
+                            timeRange = timeRange
                         )
 
                         // 新增：分类效率排行和热力图
@@ -391,13 +492,21 @@ class StatsViewModel @Inject constructor(
                         val backlogTrend = calculateBacklogTrend(tasks)
                         val velocityAcceleration = calculateVelocityAcceleration(tasks)
 
-                        // 根据时间范围过滤趋势数据
-                        val filteredWeeklyTrend = filterTrendByTimeRange(
+                        // 根据时间范围过滤趋势数据（使用 combine 参数，避免读取 stale uiState）
+                        val filteredWeeklyTrend = filterTrendByOverviewTimeRange(
                             weeklyTrend,
-                            _uiState.value.selectedTimeRange,
-                            _uiState.value.customStartDate,
-                            _uiState.value.customEndDate
+                            trendTimeRange
                         )
+
+                        val filteredBacklogTrend = filterBacklogByOverviewTimeRange(
+                            backlogTrend,
+                            trendTimeRange
+                        )
+
+                        // 热力图固定显示最近3个月（约90天）
+                        val threeMonthsHeatmap = calendarHeatmap.filter {
+                            it.date >= LocalDate.now().minusDays(89)
+                        }
 
                         // 新增：效率Tab数据计算
                         val timeHeatmap = calculateTimeHeatmap(tasks)
@@ -407,13 +516,13 @@ class StatsViewModel @Inject constructor(
                         val delayAnalysis = calculateDelayAnalysis(tasks)
 
                         _uiState.value = _uiState.value.copy(
-                            totalTasks = total,
-                            pendingTasks = pending,
-                            completedTasks = completed,
-                            deferredTasks = deferred,
-                            overdueTasks = overdue,
-                            cancelledTasks = cancelled,
-                            completionRate = completionRate,
+                            totalTasks = statusDistribution.total,
+                            pendingTasks = statusDistribution.pending,
+                            completedTasks = statusDistribution.completed,
+                            deferredTasks = statusDistribution.deferred,
+                            overdueTasks = statusDistribution.overdue,
+                            cancelledTasks = statusDistribution.cancelled,
+                            completionRate = statusDistribution.completionRate,
                             importantUrgentCount = importantUrgent,
                             importantNotUrgentCount = importantNotUrgent,
                             notImportantUrgentCount = notImportantUrgent,
@@ -421,12 +530,14 @@ class StatsViewModel @Inject constructor(
                             categoryStats = categoryStatsMap,
                             categoryEfficiencyRanking = categoryEfficiencyRanking,
                             categoryWeekdayHeatmap = categoryWeekdayHeatmap,
+                            selectedCategoryTimeRange = categoryTimeRange,
                             weeklyTrend = filteredWeeklyTrend,
                             allWeeklyTrend = weeklyTrend, // 保存完整未过滤的数据
-                            calendarHeatmap = calendarHeatmap,
+                            calendarHeatmap = threeMonthsHeatmap,
                             allCalendarHeatmap = calendarHeatmap, // 保存完整未过滤的热力图数据
                             calendarStats = calendarStats,
-                            backlogTrend = backlogTrend,
+                            backlogTrend = filteredBacklogTrend,
+                            allBacklogTrend = backlogTrend, // 保存完整未过滤的积压趋势数据
                             velocityAcceleration = velocityAcceleration,
                             completionTimeByCategory = timeByCategory,
                             completionTimeByImportance = timeByImportance,
@@ -442,6 +553,13 @@ class StatsViewModel @Inject constructor(
                             healthScore = healthScore,
                             healthLevel = healthLevel,
                             weekComparison = weekComparison,
+                            selectedOverviewTimeRange = timeRange,
+                            // 核心指标
+                            coreMetricPending = coreMetrics.pending,
+                            coreMetricImportantUrgent = coreMetrics.importantUrgent,
+                            coreMetricOverdue = coreMetrics.overdue,
+                            coreMetricProgress = coreMetrics.progress,
+                            coreMetricProgressType = coreMetrics.progressType,
                             isLoading = false,
                             lastUpdateTime = LocalDateTime.now()
                         )
@@ -455,13 +573,44 @@ class StatsViewModel @Inject constructor(
         }
     }
 
-    private fun calculateCategoryStats(tasks: List<com.example.nextthingb1.domain.model.Task>): Map<Category, CategoryStatsData> {
+    private fun calculateCategoryStats(
+        tasks: List<com.example.nextthingb1.domain.model.Task>,
+        timeRange: OverviewTimeRange
+    ): Map<Category, CategoryStatsData> {
+        val today = LocalDate.now()
+
+        // 获取时间范围的起止日期
+        val (rangeStart, rangeEnd) = when (timeRange) {
+            OverviewTimeRange.TODAY -> Pair(today, today)
+            OverviewTimeRange.THIS_WEEK -> {
+                val weekStart = today.with(java.time.DayOfWeek.MONDAY)
+                val weekEnd = today.with(java.time.DayOfWeek.SUNDAY)
+                Pair(weekStart, weekEnd)
+            }
+            OverviewTimeRange.THIS_MONTH -> {
+                val monthStart = today.withDayOfMonth(1)
+                val monthEnd = today.withDayOfMonth(today.lengthOfMonth())
+                Pair(monthStart, monthEnd)
+            }
+            OverviewTimeRange.ALL -> {
+                val earliest = tasks.minByOrNull { it.createdAt }?.createdAt?.toLocalDate() ?: today
+                Pair(earliest, today)
+            }
+        }
+
+        // 筛选该时间范围内创建的任务
+        val filteredTasks = tasks.filter { task ->
+            val taskDate = task.createdAt.toLocalDate()
+            taskDate in rangeStart..rangeEnd
+        }
+
         // 获取所有唯一的分类
-        val categories = tasks.map { it.category }.distinctBy { it.id }
+        val categories = filteredTasks.map { it.category }.distinctBy { it.id }
         return categories.associateWith { category ->
-            val categoryTasks = tasks.filter { it.category.id == category.id }
+            val categoryTasks = filteredTasks.filter { it.category.id == category.id }
             val completed = categoryTasks.count { it.status == TaskStatus.COMPLETED }
             val pending = categoryTasks.count { it.status == TaskStatus.PENDING }
+            val deferred = categoryTasks.count { it.status == TaskStatus.DELAYED }
             val overdue = categoryTasks.count { it.status == TaskStatus.OVERDUE }
             val cancelled = categoryTasks.count { it.status == TaskStatus.CANCELLED }
 
@@ -474,14 +623,18 @@ class StatsViewModel @Inject constructor(
                 .average()
                 .takeIf { !it.isNaN() } ?: 0.0
 
-            val overdueRate = if (categoryTasks.isNotEmpty())
-                (overdue.toFloat() / categoryTasks.size) * 100f else 0f
+            // 延期率 = (延期 + 逾期) / 总数 × 100%
+            val delayRate = if (categoryTasks.isNotEmpty())
+                ((deferred + overdue).toFloat() / categoryTasks.size) * 100f else 0f
+
+            // 放弃率 = 取消 / 总数 × 100%
+            val cancelRate = if (categoryTasks.isNotEmpty())
+                (cancelled.toFloat() / categoryTasks.size) * 100f else 0f
 
             // 计算效率分数（0-100）
             val efficiencyScore = calculateCategoryEfficiency(
-                completionRate = completionRate,
-                avgDuration = avgDuration,
-                overdueRate = overdueRate
+                delayRate = delayRate,
+                cancelRate = cancelRate
             )
 
             CategoryStatsData(
@@ -564,8 +717,166 @@ class StatsViewModel @Inject constructor(
         return Pair(onTimeRate, overdueRate)
     }
 
+    /**
+     * 计算基于时间维度的任务状态分布
+     */
+    private fun calculateStatusDistribution(
+        tasks: List<com.example.nextthingb1.domain.model.Task>,
+        timeRange: OverviewTimeRange
+    ): StatusDistributionData {
+        val today = LocalDate.now()
+
+        // 获取时间范围的起止日期
+        val (rangeStart, rangeEnd) = when (timeRange) {
+            OverviewTimeRange.TODAY -> Pair(today, today)
+            OverviewTimeRange.THIS_WEEK -> {
+                val weekStart = today.with(java.time.DayOfWeek.MONDAY)
+                val weekEnd = today.with(java.time.DayOfWeek.SUNDAY)
+                Pair(weekStart, weekEnd)
+            }
+            OverviewTimeRange.THIS_MONTH -> {
+                val monthStart = today.withDayOfMonth(1)
+                val monthEnd = today.withDayOfMonth(today.lengthOfMonth())
+                Pair(monthStart, monthEnd)
+            }
+            OverviewTimeRange.ALL -> {
+                val earliest = tasks.minByOrNull { it.createdAt }?.createdAt?.toLocalDate() ?: today
+                Pair(earliest, today)
+            }
+        }
+
+        // 筛选该时间范围内创建的任务
+        val filteredTasks = tasks.filter { task ->
+            val taskDate = task.createdAt.toLocalDate()
+            taskDate in rangeStart..rangeEnd
+        }
+
+        // 统计各状态数量
+        val total = filteredTasks.size
+        val pending = filteredTasks.count { it.status == TaskStatus.PENDING }
+        val completed = filteredTasks.count { it.status == TaskStatus.COMPLETED }
+        val deferred = filteredTasks.count { it.status == TaskStatus.DELAYED }
+        val overdue = filteredTasks.count { it.status == TaskStatus.OVERDUE }
+        val cancelled = filteredTasks.count { it.status == TaskStatus.CANCELLED }
+
+        val completionRate = if (total > 0) (completed.toFloat() / total) * 100f else 0f
+
+        return StatusDistributionData(
+            total = total,
+            pending = pending,
+            completed = completed,
+            deferred = deferred,
+            overdue = overdue,
+            cancelled = cancelled,
+            completionRate = completionRate
+        )
+    }
+
     fun selectTab(tab: StatsTab) {
         _uiState.value = _uiState.value.copy(selectedTab = tab)
+    }
+
+    fun selectOverviewTimeRange(timeRange: OverviewTimeRange) {
+        // 更新时间维度 Flow，会触发 combine 重新计算所有数据
+        _selectedTimeRange.value = timeRange
+    }
+
+    // 显示任务列表弹窗
+    fun showTaskList(taskListType: TaskListType) {
+        viewModelScope.launch {
+            try {
+                // 获取当前所有任务
+                val allTasks = taskUseCases.getAllTasks().first()
+
+                // 根据类型和时间范围筛选任务
+                val filtered = filterTasksByType(allTasks, taskListType, _selectedTimeRange.value)
+
+                _uiState.value = _uiState.value.copy(
+                    showTaskListSheet = true,
+                    taskListType = taskListType,
+                    filteredTasks = filtered
+                )
+            } catch (e: Exception) {
+                // 处理错误
+                _uiState.value = _uiState.value.copy(errorMessage = e.message)
+            }
+        }
+    }
+
+    // 关闭任务列表弹窗
+    fun hideTaskList() {
+        _uiState.value = _uiState.value.copy(
+            showTaskListSheet = false,
+            taskListType = null,
+            filteredTasks = emptyList()
+        )
+    }
+
+    // 根据类型和时间范围筛选任务
+    private fun filterTasksByType(
+        tasks: List<com.example.nextthingb1.domain.model.Task>,
+        type: TaskListType,
+        timeRange: OverviewTimeRange
+    ): List<com.example.nextthingb1.domain.model.Task> {
+        val today = LocalDate.now()
+
+        // 获取时间范围
+        val (rangeStart, rangeEnd) = when (timeRange) {
+            OverviewTimeRange.TODAY -> today to today
+            OverviewTimeRange.THIS_WEEK -> {
+                val weekStart = today.with(java.time.DayOfWeek.MONDAY)
+                val weekEnd = today.with(java.time.DayOfWeek.SUNDAY)
+                weekStart to weekEnd
+            }
+            OverviewTimeRange.THIS_MONTH -> {
+                val monthStart = today.withDayOfMonth(1)
+                val monthEnd = today.withDayOfMonth(today.lengthOfMonth())
+                monthStart to monthEnd
+            }
+            OverviewTimeRange.ALL -> {
+                val earliest = tasks.minByOrNull { it.createdAt }?.createdAt?.toLocalDate() ?: today
+                earliest to today
+            }
+        }
+
+        // 该时间范围内创建的任务
+        val createdInRange = tasks.filter { task ->
+            val taskDate = task.createdAt.toLocalDate()
+            taskDate in rangeStart..rangeEnd
+        }
+
+        // 根据类型筛选
+        return when (type) {
+            TaskListType.PENDING -> {
+                // 待办任务：该时间范围内创建且未完成
+                createdInRange.filter { task ->
+                    task.status != TaskStatus.COMPLETED && task.status != TaskStatus.CANCELLED
+                }
+            }
+            TaskListType.IMPORTANT_URGENT -> {
+                // 重要紧急：该时间范围内创建的重要紧急且未完成
+                createdInRange.filter { task ->
+                    task.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT &&
+                    task.status != TaskStatus.COMPLETED &&
+                    task.status != TaskStatus.CANCELLED
+                }
+            }
+            TaskListType.OVERDUE -> {
+                // 逾期任务：截止日期在该时间范围内且未完成
+                tasks.filter { task ->
+                    task.dueDate != null &&
+                    task.dueDate!!.toLocalDate() in rangeStart..rangeEnd &&
+                    task.status != TaskStatus.COMPLETED &&
+                    task.status != TaskStatus.CANCELLED
+                }
+            }
+            TaskListType.COMPLETED -> {
+                // 已完成：该时间范围内创建且已完成
+                createdInRange.filter { task ->
+                    task.status == TaskStatus.COMPLETED
+                }
+            }
+        }
     }
 
     fun toggleTrendViewMode() {
@@ -591,124 +902,345 @@ class StatsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
-    // ==================== 新增：智能洞察生成（仅针对本周任务）====================
+    // ==================== 智能洞察生成（精准统计 + 多级提示）====================
     private fun generateInsights(
         tasks: List<com.example.nextthingb1.domain.model.Task>,
-        completionRate: Float,
-        overdueTasks: Int,
-        importantUrgentCompleted: Int,
-        importantUrgentTotal: Int,
-        thisWeekCompleted: Int,
-        lastWeekCompleted: Int
+        timeRange: OverviewTimeRange = OverviewTimeRange.TODAY
     ): List<InsightData> {
-        val insights = mutableListOf<InsightData>()
-
-        // 获取本周任务（周一到周日）
+        val allInsights = mutableListOf<InsightData>()
         val today = LocalDate.now()
-        val weekStart = today.with(java.time.DayOfWeek.MONDAY)
-        val weekEnd = today.with(java.time.DayOfWeek.SUNDAY)
 
-        val thisWeekTasks = tasks.filter { task ->
+        // 获取时间范围的起止日期
+        val (rangeStart, rangeEnd, timeRangeLabel, previousRangeStart, previousRangeEnd) = when (timeRange) {
+            OverviewTimeRange.TODAY -> {
+                val yesterday = today.minusDays(1)
+                quintuple(today, today, "今日", yesterday, yesterday)
+            }
+            OverviewTimeRange.THIS_WEEK -> {
+                val weekStart = today.with(java.time.DayOfWeek.MONDAY)
+                val weekEnd = today.with(java.time.DayOfWeek.SUNDAY)
+                val lastWeekStart = weekStart.minusWeeks(1)
+                val lastWeekEnd = weekStart.minusDays(1)
+                quintuple(weekStart, weekEnd, "本周", lastWeekStart, lastWeekEnd)
+            }
+            OverviewTimeRange.THIS_MONTH -> {
+                val monthStart = today.withDayOfMonth(1)
+                val monthEnd = today.withDayOfMonth(today.lengthOfMonth())
+                val lastMonthStart = monthStart.minusMonths(1)
+                val lastMonthEnd = lastMonthStart.withDayOfMonth(lastMonthStart.lengthOfMonth())
+                quintuple(monthStart, monthEnd, "本月", lastMonthStart, lastMonthEnd)
+            }
+            OverviewTimeRange.ALL -> {
+                val earliest = tasks.minByOrNull { it.createdAt }?.createdAt?.toLocalDate() ?: today
+                quintuple(earliest, today, "总体", earliest, today)
+            }
+        }
+
+        // ==================== 精准数据统计 ====================
+
+        // 1. 该时间范围内创建的任务
+        val createdTasks = tasks.filter { task ->
             val taskDate = task.createdAt.toLocalDate()
-            taskDate in weekStart..weekEnd
+            taskDate in rangeStart..rangeEnd
         }
 
-        if (thisWeekTasks.isEmpty()) {
-            return emptyList()
+        // 2. 该时间范围内完成的任务（从创建的任务中筛选）
+        val completedInRange = createdTasks.count { it.status == TaskStatus.COMPLETED }
+
+        // 3. 完成率 = 完成的任务 / 创建的任务
+        val createdTotal = createdTasks.size
+        val completionRate = if (createdTotal > 0) {
+            (completedInRange.toFloat() / createdTotal) * 100f
+        } else 0f
+
+        // 4. 在该时间范围内变成逾期状态的任务（截止日期在范围内且未完成）
+        val overdueInRange = tasks.count { task ->
+            task.dueDate != null &&
+            task.dueDate!!.toLocalDate() in rangeStart..rangeEnd &&
+            task.status != TaskStatus.COMPLETED &&
+            task.status != TaskStatus.CANCELLED
         }
 
-        // 本周任务统计
-        val weekTotal = thisWeekTasks.size
-        val weekCompleted = thisWeekTasks.count { it.status == TaskStatus.COMPLETED }
-        val weekCompletionRate = (weekCompleted.toFloat() / weekTotal) * 100
-
-        // 本周逾期任务
-        val weekOverdue = thisWeekTasks.count { it.status == TaskStatus.OVERDUE }
-
-        // 本周重要且紧急任务
-        val weekImportantUrgentTasks = thisWeekTasks.filter {
+        // 5. 该时间范围内创建的重要紧急任务
+        val importantUrgentTasks = createdTasks.filter {
             it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT
         }
-        val weekImportantUrgentTotal = weekImportantUrgentTasks.size
-        val weekImportantUrgentCompleted = weekImportantUrgentTasks.count {
-            it.status == TaskStatus.COMPLETED
+        val importantUrgentTotal = importantUrgentTasks.size
+        val importantUrgentCompleted = importantUrgentTasks.count { it.status == TaskStatus.COMPLETED }
+        val importantUrgentRate = if (importantUrgentTotal > 0) {
+            (importantUrgentCompleted.toFloat() / importantUrgentTotal) * 100f
+        } else 0f
+
+        // ==================== 维度1：完成率洞察（6档）====================
+        if (createdTotal > 0) {
+            val completionInsight = when {
+                completionRate >= 90f -> InsightData(
+                    type = InsightType.POSITIVE,
+                    icon = "🎉",
+                    message = "${timeRangeLabel}完成率${String.format("%.0f", completionRate)}%，表现卓越！"
+                )
+                completionRate >= 80f -> InsightData(
+                    type = InsightType.POSITIVE,
+                    icon = "🎉",
+                    message = "${timeRangeLabel}完成率${String.format("%.0f", completionRate)}%，表现优秀！"
+                )
+                completionRate >= 70f -> InsightData(
+                    type = InsightType.POSITIVE,
+                    icon = "👍",
+                    message = "${timeRangeLabel}完成率${String.format("%.0f", completionRate)}%，表现良好"
+                )
+                completionRate >= 60f -> InsightData(
+                    type = InsightType.POSITIVE,
+                    icon = "📊",
+                    message = "${timeRangeLabel}完成率${String.format("%.0f", completionRate)}%，继续保持"
+                )
+                completionRate >= 40f -> InsightData(
+                    type = InsightType.WARNING,
+                    icon = "⚠️",
+                    message = "${timeRangeLabel}完成率${String.format("%.0f", completionRate)}%，需要努力"
+                )
+                else -> InsightData(
+                    type = InsightType.ALERT,
+                    icon = "🔴",
+                    message = "${timeRangeLabel}完成率仅${String.format("%.0f", completionRate)}%，需重点关注"
+                )
+            }
+            allInsights.add(completionInsight)
         }
 
-        // 维度1：本周完成率洞察
-        if (weekCompletionRate >= 80f) {
-            insights.add(InsightData(
-                type = InsightType.POSITIVE,
-                icon = "🎉",
-                message = "本周完成率${String.format("%.0f", weekCompletionRate)}%，表现优秀！"
-            ))
-        } else if (weekCompletionRate >= 60f) {
-            insights.add(InsightData(
-                type = InsightType.POSITIVE,
-                icon = "👍",
-                message = "本周完成率${String.format("%.0f", weekCompletionRate)}%，继续保持"
-            ))
-        } else if (weekCompletionRate < 60f) {
-            insights.add(InsightData(
-                type = InsightType.WARNING,
-                icon = "⚠️",
-                message = "本周完成率仅${String.format("%.0f", weekCompletionRate)}%，需要加油"
-            ))
-        }
-
-        // 维度2：本周逾期任务警告
-        if (weekOverdue > 3) {
-            insights.add(InsightData(
-                type = InsightType.ALERT,
-                icon = "🔴",
-                message = "本周有${weekOverdue}个任务已逾期，建议优先处理"
-            ))
-        } else if (weekOverdue in 1..3) {
-            insights.add(InsightData(
-                type = InsightType.WARNING,
-                icon = "⏰",
-                message = "本周有${weekOverdue}个任务已逾期，注意时间管理"
-            ))
-        } else {
-            insights.add(InsightData(
+        // ==================== 维度2：逾期任务洞察（5档）====================
+        val overdueInsight = when {
+            overdueInRange == 0 -> InsightData(
                 type = InsightType.POSITIVE,
                 icon = "✅",
-                message = "本周无逾期任务，时间管理良好"
-            ))
+                message = "${timeRangeLabel}无逾期任务，时间管理优秀"
+            )
+            overdueInRange in 1..2 -> InsightData(
+                type = InsightType.WARNING,
+                icon = "⏰",
+                message = "${timeRangeLabel}有${overdueInRange}个逾期任务，需适当关注"
+            )
+            overdueInRange in 3..5 -> InsightData(
+                type = InsightType.WARNING,
+                icon = "⚠️",
+                message = "${timeRangeLabel}有${overdueInRange}个逾期任务，建议优先处理"
+            )
+            overdueInRange in 6..10 -> InsightData(
+                type = InsightType.ALERT,
+                icon = "🔴",
+                message = "${timeRangeLabel}有${overdueInRange}个逾期任务，需重点关注"
+            )
+            else -> InsightData(
+                type = InsightType.ALERT,
+                icon = "🚨",
+                message = "${timeRangeLabel}有${overdueInRange}个逾期任务，任务积压严重！"
+            )
         }
+        allInsights.add(overdueInsight)
 
-        // 维度3：本周重要且紧急任务完成情况
-        if (weekImportantUrgentTotal > 0) {
-            val urgentCompletionRate = (weekImportantUrgentCompleted.toFloat() / weekImportantUrgentTotal) * 100
-            if (urgentCompletionRate >= 80f) {
-                insights.add(InsightData(
+        // ==================== 维度3：重要紧急任务洞察（5档）====================
+        if (importantUrgentTotal > 0) {
+            val urgentInsight = when {
+                importantUrgentRate >= 90f -> InsightData(
                     type = InsightType.POSITIVE,
                     icon = "🔥",
-                    message = "本周重要紧急任务完成率${String.format("%.0f", urgentCompletionRate)}%，处理及时"
-                ))
-            } else if (urgentCompletionRate >= 50f) {
-                insights.add(InsightData(
-                    type = InsightType.WARNING,
+                    message = "${timeRangeLabel}重要紧急任务完成率${String.format("%.0f", importantUrgentRate)}%，执行力强"
+                )
+                importantUrgentRate >= 80f -> InsightData(
+                    type = InsightType.POSITIVE,
+                    icon = "🔥",
+                    message = "${timeRangeLabel}重要紧急任务完成率${String.format("%.0f", importantUrgentRate)}%，处理及时"
+                )
+                importantUrgentRate >= 60f -> InsightData(
+                    type = InsightType.POSITIVE,
                     icon = "💼",
-                    message = "本周重要紧急任务完成${weekImportantUrgentCompleted}/${weekImportantUrgentTotal}个"
-                ))
-            } else {
-                insights.add(InsightData(
+                    message = "${timeRangeLabel}重要紧急任务完成${importantUrgentCompleted}/${importantUrgentTotal}个，继续加油"
+                )
+                importantUrgentRate >= 40f -> InsightData(
+                    type = InsightType.WARNING,
+                    icon = "⚠️",
+                    message = "${timeRangeLabel}重要紧急任务完成率${String.format("%.0f", importantUrgentRate)}%，需加快进度"
+                )
+                else -> InsightData(
                     type = InsightType.ALERT,
                     icon = "⚡",
-                    message = "本周重要紧急任务完成率仅${String.format("%.0f", urgentCompletionRate)}%，需重点关注"
-                ))
+                    message = "${timeRangeLabel}重要紧急任务完成率仅${String.format("%.0f", importantUrgentRate)}%，需重点关注"
+                )
             }
+            allInsights.add(urgentInsight)
         } else {
-            insights.add(InsightData(
+            allInsights.add(InsightData(
                 type = InsightType.POSITIVE,
                 icon = "😌",
-                message = "本周暂无重要紧急任务"
+                message = "${timeRangeLabel}暂无重要紧急任务"
             ))
         }
 
-        // 返回最多3条洞察
-        return insights.take(3)
+        // ==================== 维度4：任务创建速度分析 ====================
+        if (timeRange != OverviewTimeRange.ALL) {
+            // 计算前一时间范围内创建的任务数
+            val previousCreatedTasks = tasks.filter { task ->
+                val taskDate = task.createdAt.toLocalDate()
+                taskDate in previousRangeStart..previousRangeEnd
+            }.size
+
+            // 计算平均值
+            val avgCreated = (createdTotal + previousCreatedTasks) / 2.0
+
+            if (avgCreated > 0) {
+                if (createdTotal > avgCreated * 1.5) {
+                    allInsights.add(InsightData(
+                        type = InsightType.WARNING,
+                        icon = "📈",
+                        message = "${timeRangeLabel}创建了${createdTotal}个任务，任务量较大"
+                    ))
+                } else if (createdTotal < avgCreated * 0.5 && createdTotal > 0) {
+                    allInsights.add(InsightData(
+                        type = InsightType.POSITIVE,
+                        icon = "📉",
+                        message = "${timeRangeLabel}创建了${createdTotal}个任务，任务量较少"
+                    ))
+                }
+            }
+        }
+
+        // ==================== 维度5：完成速度趋势分析 ====================
+        if (timeRange != OverviewTimeRange.ALL && createdTotal > 0) {
+            val previousCreatedTasks = tasks.filter { task ->
+                val taskDate = task.createdAt.toLocalDate()
+                taskDate in previousRangeStart..previousRangeEnd
+            }
+
+            val previousCompleted = previousCreatedTasks.count { it.status == TaskStatus.COMPLETED }
+            val previousTotal = previousCreatedTasks.size
+
+            val previousCompletionRate = if (previousTotal > 0) {
+                (previousCompleted.toFloat() / previousTotal) * 100f
+            } else 0f
+
+            val rateChange = completionRate - previousCompletionRate
+
+            if (previousTotal > 0) {
+                if (rateChange > 10f) {
+                    allInsights.add(InsightData(
+                        type = InsightType.POSITIVE,
+                        icon = "🚀",
+                        message = "完成速度比上期提升${String.format("%.0f", rateChange)}%，状态良好"
+                    ))
+                } else if (rateChange < -10f) {
+                    allInsights.add(InsightData(
+                        type = InsightType.WARNING,
+                        icon = "🐌",
+                        message = "完成速度比上期下降${String.format("%.0f", kotlin.math.abs(rateChange))}%，需调整状态"
+                    ))
+                }
+            }
+        }
+
+        // 返回最重要的3条洞察（优先级：ALERT > WARNING > POSITIVE）
+        return allInsights
+            .sortedWith(compareByDescending<InsightData> {
+                when (it.type) {
+                    InsightType.ALERT -> 3
+                    InsightType.WARNING -> 2
+                    InsightType.POSITIVE -> 1
+                }
+            }.thenByDescending { it.message.length })
+            .take(3)
     }
+
+    // 辅助函数：创建五元组
+    private fun <A, B, C, D, E> quintuple(first: A, second: B, third: C, fourth: D, fifth: E): Quintuple<A, B, C, D, E> {
+        return Quintuple(first, second, third, fourth, fifth)
+    }
+
+    private data class Quintuple<A, B, C, D, E>(val first: A, val second: B, val third: C, val fourth: D, val fifth: E)
+
+    // ==================== 核心指标计算（动态维度）====================
+    private fun calculateCoreMetrics(
+        tasks: List<com.example.nextthingb1.domain.model.Task>,
+        timeRange: OverviewTimeRange
+    ): CoreMetricsData {
+        val today = LocalDate.now()
+
+        // 获取时间范围的起止日期
+        val (rangeStart, rangeEnd) = when (timeRange) {
+            OverviewTimeRange.TODAY -> today to today
+            OverviewTimeRange.THIS_WEEK -> {
+                val weekStart = today.with(java.time.DayOfWeek.MONDAY)
+                val weekEnd = today.with(java.time.DayOfWeek.SUNDAY)
+                weekStart to weekEnd
+            }
+            OverviewTimeRange.THIS_MONTH -> {
+                val monthStart = today.withDayOfMonth(1)
+                val monthEnd = today.withDayOfMonth(today.lengthOfMonth())
+                monthStart to monthEnd
+            }
+            OverviewTimeRange.ALL -> {
+                val earliest = tasks.minByOrNull { it.createdAt }?.createdAt?.toLocalDate() ?: today
+                earliest to today
+            }
+        }
+
+        // 1. 该时间范围内创建的任务
+        val createdTasks = tasks.filter { task ->
+            val taskDate = task.createdAt.toLocalDate()
+            taskDate in rangeStart..rangeEnd
+        }
+
+        // 2. 待办任务（该时间范围内创建且未完成）
+        val pendingCount = createdTasks.count { task ->
+            task.status != TaskStatus.COMPLETED && task.status != TaskStatus.CANCELLED
+        }
+
+        // 3. 重要紧急任务（该时间范围内创建的重要紧急且未完成）
+        val importantUrgentCount = createdTasks.count { task ->
+            task.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT &&
+            task.status != TaskStatus.COMPLETED &&
+            task.status != TaskStatus.CANCELLED
+        }
+
+        // 4. 逾期任务（截止日期在该时间范围内且未完成）
+        val overdueCount = tasks.count { task ->
+            task.dueDate != null &&
+            task.dueDate!!.toLocalDate() in rangeStart..rangeEnd &&
+            task.status != TaskStatus.COMPLETED &&
+            task.status != TaskStatus.CANCELLED
+        }
+
+        // 5. 进度指标
+        val (progressValue, progressType) = if (timeRange == OverviewTimeRange.TODAY) {
+            // 今日：显示已完成数量
+            val completedCount = createdTasks.count { it.status == TaskStatus.COMPLETED }
+            completedCount.toString() to "count"
+        } else {
+            // 其他：显示完成率
+            val completedCount = createdTasks.count { it.status == TaskStatus.COMPLETED }
+            val total = createdTasks.size
+            val rate = if (total > 0) {
+                ((completedCount.toFloat() / total) * 100).toInt()
+            } else 0
+            "${rate}%" to "rate"
+        }
+
+        return CoreMetricsData(
+            pending = pendingCount,
+            importantUrgent = importantUrgentCount,
+            overdue = overdueCount,
+            progress = progressValue,
+            progressType = progressType
+        )
+    }
+
+    // 核心指标数据类
+    private data class CoreMetricsData(
+        val pending: Int,
+        val importantUrgent: Int,
+        val overdue: Int,
+        val progress: String,
+        val progressType: String
+    )
+
 
     // ==================== 新增：健康度计算 ====================
     private fun calculateHealthScore(
@@ -729,92 +1261,168 @@ class StatsViewModel @Inject constructor(
         return Pair(score, level)
     }
 
-    // ==================== 新增：本周vs上周对比 ====================
+    // ==================== 新增：时间范围对比（支持多维度）====================
     private fun calculateWeekComparison(
-        tasks: List<com.example.nextthingb1.domain.model.Task>
-    ): WeekComparisonData {
+        tasks: List<com.example.nextthingb1.domain.model.Task>,
+        timeRange: OverviewTimeRange = OverviewTimeRange.TODAY
+    ): WeekComparisonData? {
         val now = LocalDate.now()
-        val thisWeekStart = now.minusDays(now.dayOfWeek.value.toLong() - 1) // 本周一
-        val lastWeekStart = thisWeekStart.minusWeeks(1)
-        val lastWeekEnd = thisWeekStart.minusDays(1)
 
-        // 本周任务
-        val thisWeekTasks = tasks.filter {
-            it.createdAt.toLocalDate() >= thisWeekStart
+        // 全部维度不显示对比
+        if (timeRange == OverviewTimeRange.ALL) {
+            return null
         }
-        val thisWeekCompleted = tasks.count {
-            it.completedAt?.toLocalDate()?.let { date ->
-                date >= thisWeekStart
-            } ?: false
-        }
-        val thisWeekCompletionRate = if (thisWeekTasks.isNotEmpty())
-            (thisWeekCompleted.toFloat() / thisWeekTasks.size) * 100f else 0f
 
-        val thisWeekAvgDuration = tasks
-            .filter {
-                it.completedAt?.toLocalDate()?.let { date -> date >= thisWeekStart } ?: false
-                        && it.actualDuration > 0
+        // 根据时间维度计算当前期间和上一期间的日期范围
+        val (currentStart, currentEnd, previousStart, previousEnd) = when (timeRange) {
+            OverviewTimeRange.TODAY -> {
+                // 今日 VS 昨日
+                val today = now
+                val yesterday = now.minusDays(1)
+                Triple(today, today, yesterday to yesterday)
             }
-            .map { it.actualDuration }
-            .average()
-            .takeIf { !it.isNaN() } ?: 0.0
+            OverviewTimeRange.THIS_WEEK -> {
+                // 本周 VS 上周
+                val thisWeekStart = now.with(java.time.DayOfWeek.MONDAY)
+                val thisWeekEnd = now.with(java.time.DayOfWeek.SUNDAY)
+                val lastWeekStart = thisWeekStart.minusWeeks(1)
+                val lastWeekEnd = thisWeekStart.minusDays(1)
+                Triple(thisWeekStart, thisWeekEnd, lastWeekStart to lastWeekEnd)
+            }
+            OverviewTimeRange.THIS_MONTH -> {
+                // 本月 VS 上月
+                val thisMonthStart = now.withDayOfMonth(1)
+                val thisMonthEnd = now.withDayOfMonth(now.lengthOfMonth())
+                val lastMonthStart = thisMonthStart.minusMonths(1)
+                val lastMonthEnd = lastMonthStart.withDayOfMonth(lastMonthStart.lengthOfMonth())
+                Triple(thisMonthStart, thisMonthEnd, lastMonthStart to lastMonthEnd)
+            }
+            OverviewTimeRange.ALL -> {
+                return null // 不应该到这里
+            }
+        }.let { (start, end, previous) ->
+            quadruple(start, end, previous.first, previous.second)
+        }
 
-        // 上周任务
-        val lastWeekTasks = tasks.filter {
+        // 当前期间任务统计
+        val currentTasks = tasks.filter {
             val date = it.createdAt.toLocalDate()
-            date >= lastWeekStart && date <= lastWeekEnd
+            date in currentStart..currentEnd
         }
-        val lastWeekCompleted = tasks.count {
-            it.completedAt?.toLocalDate()?.let { date ->
-                date >= lastWeekStart && date <= lastWeekEnd
-            } ?: false
-        }
-        val lastWeekCompletionRate = if (lastWeekTasks.isNotEmpty())
-            (lastWeekCompleted.toFloat() / lastWeekTasks.size) * 100f else 0f
+        // 使用创建在该时间段内且已完成的任务数，避免 completedAt 跨期导致比率超过100%
+        val currentCompleted = currentTasks.count { it.status == TaskStatus.COMPLETED }
+        val currentCompletionRate = if (currentTasks.isNotEmpty())
+            (currentCompleted.toFloat() / currentTasks.size) * 100f else 0f
 
-        val lastWeekAvgDuration = tasks
-            .filter {
-                it.completedAt?.toLocalDate()?.let { date ->
-                    date >= lastWeekStart && date <= lastWeekEnd
-                } ?: false && it.actualDuration > 0
-            }
+        val currentAvgDuration = currentTasks
+            .filter { it.status == TaskStatus.COMPLETED && it.actualDuration > 0 }
             .map { it.actualDuration }
             .average()
             .takeIf { !it.isNaN() } ?: 0.0
+
+        // 当前期间延期任务数（DELAYED 状态）
+        val currentDelayed = currentTasks.count {
+            it.status == com.example.nextthingb1.domain.model.TaskStatus.DELAYED
+        }
+
+        // 当前期间放弃任务数（CANCELLED 状态）
+        val currentCancelled = currentTasks.count {
+            it.status == com.example.nextthingb1.domain.model.TaskStatus.CANCELLED
+        }
+
+        // 当前期间逾期任务数（OVERDUE 状态）
+        val currentOverdue = currentTasks.count {
+            it.status == com.example.nextthingb1.domain.model.TaskStatus.OVERDUE
+        }
+
+        // 上一期间任务统计
+        val previousTasks = tasks.filter {
+            val date = it.createdAt.toLocalDate()
+            date in previousStart..previousEnd
+        }
+        // 同样使用创建在该时间段内且已完成的任务数，保持与当前期间计算方式一致
+        val previousCompleted = previousTasks.count { it.status == TaskStatus.COMPLETED }
+        val previousCompletionRate = if (previousTasks.isNotEmpty())
+            (previousCompleted.toFloat() / previousTasks.size) * 100f else 0f
+
+        val previousAvgDuration = previousTasks
+            .filter { it.status == TaskStatus.COMPLETED && it.actualDuration > 0 }
+            .map { it.actualDuration }
+            .average()
+            .takeIf { !it.isNaN() } ?: 0.0
+
+        // 上一期间延期任务数
+        val previousDelayed = previousTasks.count {
+            it.status == com.example.nextthingb1.domain.model.TaskStatus.DELAYED
+        }
+
+        // 上一期间放弃任务数
+        val previousCancelled = previousTasks.count {
+            it.status == com.example.nextthingb1.domain.model.TaskStatus.CANCELLED
+        }
+
+        // 上一期间逾期任务数
+        val previousOverdue = previousTasks.count {
+            it.status == com.example.nextthingb1.domain.model.TaskStatus.OVERDUE
+        }
 
         return WeekComparisonData(
-            thisWeekCompleted = thisWeekCompleted,
-            lastWeekCompleted = lastWeekCompleted,
-            completedChange = thisWeekCompleted - lastWeekCompleted,
-            thisWeekCompletionRate = thisWeekCompletionRate,
-            lastWeekCompletionRate = lastWeekCompletionRate,
-            completionRateChange = thisWeekCompletionRate - lastWeekCompletionRate,
-            thisWeekAvgDuration = thisWeekAvgDuration,
-            lastWeekAvgDuration = lastWeekAvgDuration,
-            avgDurationChange = thisWeekAvgDuration - lastWeekAvgDuration
+            thisWeekCompleted = currentCompleted,
+            lastWeekCompleted = previousCompleted,
+            completedChange = currentCompleted - previousCompleted,
+            thisWeekCompletionRate = currentCompletionRate,
+            lastWeekCompletionRate = previousCompletionRate,
+            completionRateChange = currentCompletionRate - previousCompletionRate,
+            thisWeekAvgDuration = currentAvgDuration,
+            lastWeekAvgDuration = previousAvgDuration,
+            avgDurationChange = currentAvgDuration - previousAvgDuration,
+            thisWeekTotalTasks = currentTasks.size,
+            lastWeekTotalTasks = previousTasks.size,
+            totalTasksChange = currentTasks.size - previousTasks.size,
+            thisWeekDelayedTasks = currentDelayed,
+            lastWeekDelayedTasks = previousDelayed,
+            delayedTasksChange = currentDelayed - previousDelayed,
+            thisWeekCancelledTasks = currentCancelled,
+            lastWeekCancelledTasks = previousCancelled,
+            cancelledTasksChange = currentCancelled - previousCancelled,
+            thisWeekOverdueTasks = currentOverdue,
+            lastWeekOverdueTasks = previousOverdue,
+            overdueTasksChange = currentOverdue - previousOverdue
         )
     }
 
+    // 辅助函数：创建四元组
+    private fun <A, B, C, D> quadruple(first: A, second: B, third: C, fourth: D): Quadruple<A, B, C, D> {
+        return Quadruple(first, second, third, fourth)
+    }
+
+    private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
+
     // ==================== 新增：分类效率计算 ====================
+    /**
+     * 计算分类效率分数（满分100分）
+     *
+     * 计算规则：
+     * - 效率分 = 100 - (延期率 × 60 + 放弃率 × 40)
+     * - 延期率权重60%：反映计划能力和时间管理
+     * - 放弃率权重40%：反映任务筛选和优先级能力
+     * - 分数范围：0-100分
+     */
     private fun calculateCategoryEfficiency(
-        completionRate: Float,
-        avgDuration: Double,
-        overdueRate: Float
+        delayRate: Float,
+        cancelRate: Float
     ): Int {
-        // 完成率权重50%，时长权重30%（越短越好），逾期率权重20%（越低越好）
-        val completionScore = completionRate * 0.5f
+        // 延期扣分（权重60%）
+        val delayPenalty = delayRate * 0.6f
 
-        // 时长标准化：假设60分钟为标准，超过扣分
-        val durationScore = if (avgDuration > 0) {
-            val normalized = (60.0 / (avgDuration + 10)).coerceIn(0.0, 1.0) * 100
-            normalized * 0.3
-        } else {
-            0.0
-        }
+        // 放弃扣分（权重40%）
+        val cancelPenalty = cancelRate * 0.4f
 
-        val overdueScore = (100f - overdueRate) * 0.2f
+        // 最终分数 = 100 - 总扣分
+        val score = 100f - delayPenalty - cancelPenalty
 
-        return (completionScore + durationScore + overdueScore).toInt().coerceIn(0, 100)
+        return score.toInt().coerceIn(0, 100)
     }
 
     // ==================== 新增：分类效率排行榜 ====================
@@ -860,6 +1468,11 @@ class StatsViewModel @Inject constructor(
     // ==================== 新增：选择分类 ====================
     fun selectCategory(category: Category?) {
         _uiState.value = _uiState.value.copy(selectedCategory = category)
+    }
+
+    // 选择分类页面时间维度
+    fun selectCategoryTimeRange(timeRange: OverviewTimeRange) {
+        _selectedCategoryTimeRange.value = timeRange
     }
 
     // ==================== 趋势Tab新增功能 ====================
@@ -1060,6 +1673,13 @@ class StatsViewModel @Inject constructor(
             customEnd
         )
 
+        val filteredBacklog = filterBacklogByTimeRange(
+            _uiState.value.allBacklogTrend,
+            timeRange,
+            customStart,
+            customEnd
+        )
+
         // 重新计算热力图统计数据
         val newCalendarStats = if (filteredHeatmap.isNotEmpty()) {
             calculateCalendarStats(filteredHeatmap)
@@ -1073,7 +1693,32 @@ class StatsViewModel @Inject constructor(
             customEndDate = customEnd,
             weeklyTrend = filteredTrend,
             calendarHeatmap = filteredHeatmap,
-            calendarStats = newCalendarStats
+            calendarStats = newCalendarStats,
+            backlogTrend = filteredBacklog
+        )
+    }
+
+    /**
+     * 选择趋势页面的时间范围（本周/本月/全部）
+     */
+    fun selectTrendTimeRange(timeRange: OverviewTimeRange) {
+        // 更新 Flow，触发 combine 重新计算（确保任务数据+趋势范围同步）
+        _selectedTrendTimeRange.value = timeRange
+        // 同时立即过滤已有数据，提升 UI 响应速度
+        val filteredTrend = filterTrendByOverviewTimeRange(
+            _uiState.value.allWeeklyTrend,
+            timeRange
+        )
+
+        val filteredBacklog = filterBacklogByOverviewTimeRange(
+            _uiState.value.allBacklogTrend,
+            timeRange
+        )
+
+        _uiState.value = _uiState.value.copy(
+            selectedTrendTimeRange = timeRange,
+            weeklyTrend = filteredTrend,
+            backlogTrend = filteredBacklog
         )
     }
 
@@ -1126,6 +1771,78 @@ class StatsViewModel @Inject constructor(
                     allHeatmap
                 }
             }
+        }
+    }
+
+    /**
+     * 根据时间范围过滤积压趋势数据
+     */
+    private fun filterBacklogByTimeRange(
+        allBacklog: List<BacklogTrendData>,
+        timeRange: TimeRange,
+        customStart: LocalDate?,
+        customEnd: LocalDate?
+    ): List<BacklogTrendData> {
+        val today = LocalDate.now()
+
+        return when (timeRange) {
+            TimeRange.WEEK_7 -> allBacklog.filter { it.date >= today.minusDays(6) }
+            TimeRange.DAYS_30 -> allBacklog.filter { it.date >= today.minusDays(29) }
+            TimeRange.DAYS_90 -> allBacklog.filter { it.date >= today.minusDays(89) }
+            TimeRange.ALL -> allBacklog
+            TimeRange.CUSTOM -> {
+                if (customStart != null && customEnd != null) {
+                    allBacklog.filter { it.date in customStart..customEnd }
+                } else {
+                    allBacklog
+                }
+            }
+        }
+    }
+
+    /**
+     * 根据OverviewTimeRange过滤趋势数据（本周/本月/全部）
+     */
+    private fun filterTrendByOverviewTimeRange(
+        allTrend: List<DailyTrendData>,
+        timeRange: OverviewTimeRange
+    ): List<DailyTrendData> {
+        val today = LocalDate.now()
+
+        return when (timeRange) {
+            OverviewTimeRange.TODAY -> allTrend.filter { it.date == today }
+            OverviewTimeRange.THIS_WEEK -> {
+                val startOfWeek = today.with(java.time.DayOfWeek.MONDAY)
+                allTrend.filter { it.date >= startOfWeek }
+            }
+            OverviewTimeRange.THIS_MONTH -> {
+                val startOfMonth = today.withDayOfMonth(1)
+                allTrend.filter { it.date >= startOfMonth }
+            }
+            OverviewTimeRange.ALL -> allTrend
+        }
+    }
+
+    /**
+     * 根据OverviewTimeRange过滤积压趋势数据（本周/本月/全部）
+     */
+    private fun filterBacklogByOverviewTimeRange(
+        allBacklog: List<BacklogTrendData>,
+        timeRange: OverviewTimeRange
+    ): List<BacklogTrendData> {
+        val today = LocalDate.now()
+
+        return when (timeRange) {
+            OverviewTimeRange.TODAY -> allBacklog.filter { it.date == today }
+            OverviewTimeRange.THIS_WEEK -> {
+                val startOfWeek = today.with(java.time.DayOfWeek.MONDAY)
+                allBacklog.filter { it.date >= startOfWeek }
+            }
+            OverviewTimeRange.THIS_MONTH -> {
+                val startOfMonth = today.withDayOfMonth(1)
+                allBacklog.filter { it.date >= startOfMonth }
+            }
+            OverviewTimeRange.ALL -> allBacklog
         }
     }
 

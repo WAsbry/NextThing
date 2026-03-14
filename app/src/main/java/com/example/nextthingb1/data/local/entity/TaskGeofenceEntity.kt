@@ -105,6 +105,14 @@ data class TaskGeofenceEntity(
     val lastCheckUserLongitude: Double? = null,
 
     /**
+     * 地理围栏外延期次数
+     *
+     * 记录因用户不在围栏内而被自动延期的次数。
+     * 当延期次数 >= 3 时，强制发送通知，防止任务被无限静默延期。
+     */
+    val geofenceDeferCount: Int = 0,
+
+    /**
      * 创建时间
      */
     val createdAt: LocalDateTime = LocalDateTime.now(),

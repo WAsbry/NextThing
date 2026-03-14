@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 data class UserInfoUiState(
@@ -49,23 +50,29 @@ class UserInfoViewModel @Inject constructor(
 
     private fun loadUserInfo() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
-
-            userUseCases.getCurrentUser().collect { user ->
-                if (user != null) {
-                    _uiState.value = _uiState.value.copy(
-                        currentUserId = user.id,
-                        avatarUri = user.avatarUri?.let { Uri.parse(it) },
-                        nickname = user.nickname,
-                        userId = user.id,
-                        phoneNumber = user.phoneNumber ?: "",
-                        wechatId = user.wechatId ?: "",
-                        qqId = user.qqId ?: "",
-                        isLoading = false
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(isLoading = false)
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                userUseCases.getCurrentUser().collect { user ->
+                    if (user != null) {
+                        _uiState.update {
+                            it.copy(
+                                currentUserId = user.id,
+                                avatarUri = user.avatarUri?.let { u -> Uri.parse(u) },
+                                nickname = user.nickname,
+                                userId = user.id,
+                                phoneNumber = user.phoneNumber ?: "",
+                                wechatId = user.wechatId ?: "",
+                                qqId = user.qqId ?: "",
+                                isLoading = false
+                            )
+                        }
+                    } else {
+                        _uiState.update { it.copy(isLoading = false) }
+                    }
                 }
+            } catch (e: Exception) {
+                Timber.e(e, "加载用户信息失败")
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
             }
         }
     }

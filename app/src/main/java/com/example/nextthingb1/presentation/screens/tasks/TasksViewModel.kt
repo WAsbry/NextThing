@@ -8,6 +8,7 @@ import com.example.nextthingb1.domain.model.TaskStatus
 import com.example.nextthingb1.domain.model.TaskTab
 import com.example.nextthingb1.domain.usecase.TaskUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,9 +73,14 @@ class TasksViewModel @Inject constructor(
     
     private val _uiState = MutableStateFlow(TasksUiState())
     val uiState: StateFlow<TasksUiState> = _uiState.asStateFlow()
-    
+
     private val currentDate = LocalDate.now()
     private var currentMonthDate = currentDate
+
+    // Job handles to cancel stale collectors before starting a new one
+    private var loadTasksJob: Job? = null
+    private var loadSelectedDateTasksJob: Job? = null
+    private var updateCalendarStatsJob: Job? = null
     
     init {
         Log.d("TasksViewModel", "=== TasksViewModel 初始化 ===")
@@ -97,7 +103,8 @@ class TasksViewModel @Inject constructor(
         Timber.tag("DataFlow").d("━━━━━━ TasksViewModel.loadTasks ━━━━━━")
         Timber.tag("DataFlow").d("当前周偏移量: ${_uiState.value.currentWeekOffset}")
 
-        viewModelScope.launch {
+        loadTasksJob?.cancel()
+        loadTasksJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             Timber.tag("DataFlow").d("开始加载所有任务，isLoading=true")
 
@@ -197,7 +204,7 @@ class TasksViewModel @Inject constructor(
         Log.d("TasksViewModel", "根据标签页过滤后的任务数量: ${filteredTasks.size}")
 
         val groups = filteredTasks.groupBy { task ->
-            task.createdAt.toLocalDate().toString()
+            (task.dueDate?.toLocalDate() ?: task.createdAt.toLocalDate()).toString()
         }.map { (date, tasksForDate) ->
             val completedCount = tasksForDate.count { it.status == TaskStatus.COMPLETED }
             Log.d("TasksViewModel", "日期: $date, 任务数: ${tasksForDate.size}, 完成数: $completedCount")
@@ -234,9 +241,9 @@ class TasksViewModel @Inject constructor(
         Log.d("TasksViewModel", "目标周结束: $targetWeekEnd")
 
         val filteredTasks = tasks.filter { task ->
-            val taskDate = task.createdAt.toLocalDate()
+            val taskDate = (task.dueDate?.toLocalDate() ?: task.createdAt.toLocalDate())
             val inWeek = !taskDate.isBefore(targetWeekStart) && !taskDate.isAfter(targetWeekEnd)
-            Log.d("TasksViewModel", "任务: ${task.title}, 创建日期: $taskDate, 在目标周内: $inWeek")
+            Log.d("TasksViewModel", "任务: ${task.title}, 截止日期: $taskDate, 在目标周内: $inWeek")
             inWeek
         }
 
@@ -345,11 +352,12 @@ class TasksViewModel @Inject constructor(
     }
 
     private fun loadSelectedDateTasks(date: String) {
-        viewModelScope.launch {
+        loadSelectedDateTasksJob?.cancel()
+        loadSelectedDateTasksJob = viewModelScope.launch {
             try {
                 taskUseCases.getAllTasks().collect { allTasks ->
                     val selectedDateTasks = allTasks.filter { task ->
-                        task.createdAt.toLocalDate().toString() == date
+                        (task.dueDate?.toLocalDate() ?: task.createdAt.toLocalDate()).toString() == date
                     }
 
                     val completedCount = selectedDateTasks.count { it.status == TaskStatus.COMPLETED }
@@ -373,12 +381,13 @@ class TasksViewModel @Inject constructor(
     fun clearErrorMessage() { _uiState.value = _uiState.value.copy(errorMessage = null) }
 
     private fun updateCalendarTasksStatistics() {
-        viewModelScope.launch {
+        updateCalendarStatsJob?.cancel()
+        updateCalendarStatsJob = viewModelScope.launch {
             try {
                 taskUseCases.getAllTasks().collect { allTasks ->
                     val updatedCalendarDays = _uiState.value.calendarDays.map { day ->
                         val dayTasks = allTasks.filter { task ->
-                            val taskDate = task.createdAt.toLocalDate()
+                            val taskDate = task.dueDate?.toLocalDate() ?: task.createdAt.toLocalDate()
                             taskDate.toString() == day.date
                         }
 

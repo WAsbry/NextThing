@@ -83,6 +83,7 @@ data class TaskGeofence(
     val lastCheckDistance: Double? = null,
     val lastCheckUserLatitude: Double? = null,
     val lastCheckUserLongitude: Double? = null,
+    val geofenceDeferCount: Int = 0,
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now()
 )

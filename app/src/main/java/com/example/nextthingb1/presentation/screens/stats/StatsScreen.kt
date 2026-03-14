@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -31,13 +32,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.nextthingb1.domain.model.Category
+import com.example.nextthingb1.domain.model.Task
 import com.example.nextthingb1.presentation.theme.*
+import com.example.nextthingb1.presentation.components.TaskItemCard
+import androidx.compose.foundation.lazy.items
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 // 扩展属性：将 Category 的 colorHex 转换为 Compose Color
 private val Category.color: Color
     get() = Color(android.graphics.Color.parseColor(this.colorHex))
+
+// 扩展属性：柔和浅色系配色（用于饼图显示）
+private val Category.pastelColor: Color
+    get() = when (this.name) {
+        "工作" -> Color(0xFF81D4FA)  // 浅蓝色
+        "学习" -> Color(0xFFA5D6A7)  // 浅绿色
+        "生活" -> Color(0xFFFFF59D)  // 浅黄色
+        "健康" -> Color(0xFFFFAB91)  // 浅橙色
+        "运动" -> Color(0xFFCE93D8)  // 浅紫色
+        "娱乐" -> Color(0xFF80CBC4)  // 浅青色
+        "购物" -> Color(0xFFF48FB1)  // 浅粉色
+        "社交" -> Color(0xFFFFCC80)  // 浅橘色
+        else -> Color(0xFFB0BEC5)    // 浅灰色
+    }
 
 // 扩展属性：为 Category 提供 emoji 表示
 private val Category.emoji: String
@@ -56,46 +74,58 @@ fun StatsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BgPrimary),
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
-        // Tab 切换
-        item {
-            StatsTabRow(
-                selectedTab = uiState.selectedTab,
-                onTabSelected = { viewModel.selectTab(it) }
-            )
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BgPrimary),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            // Tab 切换
+            item {
+                StatsTabRow(
+                    selectedTab = uiState.selectedTab,
+                    onTabSelected = { viewModel.selectTab(it) }
+                )
+            }
+
+            // 根据选中的 Tab 显示不同内容
+            when (uiState.selectedTab) {
+                StatsTab.OVERVIEW -> {
+                    item { OverviewContent(uiState, viewModel) }
+                }
+                StatsTab.CATEGORY -> {
+                    item { CategoryContent(uiState, viewModel) }
+                }
+                StatsTab.TREND -> {
+                    item { TrendContent(uiState, viewModel) }
+                }
+                StatsTab.EFFICIENCY -> {
+                    item { EfficiencyContent(uiState) }
+                }
+            }
+
+            // 最后更新时间
+            item {
+                Text(
+                    text = "最后更新于: ${uiState.lastUpdateTime.format(DateTimeFormatter.ofPattern("HH:mm:ss"))}",
+                    fontSize = 12.sp,
+                    color = TextMuted,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
-        // 根据选中的 Tab 显示不同内容
-        when (uiState.selectedTab) {
-            StatsTab.OVERVIEW -> {
-                item { OverviewContent(uiState) }
-            }
-            StatsTab.CATEGORY -> {
-                item { CategoryContent(uiState, viewModel) }
-            }
-            StatsTab.TREND -> {
-                item { TrendContent(uiState, viewModel) }
-            }
-            StatsTab.EFFICIENCY -> {
-                item { EfficiencyContent(uiState) }
-            }
-        }
-
-        // 最后更新时间
-        item {
-            Text(
-                text = "最后更新于: ${uiState.lastUpdateTime.format(DateTimeFormatter.ofPattern("HH:mm:ss"))}",
-                fontSize = 12.sp,
-                color = TextMuted,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                textAlign = TextAlign.Center
+        // 任务列表弹窗
+        if (uiState.showTaskListSheet) {
+            TaskListBottomSheet(
+                taskListType = uiState.taskListType!!,
+                tasks = uiState.filteredTasks,
+                timeRange = uiState.selectedOverviewTimeRange,
+                onDismiss = { viewModel.hideTaskList() }
             )
         }
     }
@@ -146,79 +176,83 @@ private fun StatsTabRow(
 
 // ==================== 概览页面 ====================
 @Composable
-private fun OverviewContent(uiState: StatsUiState) {
+private fun OverviewContent(uiState: StatsUiState, viewModel: StatsViewModel) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 新增：智能洞察卡片
         if (uiState.insights.isNotEmpty()) {
-            SmartInsightsCard(insights = uiState.insights)
+            SmartInsightsCard(
+                insights = uiState.insights,
+                selectedTimeRange = uiState.selectedOverviewTimeRange,
+                onTimeRangeSelected = { viewModel.selectOverviewTimeRange(it) }
+            )
         }
 
         // 核心指标卡片
-        CoreMetricsCards(uiState)
+        CoreMetricsCards(uiState, viewModel)
 
         // 新增：本周vs上周对比卡片
         uiState.weekComparison?.let { comparison ->
-            WeekComparisonCard(comparison = comparison)
+            WeekComparisonCard(
+                comparison = comparison,
+                timeRange = uiState.selectedOverviewTimeRange
+            )
         }
 
         // 完成率进度条
         CompletionProgressCard(uiState)
-
-        // 重要程度分布环形图
-        ImportanceDistributionCard(uiState)
     }
 }
 
 @Composable
-private fun CoreMetricsCards(uiState: StatsUiState) {
-    Column(
+private fun CoreMetricsCards(uiState: StatsUiState, viewModel: StatsViewModel) {
+    // 进度指标的标题和图标（根据时间维度动态调整）
+    val (progressTitle, progressIcon) = if (uiState.coreMetricProgressType == "count") {
+        "已完成" to "✅"
+    } else {
+        "完成率" to "📊"
+    }
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MetricCard(
-                title = "总任务数",
-                value = uiState.totalTasks.toString(),
-                icon = "📋",
-                color = Primary,
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                title = "已完成",
-                value = uiState.completedTasks.toString(),
-                icon = "✅",
-                color = Success,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MetricCard(
-                title = "完成率",
-                value = "${String.format("%.1f", uiState.completionRate)}%",
-                icon = "📈",
-                color = Color(0xFFAB47BC),
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                title = "放弃任务",
-                value = uiState.cancelledTasks.toString(),
-                icon = "🚫",
-                color = Color(0xFFFFA726),
-                modifier = Modifier.weight(1f)
-            )
-        }
+        MetricCard(
+            title = "待办任务",
+            value = uiState.coreMetricPending.toString(),
+            icon = "📋",
+            color = Primary,
+            modifier = Modifier.weight(1f),
+            onClick = { viewModel.showTaskList(com.example.nextthingb1.presentation.screens.stats.TaskListType.PENDING) }
+        )
+        MetricCard(
+            title = "重要紧急",
+            value = uiState.coreMetricImportantUrgent.toString(),
+            icon = "🔥",
+            color = Color(0xFFEF5350),
+            modifier = Modifier.weight(1f),
+            onClick = { viewModel.showTaskList(com.example.nextthingb1.presentation.screens.stats.TaskListType.IMPORTANT_URGENT) }
+        )
+        MetricCard(
+            title = "逾期任务",
+            value = uiState.coreMetricOverdue.toString(),
+            icon = "⏰",
+            color = Color(0xFFFF9800),
+            modifier = Modifier.weight(1f),
+            onClick = { viewModel.showTaskList(com.example.nextthingb1.presentation.screens.stats.TaskListType.OVERDUE) }
+        )
+        MetricCard(
+            title = progressTitle,
+            value = uiState.coreMetricProgress,
+            icon = progressIcon,
+            color = Success,
+            modifier = Modifier.weight(1f),
+            onClick = { viewModel.showTaskList(com.example.nextthingb1.presentation.screens.stats.TaskListType.COMPLETED) }
+        )
     }
 }
 
@@ -228,22 +262,26 @@ private fun MetricCard(
     value: String,
     icon: String,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .height(160.dp)
+            .clickable(onClick = onClick), // 添加点击事件
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = BgCard)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(42.dp)
                     .clip(CircleShape)
                     .background(
                         brush = Brush.linearGradient(
@@ -254,34 +292,61 @@ private fun MetricCard(
             ) {
                 Text(
                     text = icon,
-                    fontSize = 24.sp
+                    fontSize = 22.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                color = TextSecondary,
-                textAlign = TextAlign.Center
-            )
+            // 固定标题区域高度
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    lineHeight = 14.sp
+                )
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
-                text = value,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
-                textAlign = TextAlign.Center
-            )
+            // 固定数值区域高度
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = value,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun CompletionProgressCard(uiState: StatsUiState) {
+    // 根据时间维度显示标题
+    val timeRangeText = when (uiState.selectedOverviewTimeRange) {
+        OverviewTimeRange.TODAY -> "今日"
+        OverviewTimeRange.THIS_WEEK -> "本周"
+        OverviewTimeRange.THIS_MONTH -> "本月"
+        OverviewTimeRange.ALL -> "全部"
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -294,18 +359,39 @@ private fun CompletionProgressCard(uiState: StatsUiState) {
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
-            Text(
-                text = "任务状态分布",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
+            // 标题带时间维度
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "任务状态分布",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                // 时间维度标签
+                Text(
+                    text = timeRangeText,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Primary,
+                    modifier = Modifier
+                        .background(
+                            Primary.copy(alpha = 0.1f),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 未完成进度条
+            // 进行中进度条（原"未完成"）
             ProgressBarItem(
-                label = "未完成",
+                label = "进行中",
                 count = uiState.pendingTasks,
                 total = uiState.totalTasks,
                 color = Color(0xFF2196F3)  // 蓝色
@@ -323,9 +409,9 @@ private fun CompletionProgressCard(uiState: StatsUiState) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 延期进度条
+            // 延期/暂停进度条
             ProgressBarItem(
-                label = "延期",
+                label = "延期/暂停",
                 count = uiState.deferredTasks,
                 total = uiState.totalTasks,
                 color = Color(0xFFFFA726)  // 橙黄色
@@ -345,11 +431,62 @@ private fun CompletionProgressCard(uiState: StatsUiState) {
 
             // 放弃进度条
             ProgressBarItem(
-                label = "放弃",
+                label = "已放弃",
                 count = uiState.cancelledTasks,
                 total = uiState.totalTasks,
                 color = Color(0xFF9E9E9E)  // 灰色
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 汇总信息
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Color(0xFFF5F5F5),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "总计：",
+                        fontSize = 13.sp,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = "${uiState.totalTasks}个任务",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "完成率：",
+                        fontSize = 13.sp,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = "${String.format("%.1f", uiState.completionRate)}%",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (uiState.completionRate >= 70) Success
+                               else if (uiState.completionRate >= 40) Primary
+                               else Danger
+                    )
+                }
+            }
         }
     }
 }
@@ -361,6 +498,27 @@ private fun ProgressBarItem(
     total: Int,
     color: Color
 ) {
+    // 计算进度比例
+    val progress = if (total > 0) count.toFloat() / total else 0f
+
+    // 动画状态
+    var targetProgress by remember { mutableStateOf(0f) }
+
+    // 首次进入时触发动画
+    LaunchedEffect(progress) {
+        targetProgress = progress
+    }
+
+    // 进度条宽度动画
+    val animatedProgress by animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = tween(
+            durationMillis = 1000,  // 1秒动画时长
+            easing = FastOutSlowInEasing
+        ),
+        label = "progressAnimation"
+    )
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -369,7 +527,7 @@ private fun ProgressBarItem(
             text = label,
             fontSize = 14.sp,
             color = TextSecondary,
-            modifier = Modifier.width(60.dp)
+            modifier = Modifier.width(80.dp)
         )
 
         Box(
@@ -379,11 +537,10 @@ private fun ProgressBarItem(
                 .clip(RoundedCornerShape(4.dp))
                 .background(Color(0xFFE0E0E0))
         ) {
-            val progress = if (total > 0) count.toFloat() / total else 0f
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(progress)
+                    .fillMaxWidth(animatedProgress)
                     .background(color, RoundedCornerShape(4.dp))
             )
         }
@@ -593,25 +750,22 @@ private fun CategoryContent(uiState: StatsUiState, viewModel: StatsViewModel) {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 新增：分类双层饼图
+        // 分类双层饼图（带时间维度选择）
         CategoryDoublePieChart(
             categoryStats = uiState.categoryStats.values.toList(),
             selectedCategory = uiState.selectedCategory,
-            onCategorySelected = { category -> viewModel.selectCategory(category) }
+            onCategorySelected = { category -> viewModel.selectCategory(category) },
+            selectedTimeRange = uiState.selectedCategoryTimeRange,
+            onTimeRangeSelected = { timeRange -> viewModel.selectCategoryTimeRange(timeRange) }
         )
 
-        // 新增：分类效率排行榜
+        // 分类效率排行榜
         if (uiState.categoryEfficiencyRanking.isNotEmpty()) {
-            CategoryEfficiencyRanking(ranking = uiState.categoryEfficiencyRanking)
+            CategoryEfficiencyRanking(
+                ranking = uiState.categoryEfficiencyRanking,
+                selectedTimeRange = uiState.selectedCategoryTimeRange
+            )
         }
-
-        // 新增：分类时间投入热力图
-        if (uiState.categoryWeekdayHeatmap.isNotEmpty()) {
-            CategoryWeekdayHeatmap(heatmapData = uiState.categoryWeekdayHeatmap)
-        }
-
-        // 保留：分类完成时长对比
-        CategoryDurationChart(uiState)
     }
 }
 
@@ -819,22 +973,8 @@ private fun TrendContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 新增：时间范围选择器
-        TimeRangeSelector(
-            selectedRange = uiState.selectedTimeRange,
-            onRangeSelected = { range -> viewModel.selectTimeRange(range) }
-        )
-
         // 周趋势折线图（支持时间范围切换）
-        WeeklyTrendChart(uiState)
-
-        // 新增：月历热力图（GitHub风格）
-        if (uiState.calendarHeatmap.isNotEmpty()) {
-            CalendarHeatmapCard(
-                heatmapData = uiState.calendarHeatmap,
-                stats = uiState.calendarStats
-            )
-        }
+        WeeklyTrendChart(uiState, viewModel)
 
         // 新增：任务积压趋势面积图
         if (uiState.backlogTrend.isNotEmpty()) {
@@ -844,20 +984,18 @@ private fun TrendContent(
             )
         }
 
-        // 新增：完成速度加速度柱状图
-        if (uiState.velocityAcceleration.isNotEmpty()) {
-            VelocityAccelerationBarChart(
-                velocityData = uiState.velocityAcceleration
+        // 新增：月历热力图（GitHub风格） - 固定显示最近3个月
+        if (uiState.calendarHeatmap.isNotEmpty()) {
+            CalendarHeatmapCard(
+                heatmapData = uiState.calendarHeatmap,
+                stats = uiState.calendarStats
             )
         }
-
-        // 创建 vs 完成对比
-        CreateVsCompleteTrendCard(uiState)
     }
 }
 
 @Composable
-private fun WeeklyTrendChart(uiState: StatsUiState) {
+private fun WeeklyTrendChart(uiState: StatsUiState, viewModel: StatsViewModel) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -870,19 +1008,93 @@ private fun WeeklyTrendChart(uiState: StatsUiState) {
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
-            val timeRangeText = when (uiState.selectedTimeRange) {
-                TimeRange.WEEK_7 -> "最近7天"
-                TimeRange.DAYS_30 -> "最近30天"
-                TimeRange.DAYS_90 -> "最近90天"
-                TimeRange.ALL -> "全部"
-                TimeRange.CUSTOM -> "自定义"
+            // 计算趋势
+            val trendInfo = if (uiState.weeklyTrend.size >= 2) {
+                val recentAvg = uiState.weeklyTrend.takeLast(3).map { it.completedCount }.average()
+                val previousAvg = uiState.weeklyTrend.dropLast(3).takeLast(3).map { it.completedCount }.average()
+
+                when {
+                    previousAvg == 0.0 -> Triple("→", "平稳", Color(0xFF9E9E9E))
+                    recentAvg > previousAvg * 1.1 -> Triple("↗", "上升", Success)
+                    recentAvg < previousAvg * 0.9 -> Triple("↘", "下降", Color(0xFFFF5252))
+                    else -> Triple("→", "平稳", Color(0xFF9E9E9E))
+                }
+            } else {
+                Triple("→", "平稳", Color(0xFF9E9E9E))
             }
-            Text(
-                text = "任务完成趋势（$timeRangeText）",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "任务完成趋势",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                // 趋势标签
+                Row(
+                    modifier = Modifier
+                        .background(trendInfo.third.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = trendInfo.first,
+                        fontSize = 14.sp,
+                        color = trendInfo.third,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = trendInfo.second,
+                        fontSize = 12.sp,
+                        color = trendInfo.third,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 时间维度选择器（本周/本月/全部）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFF5F5F5))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                listOf(
+                    OverviewTimeRange.THIS_WEEK,
+                    OverviewTimeRange.THIS_MONTH,
+                    OverviewTimeRange.ALL
+                ).forEach { timeRange ->
+                    val isSelected = uiState.selectedTrendTimeRange == timeRange
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (isSelected) Primary else Color.White
+                            )
+                            .clickable { viewModel.selectTrendTimeRange(timeRange) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = timeRange.displayName,
+                            color = if (isSelected) Color.White else TextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -991,6 +1203,8 @@ private fun LineChart(
                 .fillMaxHeight()
         ) {
             // 折线图Canvas
+            val primaryColor = Primary
+            val successColor = Success
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1023,7 +1237,7 @@ private fun LineChart(
                 }
                 drawPath(
                     path = createdPath,
-                    color = Primary,
+                    color = primaryColor,
                     style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
                 )
 
@@ -1040,7 +1254,7 @@ private fun LineChart(
                 }
                 drawPath(
                     path = completedPath,
-                    color = Success,
+                    color = successColor,
                     style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
                 )
 
@@ -1051,7 +1265,7 @@ private fun LineChart(
                     // 创建点
                     val createdY = size.height - (dayData.createdCount * heightScale)
                     drawCircle(
-                        color = Primary,
+                        color = primaryColor,
                         radius = 4.dp.toPx(),
                         center = Offset(x, createdY)
                     )
@@ -1059,7 +1273,7 @@ private fun LineChart(
                     // 完成点
                     val completedY = size.height - (dayData.completedCount * heightScale)
                     drawCircle(
-                        color = Success,
+                        color = successColor,
                         radius = 4.dp.toPx(),
                         center = Offset(x, completedY)
                     )
@@ -1216,7 +1430,12 @@ private fun EfficiencyContent(uiState: StatsUiState) {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 新增：时间热力图（7×6矩阵）
+        // 1. 效率雷达图（核心卡片）- 六维度评分
+        uiState.procrastinationRadar?.let {
+            ProcrastinationRadarCard(radarData = it)
+        }
+
+        // 2. 黄金时段热力图 - 最佳工作时间
         if (uiState.timeHeatmap.isNotEmpty()) {
             TimeHeatmapCard(
                 heatmapData = uiState.timeHeatmap,
@@ -1224,26 +1443,10 @@ private fun EfficiencyContent(uiState: StatsUiState) {
             )
         }
 
-        // 新增：拖延分析雷达图
-        uiState.procrastinationRadar?.let {
-            ProcrastinationRadarCard(radarData = it)
-        }
-
-        // 新增：延迟成本分析卡片
-        uiState.delayAnalysis?.let {
-            DelayAnalysisCard(delayData = it)
-        }
-
-        // 新增：任务完成漏斗
+        // 3. 任务完成漏斗 - 流程健康度
         uiState.taskFunnel?.let {
             TaskFunnelCard(funnelData = it)
         }
-
-        // 准时完成率双环图
-        OnTimeCompletionCard(uiState)
-
-        // 重要程度完成时长对比
-        ImportanceDurationCard(uiState)
     }
 }
 
@@ -1521,7 +1724,11 @@ private fun ImportanceDurationItem(
 
 // ==================== 新增：智能洞察卡片 ====================
 @Composable
-private fun SmartInsightsCard(insights: List<com.example.nextthingb1.presentation.screens.stats.InsightData>) {
+private fun SmartInsightsCard(
+    insights: List<com.example.nextthingb1.presentation.screens.stats.InsightData>,
+    selectedTimeRange: com.example.nextthingb1.presentation.screens.stats.OverviewTimeRange,
+    onTimeRangeSelected: (com.example.nextthingb1.presentation.screens.stats.OverviewTimeRange) -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1537,12 +1744,49 @@ private fun SmartInsightsCard(insights: List<com.example.nextthingb1.presentatio
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "智能洞察",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
+            // 标题和时间维度选择器
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "智能洞察",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                // 时间维度选择器
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF5F5F5))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    com.example.nextthingb1.presentation.screens.stats.OverviewTimeRange.values().forEach { timeRange ->
+                        val isSelected = selectedTimeRange == timeRange
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (isSelected) Primary else Color.White
+                                )
+                                .clickable { onTimeRangeSelected(timeRange) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = timeRange.displayName,
+                                color = if (isSelected) Color.White else TextSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
 
             insights.forEach { insight ->
                 InsightRow(insight = insight)
@@ -1655,6 +1899,7 @@ private fun SemiCircleGauge(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        val textPrimaryColor = TextPrimary
         Canvas(modifier = Modifier.fillMaxSize()) {
             val centerX = size.width / 2
             val centerY = size.height * 0.85f
@@ -1699,7 +1944,7 @@ private fun SemiCircleGauge(
             val endY = centerY + (pointerLength * sin(radian)).toFloat()
 
             drawLine(
-                color = TextPrimary,
+                color = textPrimaryColor,
                 start = Offset(centerX, centerY),
                 end = Offset(endX, endY),
                 strokeWidth = 3.dp.toPx(),
@@ -1708,7 +1953,7 @@ private fun SemiCircleGauge(
 
             // 中心圆点
             drawCircle(
-                color = TextPrimary,
+                color = textPrimaryColor,
                 radius = 6.dp.toPx(),
                 center = Offset(centerX, centerY)
             )
@@ -1719,8 +1964,21 @@ private fun SemiCircleGauge(
 // ==================== 新增：本周vs上周对比卡片 ====================
 @Composable
 private fun WeekComparisonCard(
-    comparison: com.example.nextthingb1.presentation.screens.stats.WeekComparisonData
+    comparison: com.example.nextthingb1.presentation.screens.stats.WeekComparisonData,
+    timeRange: com.example.nextthingb1.presentation.screens.stats.OverviewTimeRange
 ) {
+    // 根据时间维度确定标题和标签
+    val (title, currentLabel, previousLabel) = when (timeRange) {
+        com.example.nextthingb1.presentation.screens.stats.OverviewTimeRange.TODAY ->
+            Triple("今日 vs 昨日", "今", "昨")
+        com.example.nextthingb1.presentation.screens.stats.OverviewTimeRange.THIS_WEEK ->
+            Triple("本周 vs 上周", "本周", "上周")
+        com.example.nextthingb1.presentation.screens.stats.OverviewTimeRange.THIS_MONTH ->
+            Triple("本月 vs 上月", "本月", "上月")
+        com.example.nextthingb1.presentation.screens.stats.OverviewTimeRange.ALL ->
+            Triple("全部数据", "全部", "全部") // 不应该显示
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1731,142 +1989,360 @@ private fun WeekComparisonCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(16.dp)
         ) {
+            // 标题
             Text(
-                text = "本周 vs 上周",
+                text = title,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                color = TextPrimary,
+                modifier = Modifier.padding(bottom = 12.dp)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 完成数量对比
-            ComparisonRow(
-                label = "完成数量",
-                thisWeekValue = "${comparison.thisWeekCompleted}个",
-                lastWeekValue = "${comparison.lastWeekCompleted}个",
-                change = comparison.completedChange,
-                isIncreaseBetter = true
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 完成率对比
-            ComparisonRow(
-                label = "完成率",
-                thisWeekValue = "${String.format("%.1f", comparison.thisWeekCompletionRate)}%",
-                lastWeekValue = "${String.format("%.1f", comparison.lastWeekCompletionRate)}%",
-                change = comparison.completionRateChange.toInt(),
-                isIncreaseBetter = true
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 平均完成时长对比
-            ComparisonRow(
-                label = "平均时长",
-                thisWeekValue = "${comparison.thisWeekAvgDuration.toInt()}分",
-                lastWeekValue = "${comparison.lastWeekAvgDuration.toInt()}分",
-                change = comparison.avgDurationChange.toInt(),
-                isIncreaseBetter = false  // 时长越短越好
-            )
-        }
-    }
-}
-
-@Composable
-private fun ComparisonRow(
-    label: String,
-    thisWeekValue: String,
-    lastWeekValue: String,
-    change: Int,
-    isIncreaseBetter: Boolean
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            color = TextSecondary,
-            modifier = Modifier.width(70.dp)
-        )
-
-        // 上周数据
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = "上周",
-                fontSize = 11.sp,
-                color = TextMuted
-            )
-            Text(
-                text = lastWeekValue,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = TextSecondary
-            )
-        }
-
-        // 箭头和变化
-        val isPositiveChange = if (isIncreaseBetter) change > 0 else change < 0
-        val changeColor = when {
-            change == 0 -> TextMuted
-            isPositiveChange -> Success
-            else -> Danger
-        }
-
-        val arrow = when {
-            change > 0 -> "↑"
-            change < 0 -> "↓"
-            else -> "—"
-        }
-
-        Text(
-            text = "$arrow ${kotlin.math.abs(change)}",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = changeColor,
-            modifier = Modifier.width(60.dp),
-            textAlign = TextAlign.Center
-        )
-
-        // 本周数据
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = "本周",
-                fontSize = 11.sp,
-                color = TextMuted
-            )
-            Text(
-                text = thisWeekValue,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
+            // 5组柱状图
+            GroupedBarChart(
+                previousLabel = previousLabel,
+                currentLabel = currentLabel,
+                groups = listOf(
+                    BarGroupData(
+                        label = "任务总数",
+                        previousValue = comparison.lastWeekTotalTasks,
+                        currentValue = comparison.thisWeekTotalTasks,
+                        unit = "",
+                        isRateData = false
+                    ),
+                    BarGroupData(
+                        label = "延期任务",
+                        previousValue = comparison.lastWeekDelayedTasks,
+                        currentValue = comparison.thisWeekDelayedTasks,
+                        unit = "",
+                        isRateData = false
+                    ),
+                    BarGroupData(
+                        label = "逾期任务",
+                        previousValue = comparison.lastWeekOverdueTasks,
+                        currentValue = comparison.thisWeekOverdueTasks,
+                        unit = "",
+                        isRateData = false
+                    ),
+                    BarGroupData(
+                        label = "放弃任务",
+                        previousValue = comparison.lastWeekCancelledTasks,
+                        currentValue = comparison.thisWeekCancelledTasks,
+                        unit = "",
+                        isRateData = false
+                    ),
+                    BarGroupData(
+                        label = "完成率",
+                        previousValue = comparison.lastWeekCompletionRate.toInt(),
+                        currentValue = comparison.thisWeekCompletionRate.toInt(),
+                        unit = "%",
+                        isRateData = true  // 标记为百分比数据，独立计算比例
+                    )
+                )
             )
         }
     }
 }
 
 /**
- * 分类双层饼图
+ * 柱状图分组数据
+ */
+private data class BarGroupData(
+    val label: String,
+    val previousValue: Int,
+    val currentValue: Int,
+    val unit: String,
+    val isRateData: Boolean
+)
+
+/**
+ * 分组柱状图 - 5组，每组2个柱子紧挨着
+ */
+@Composable
+private fun GroupedBarChart(
+    previousLabel: String,
+    currentLabel: String,
+    groups: List<BarGroupData>
+) {
+    // 定义柱状图显示区域的总高度（保持不变）
+    val containerHeight = 140.dp
+
+    // 最大柱子高度 = 容器高度的80%，为112dp
+    val maxBarHeight = containerHeight * 0.8f
+
+    // 第一组：任务数量类（非百分比数据），找出所有任务数量的最大值
+    val taskCountMaxValue = groups
+        .filter { !it.isRateData }
+        .flatMap { listOf(it.previousValue, it.currentValue) }
+        .maxOrNull()?.coerceAtLeast(1) ?: 1
+
+    // 第二组：完成率类（百分比数据），找出完成率的最大值
+    val rateMaxValue = groups
+        .filter { it.isRateData }
+        .flatMap { listOf(it.previousValue, it.currentValue) }
+        .maxOrNull()?.coerceAtLeast(1) ?: 1
+
+    Column {
+        // 柱状图区域
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(containerHeight),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            groups.forEach { group ->
+                // 根据数据类型选择对应的最大值
+                val maxValue = if (group.isRateData) rateMaxValue else taskCountMaxValue
+
+                BarGroup(
+                    label = group.label,
+                    previousValue = group.previousValue,
+                    currentValue = group.currentValue,
+                    unit = group.unit,
+                    maxValue = maxValue,  // 传入对应组的最大值
+                    maxBarHeight = maxBarHeight,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 图例
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 昨日图例
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(Color(0xFFBDBDBD), RoundedCornerShape(2.dp))
+                )
+                Text(
+                    text = previousLabel,
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // 今日图例
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(Primary, RoundedCornerShape(2.dp))
+                )
+                Text(
+                    text = currentLabel,
+                    fontSize = 12.sp,
+                    color = TextPrimary
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 单组柱状图 - 两个柱子紧挨着
+ */
+@Composable
+private fun BarGroup(
+    label: String,
+    previousValue: Int,
+    currentValue: Int,
+    unit: String,
+    maxValue: Int,  // 使用传入的组最大值
+    maxBarHeight: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier
+) {
+    // 按照传入的最大值计算柱子高度
+    val previousBarHeight = if (maxValue > 0) maxBarHeight * (previousValue.toFloat() / maxValue) else 0.dp
+    val currentBarHeight = if (maxValue > 0) maxBarHeight * (currentValue.toFloat() / maxValue) else 0.dp
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 两个柱子紧挨着
+        Row(
+            modifier = Modifier.height(maxBarHeight),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // 昨日柱子
+            SingleBar(
+                value = previousValue,
+                unit = unit,
+                barHeight = previousBarHeight,
+                barColor = Color(0xFFBDBDBD),
+                barWidth = 20.dp
+            )
+
+            // 今日柱子
+            SingleBar(
+                value = currentValue,
+                unit = unit,
+                barHeight = currentBarHeight,
+                barColor = Primary,
+                barWidth = 20.dp
+            )
+        }
+
+        // 标签
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = TextSecondary,
+            modifier = Modifier.padding(top = 6.dp),
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
+    }
+}
+
+/**
+ * 单个柱子
+ */
+@Composable
+private fun SingleBar(
+    value: Int,
+    unit: String,
+    barHeight: androidx.compose.ui.unit.Dp,
+    barColor: Color,
+    barWidth: androidx.compose.ui.unit.Dp
+) {
+    // 记录目标高度，初始为0，用于触发首次动画
+    var targetHeight by remember { mutableStateOf(0.dp) }
+
+    // 首次进入时，延迟触发动画
+    LaunchedEffect(barHeight) {
+        targetHeight = barHeight
+    }
+
+    // 动画：柱子从0高度增长到实际高度
+    val animatedHeight by animateDpAsState(
+        targetValue = targetHeight,
+        animationSpec = tween(
+            durationMillis = 800,  // 动画时长800ms
+            easing = FastOutSlowInEasing  // 快进慢出的缓动曲线
+        ),
+        label = "barHeightAnimation"
+    )
+
+    // 数值透明度动画（延迟显示）
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (targetHeight > 0.dp) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 400,
+            delayMillis = 600,  // 延迟600ms后开始
+            easing = LinearEasing
+        ),
+        label = "valueAlphaAnimation"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (value == 0) {
+            // 没有数据时显示"暂无"，位置靠近底部
+            Box(
+                modifier = Modifier.height(112.dp),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Text(
+                    text = "暂无",
+                    fontSize = 11.sp,
+                    color = TextMuted,
+                    fontWeight = FontWeight.Normal,
+                    modifier = Modifier.padding(bottom = 0.dp)  // 贴近底部
+                )
+            }
+        } else {
+            // 有数据时，始终显示数值（带淡入动画）
+            Text(
+                text = "$value$unit",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = TextPrimary.copy(alpha = animatedAlpha),
+                modifier = Modifier.padding(bottom = 2.dp)
+            )
+
+            // 柱子（带高度增长动画）
+            Box(
+                modifier = Modifier
+                    .width(barWidth)
+                    .height(animatedHeight.coerceAtLeast(0.dp))
+                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                barColor.copy(alpha = 0.8f),
+                                barColor
+                            )
+                        )
+                    )
+            )
+        }
+    }
+}
+
+/**
+ * 分类双层饼图（带动画）
  */
 @Composable
 private fun CategoryDoublePieChart(
     categoryStats: List<CategoryStatsData>,
     selectedCategory: Category?,
-    onCategorySelected: (Category?) -> Unit
+    onCategorySelected: (Category?) -> Unit,
+    selectedTimeRange: OverviewTimeRange,
+    onTimeRangeSelected: (OverviewTimeRange) -> Unit
 ) {
     if (categoryStats.isEmpty()) return
+
+    // 使用 Animatable 控制动画进度
+    val animatedProgress = remember { Animatable(0f) }
+
+    // 创建一个key来标识数据变化（包括数据内容和选中状态）
+    val dataKey = remember(categoryStats, selectedCategory) {
+        categoryStats.hashCode() + (selectedCategory?.id?.hashCode() ?: 0)
+    }
+
+    // 监听数据变化、时间维度变化、选中分类变化，触发动画
+    LaunchedEffect(dataKey) {
+        animatedProgress.snapTo(0f)
+        animatedProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = 1200,
+                easing = FastOutSlowInEasing
+            )
+        )
+    }
+
+    // 中心文字淡入动画
+    val textAlpha by animateFloatAsState(
+        targetValue = if (animatedProgress.value > 0.1f) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 400,
+            delayMillis = 200,
+            easing = LinearEasing
+        ),
+        label = "textAlphaAnimation"
+    )
 
     Card(
         modifier = Modifier
@@ -1881,12 +2357,49 @@ private fun CategoryDoublePieChart(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Text(
-                text = "分类任务分布",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
+            // 标题和时间维度选择器
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "分类任务分布",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                // 时间维度选择器
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF5F5F5))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    OverviewTimeRange.values().forEach { timeRange ->
+                        val isSelected = selectedTimeRange == timeRange
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (isSelected) Primary else Color.White
+                                )
+                                .clickable { onTimeRangeSelected(timeRange) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = timeRange.displayName,
+                                color = if (isSelected) Color.White else TextSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1945,47 +2458,66 @@ private fun CategoryDoublePieChart(
                     val innerRadius = canvasSize * 0.2f
 
                     val total = categoryStats.sumOf { it.totalCount }
-                    var startAngle = -90f
+                    var cumulativeAngle = 0f
+                    val currentProgress = animatedProgress.value
 
                     if (selectedCategory == null) {
-                        // 外圈：显示分类分布
+                        // 外圈：显示分类分布（顺序绘制动画）
                         categoryStats.forEach { stat ->
-                            val sweepAngle = (stat.totalCount.toFloat() / total) * 360f
+                            val targetSweepAngle = (stat.totalCount.toFloat() / total) * 360f
+                            val proportion = stat.totalCount.toFloat() / total
 
-                            drawArc(
-                                color = stat.category.color,
-                                startAngle = startAngle,
-                                sweepAngle = sweepAngle,
-                                useCenter = false,
-                                topLeft = Offset(
-                                    centerX - outerRadius,
-                                    centerY - outerRadius
-                                ),
-                                size = Size(outerRadius * 2, outerRadius * 2),
-                                style = Stroke(width = (outerRadius - innerRadius))
-                            )
+                            // 计算该扇形的绘制进度区间
+                            val startProgress = cumulativeAngle / 360f
+                            val endProgress = (cumulativeAngle + targetSweepAngle) / 360f
 
-                            startAngle += sweepAngle
+                            // 计算当前应该绘制的角度
+                            val animatedSweepAngle = when {
+                                currentProgress <= startProgress -> 0f
+                                currentProgress >= endProgress -> targetSweepAngle
+                                else -> {
+                                    // 在该扇形的绘制区间内，按比例绘制
+                                    val segmentProgress = (currentProgress - startProgress) / (endProgress - startProgress)
+                                    targetSweepAngle * segmentProgress
+                                }
+                            }
+
+                            if (animatedSweepAngle > 0f) {
+                                drawArc(
+                                    color = stat.category.pastelColor,
+                                    startAngle = -90f + cumulativeAngle,
+                                    sweepAngle = animatedSweepAngle,
+                                    useCenter = false,
+                                    topLeft = Offset(
+                                        centerX - outerRadius,
+                                        centerY - outerRadius
+                                    ),
+                                    size = Size(outerRadius * 2, outerRadius * 2),
+                                    style = Stroke(width = (outerRadius - innerRadius))
+                                )
+                            }
+
+                            cumulativeAngle += targetSweepAngle
                         }
                     } else {
-                        // 显示选中分类的状态分布
+                        // 显示选中分类的状态分布（顺序绘制动画）
                         val selectedStat = categoryStats.find { it.category == selectedCategory }
                         selectedStat?.let { stat ->
                             val statusData = listOf(
                                 Triple("已完成", stat.completedCount, Color(0xFF4CAF50)),
                                 Triple("进行中", stat.pendingCount, Color(0xFF2196F3)),
-                                Triple("已逾期", stat.overdueCount, Color(0xFFF4336)),
+                                Triple("已逾期", stat.overdueCount, Color(0xFFF44336)),
                                 Triple("已取消", stat.cancelledCount, Color(0xFF9E9E9E))
                             ).filter { it.second > 0 }
 
                             val statusTotal = statusData.sumOf { it.second }
-                            var statusStartAngle = -90f
 
-                            // 外圈：显示选中分类
+                            // 外圈：显示选中分类（整圈动画，使用高亮色）
+                            val outerCircleAngle = 360f * currentProgress
                             drawArc(
-                                color = stat.category.color,
+                                color = stat.category.pastelColor.copy(alpha = 0.6f),
                                 startAngle = -90f,
-                                sweepAngle = 360f,
+                                sweepAngle = outerCircleAngle,
                                 useCenter = false,
                                 topLeft = Offset(
                                     centerX - outerRadius,
@@ -1995,33 +2527,51 @@ private fun CategoryDoublePieChart(
                                 style = Stroke(width = (outerRadius - innerRadius) * 0.4f)
                             )
 
-                            // 内圈：显示状态分布
+                            // 内圈：显示状态分布（顺序绘制动画）
+                            var statusCumulativeAngle = 0f
                             statusData.forEach { (_, count, color) ->
-                                val sweepAngle = (count.toFloat() / statusTotal) * 360f
+                                val targetSweepAngle = (count.toFloat() / statusTotal) * 360f
 
-                                drawArc(
-                                    color = color,
-                                    startAngle = statusStartAngle,
-                                    sweepAngle = sweepAngle,
-                                    useCenter = false,
-                                    topLeft = Offset(
-                                        centerX - innerRadius * 1.8f,
-                                        centerY - innerRadius * 1.8f
-                                    ),
-                                    size = Size(innerRadius * 3.6f, innerRadius * 3.6f),
-                                    style = Stroke(width = innerRadius * 0.8f)
-                                )
+                                // 计算该扇形的绘制进度区间
+                                val startProgress = statusCumulativeAngle / 360f
+                                val endProgress = (statusCumulativeAngle + targetSweepAngle) / 360f
 
-                                statusStartAngle += sweepAngle
+                                // 计算当前应该绘制的角度
+                                val animatedSweepAngle = when {
+                                    currentProgress <= startProgress -> 0f
+                                    currentProgress >= endProgress -> targetSweepAngle
+                                    else -> {
+                                        val segmentProgress = (currentProgress - startProgress) / (endProgress - startProgress)
+                                        targetSweepAngle * segmentProgress
+                                    }
+                                }
+
+                                if (animatedSweepAngle > 0f) {
+                                    drawArc(
+                                        color = color,
+                                        startAngle = -90f + statusCumulativeAngle,
+                                        sweepAngle = animatedSweepAngle,
+                                        useCenter = false,
+                                        topLeft = Offset(
+                                            centerX - innerRadius * 1.8f,
+                                            centerY - innerRadius * 1.8f
+                                        ),
+                                        size = Size(innerRadius * 3.6f, innerRadius * 3.6f),
+                                        style = Stroke(width = innerRadius * 0.8f)
+                                    )
+                                }
+
+                                statusCumulativeAngle += targetSweepAngle
                             }
                         }
                     }
                 }
 
-                // 中心文字
+                // 中心文字（带淡入动画）
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.alpha(textAlpha)
                 ) {
                     if (selectedCategory != null) {
                         Text(
@@ -2068,14 +2618,16 @@ private fun CategoryDoublePieChart(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(stat.category.pastelColor.copy(alpha = 0.08f))
                             .clickable { onCategorySelected(stat.category) }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 10.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(12.dp)
-                                .background(stat.category.color, CircleShape)
+                                .size(14.dp)
+                                .background(stat.category.pastelColor, CircleShape)
                         )
 
                         Spacer(modifier = Modifier.width(8.dp))
@@ -2164,8 +2716,12 @@ private fun CategoryDoublePieChart(
  */
 @Composable
 private fun CategoryEfficiencyRanking(
-    ranking: List<CategoryEfficiencyData>
+    ranking: List<CategoryEfficiencyData>,
+    selectedTimeRange: OverviewTimeRange
 ) {
+    // 效率分说明弹窗状态
+    var showEfficiencyExplanation by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2179,12 +2735,30 @@ private fun CategoryEfficiencyRanking(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Text(
-                text = "分类效率排行榜",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
+            // 标题和时间维度
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "分类效率排行榜",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                // 时间维度标签
+                Text(
+                    text = selectedTimeRange.displayName,
+                    color = Primary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .background(Primary.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -2254,44 +2828,299 @@ private fun CategoryEfficiencyRanking(
                                 color = TextPrimary
                             )
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Text(
-                                    text = "完成率 ${String.format("%.0f", data.completionRate)}%",
-                                    fontSize = 12.sp,
-                                    color = TextSecondary
-                                )
-
-                                Text(
-                                    text = "平均${String.format("%.1f", data.avgDuration)}分钟",
-                                    fontSize = 12.sp,
-                                    color = TextSecondary
-                                )
-                            }
+                            // 只显示完成率
+                            Text(
+                                text = "完成率 ${String.format("%.0f", data.completionRate)}%",
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
                         }
 
-                        // 效率分数
-                        Column(
-                            horizontalAlignment = Alignment.End
+                        // 效率分数和信息图标
+                        Row(
+                            modifier = Modifier
+                                .clickable { showEfficiencyExplanation = true }
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "${data.efficiencyScore}",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Primary
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.End
+                            ) {
+                                Text(
+                                    text = "${data.efficiencyScore}",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Primary
+                                )
 
-                            Text(
-                                text = "效率分",
-                                fontSize = 11.sp,
-                                color = TextMuted
+                                Text(
+                                    text = "效率分",
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            }
+
+                            // 信息图标
+                            Icon(
+                                painter = painterResource(id = android.R.drawable.ic_menu_info_details),
+                                contentDescription = "效率分说明",
+                                tint = Primary.copy(alpha = 0.6f),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
             }
         }
+    }
+
+    // 效率分说明底部弹窗
+    if (showEfficiencyExplanation) {
+        EfficiencyScoreExplanationSheet(
+            onDismiss = { showEfficiencyExplanation = false }
+        )
+    }
+}
+
+/**
+ * 效率分说明底部弹窗
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EfficiencyScoreExplanationSheet(
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            // 标题
+            Text(
+                text = "效率分计算规则",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            // 核心理念
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F9FF))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "💯",
+                        fontSize = 32.sp,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "满分100分，有延期或放弃就扣分",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "分数越高，说明执行力越强",
+                            fontSize = 13.sp,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 扣分项
+            Text(
+                text = "扣分项",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            // 延期扣分
+            EfficiencyPenaltyItem(
+                icon = "⏰",
+                title = "延期/逾期",
+                weight = "60%",
+                description = "未按时完成的任务",
+                color = Danger
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 放弃扣分
+            EfficiencyPenaltyItem(
+                icon = "🚫",
+                title = "放弃任务",
+                weight = "40%",
+                description = "中途取消的任务",
+                color = Color(0xFF9E9E9E)
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 计算公式
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "计算公式",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    Text(
+                        text = "效率分 = 100 - (延期率×60 + 放弃率×40)",
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 评分标准
+            Text(
+                text = "评分标准",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            ScoreRangeItem("90-100分", "优秀", Color(0xFF4CAF50))
+            ScoreRangeItem("75-89分", "良好", Color(0xFF2196F3))
+            ScoreRangeItem("60-74分", "一般", Color(0xFFFFA726))
+            ScoreRangeItem("0-59分", "待改进", Color(0xFF9E9E9E))
+        }
+    }
+}
+
+/**
+ * 效率扣分项
+ */
+@Composable
+private fun EfficiencyPenaltyItem(
+    icon: String,
+    title: String,
+    weight: String,
+    description: String,
+    color: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 图标
+        Text(
+            text = icon,
+            fontSize = 24.sp,
+            modifier = Modifier.padding(end = 12.dp)
+        )
+
+        // 内容
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
+
+                Text(
+                    text = weight,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    modifier = Modifier
+                        .background(color, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+
+            Text(
+                text = description,
+                fontSize = 12.sp,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+/**
+ * 评分范围项
+ */
+@Composable
+private fun ScoreRangeItem(
+    range: String,
+    label: String,
+    color: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(color, CircleShape)
+            )
+
+            Text(
+                text = range,
+                fontSize = 14.sp,
+                color = TextPrimary,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = TextSecondary
+        )
     }
 }
 
@@ -2494,7 +3323,7 @@ private fun TimeRangeSelector(
 }
 
 /**
- * 月历热力图（GitHub风格）
+ * 完成连贯性热力图（GitHub风格）- 固定显示最近3个月
  */
 @Composable
 private fun CalendarHeatmapCard(
@@ -2515,14 +3344,14 @@ private fun CalendarHeatmapCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "完成任务热力图",
+                text = "完成连贯性热力图",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
 
             Text(
-                text = "最近90天的每日完成情况",
+                text = "可视化你的完成习惯，培养持续行动力（最近3个月）",
                 fontSize = 12.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 4.dp)
@@ -2530,46 +3359,8 @@ private fun CalendarHeatmapCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 热力图网格
-            val weeks = heatmapData.chunked(7)
-
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                weeks.forEach { week ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        week.forEach { dayData ->
-                            val color = when (dayData.level) {
-                                0 -> Color(0xFFEBEDF0)  // 白色
-                                1 -> Color(0xFFC6E48B)  // 浅绿
-                                2 -> Color(0xFF7BC96F)  // 绿色
-                                3 -> Color(0xFF239A3B)  // 深绿
-                                else -> Color(0xFF196127)  // 最深绿
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(1f)
-                                    .background(color, RoundedCornerShape(2.dp))
-                                    .border(
-                                        0.5.dp,
-                                        Color(0xFFE0E0E0),
-                                        RoundedCornerShape(2.dp)
-                                    )
-                            )
-                        }
-
-                        // 如果这周不足7天，补充空白
-                        repeat(7 - week.size) {
-                            Box(modifier = Modifier.weight(1f).aspectRatio(1f))
-                        }
-                    }
-                }
-            }
+            // GitHub风格热力图
+            GitHubStyleHeatmap(heatmapData)
 
             // 颜色图例
             Row(
@@ -2642,6 +3433,155 @@ private fun CalendarHeatmapCard(
     }
 }
 
+/**
+ * GitHub风格热力图组件
+ */
+@Composable
+private fun GitHubStyleHeatmap(heatmapData: List<CalendarHeatmapData>) {
+    if (heatmapData.isEmpty()) return
+
+    // 按周分组（每周7天，从周一开始）
+    val weeks = mutableListOf<List<CalendarHeatmapData>>()
+    val sortedData = heatmapData.sortedBy { it.date }
+
+    // 获取第一天是星期几（1=Monday, 7=Sunday）
+    val firstDayOfWeek = sortedData.first().date.dayOfWeek.value
+
+    // 添加前置空白（填充第一周的空缺）
+    val leadingEmptyDays = firstDayOfWeek - 1
+    var currentWeek = mutableListOf<CalendarHeatmapData?>()
+    repeat(leadingEmptyDays) {
+        currentWeek.add(null)
+    }
+
+    // 填充数据
+    sortedData.forEach { data ->
+        currentWeek.add(data)
+        if (currentWeek.size == 7) {
+            weeks.add(currentWeek.filterNotNull())
+            currentWeek = mutableListOf()
+        }
+    }
+
+    // 添加最后一周（如果有剩余）
+    if (currentWeek.isNotEmpty()) {
+        weeks.add(currentWeek.filterNotNull())
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // 月份标签行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            // 左侧空白（对齐星期标签）
+            Spacer(modifier = Modifier.width(24.dp))
+
+            // 月份标签
+            val months = mutableListOf<Pair<String, Int>>()
+            weeks.forEachIndexed { index, week ->
+                if (week.isNotEmpty()) {
+                    val month = week.first().date.monthValue
+                    if (months.isEmpty() || months.last().first != month.toString()) {
+                        months.add(Pair(month.toString(), index))
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                months.forEach { (month, weekIndex) ->
+                    val monthName = when (month.toInt()) {
+                        1 -> "1月"
+                        2 -> "2月"
+                        3 -> "3月"
+                        4 -> "4月"
+                        5 -> "5月"
+                        6 -> "6月"
+                        7 -> "7月"
+                        8 -> "8月"
+                        9 -> "9月"
+                        10 -> "10月"
+                        11 -> "11月"
+                        12 -> "12月"
+                        else -> ""
+                    }
+
+                    Text(
+                        text = monthName,
+                        fontSize = 10.sp,
+                        color = TextMuted,
+                        modifier = Modifier.offset(x = (weekIndex * 14).dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 热力图主体
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            // 左侧星期标签
+            Column(
+                modifier = Modifier.width(24.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                listOf("", "Mon", "", "Wed", "", "Fri", "").forEach { label ->
+                    Box(
+                        modifier = Modifier.height(12.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 9.sp,
+                            color = TextMuted
+                        )
+                    }
+                }
+            }
+
+            // 热力图格子
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // 按列绘制（每列代表一周）
+                var weekIndex = 0
+                val maxWeeks = 13 // 最多显示13周（约3个月）
+
+                while (weekIndex < weeks.size && weekIndex < maxWeeks) {
+                    val week = weeks[weekIndex]
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        // 绘制7天
+                        for (dayOfWeek in 1..7) {
+                            val dayData = week.find { it.date.dayOfWeek.value == dayOfWeek }
+                            val color = when (dayData?.level) {
+                                0 -> Color(0xFFEBEDF0)
+                                1 -> Color(0xFFC6E48B)
+                                2 -> Color(0xFF7BC96F)
+                                3 -> Color(0xFF239A3B)
+                                4 -> Color(0xFF196127)
+                                else -> Color(0xFFEBEDF0)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .background(color, RoundedCornerShape(2.dp))
+                            )
+                        }
+                    }
+                    weekIndex++
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun StatItem(icon: String, label: String, value: String) {
     Column(
@@ -2668,7 +3608,7 @@ private fun StatItem(icon: String, label: String, value: String) {
 }
 
 /**
- * 任务积压趋势面积图
+ * 任务积压预警趋势面积图
  */
 @Composable
 private fun BacklogTrendAreaChart(
@@ -2689,14 +3629,14 @@ private fun BacklogTrendAreaChart(
                 .padding(16.dp)
         ) {
             Text(
-                text = "任务积压趋势",
+                text = "积压预警趋势",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
 
             Text(
-                text = "最近30天的未完成任务堆积情况",
+                text = "及时发现任务堆积问题，避免失控",
                 fontSize = 12.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 4.dp)
@@ -2704,7 +3644,134 @@ private fun BacklogTrendAreaChart(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 预警状态卡片
+            if (backlogData.isNotEmpty()) {
+                val currentBacklog = backlogData.lastOrNull()?.backlogCount ?: 0
+                val previousBacklog = if (backlogData.size >= 7) {
+                    backlogData[backlogData.size - 7].backlogCount
+                } else {
+                    currentBacklog
+                }
+                val backlogChange = currentBacklog - previousBacklog
+                val changePercentage = if (previousBacklog > 0) {
+                    ((backlogChange.toFloat() / previousBacklog) * 100).toInt()
+                } else if (currentBacklog > 0) {
+                    100
+                } else {
+                    0
+                }
+
+                val warningLevel = when {
+                    currentBacklog >= threshold -> Triple("⚠️ 预警", Color(0xFFFF5252), Color(0xFFFFF3F3))
+                    currentBacklog >= threshold * 0.7 -> Triple("⚡ 注意", Color(0xFFFF9800), Color(0xFFFFF8E1))
+                    else -> Triple("✅ 健康", Success, Color(0xFFF1F8F4))
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = warningLevel.third)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 当前积压
+                        Column {
+                            Text(
+                                text = "当前积压",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
+                            Row(
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "$currentBacklog",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = warningLevel.second
+                                )
+                                Text(
+                                    text = "个任务",
+                                    fontSize = 12.sp,
+                                    color = TextSecondary,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
+                        }
+
+                        // 相比上周
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "相比上周",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = when {
+                                        backlogChange > 0 -> "↗"
+                                        backlogChange < 0 -> "↘"
+                                        else -> "→"
+                                    },
+                                    fontSize = 16.sp,
+                                    color = when {
+                                        backlogChange > 0 -> Color(0xFFFF5252)
+                                        backlogChange < 0 -> Success
+                                        else -> Color(0xFF9E9E9E)
+                                    }
+                                )
+                                Text(
+                                    text = if (backlogChange >= 0) "+$backlogChange" else "$backlogChange",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when {
+                                        backlogChange > 0 -> Color(0xFFFF5252)
+                                        backlogChange < 0 -> Success
+                                        else -> Color(0xFF9E9E9E)
+                                    }
+                                )
+                                if (changePercentage != 0) {
+                                    Text(
+                                        text = "(${if (changePercentage > 0) "+" else ""}$changePercentage%)",
+                                        fontSize = 12.sp,
+                                        color = TextMuted
+                                    )
+                                }
+                            }
+                        }
+
+                        // 预警状态
+                        Row(
+                            modifier = Modifier
+                                .background(warningLevel.second.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = warningLevel.first,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = warningLevel.second
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // 面积图
+            val primaryColor = Primary
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2797,7 +3864,7 @@ private fun BacklogTrendAreaChart(
 
                 drawPath(
                     path = newTaskLine,
-                    color = Primary,
+                    color = primaryColor,
                     style = Stroke(
                         width = 2.dp.toPx(),
                         cap = StrokeCap.Round,
@@ -3061,7 +4128,7 @@ private fun TimeHeatmapCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "时间效率热力图",
+                text = "黄金工作时段分析",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
@@ -3209,14 +4276,14 @@ private fun ProcrastinationRadarCard(radarData: ProcrastinationRadarData) {
                 .padding(16.dp)
         ) {
             Text(
-                text = "效率分析雷达图",
+                text = "综合效率评分",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
 
             Text(
-                text = "六维效率评估模型",
+                text = "六维度效率评估，一图看懂综合表现",
                 fontSize = 12.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 4.dp)
@@ -3225,6 +4292,7 @@ private fun ProcrastinationRadarCard(radarData: ProcrastinationRadarData) {
             Spacer(modifier = Modifier.height(16.dp))
 
             // 雷达图（简化版：六边形）
+            val primaryColor = Primary
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3296,7 +4364,7 @@ private fun ProcrastinationRadarCard(radarData: ProcrastinationRadarData) {
 
                     // 绘制圆点
                     drawCircle(
-                        color = Primary,
+                        color = primaryColor,
                         radius = 4.dp.toPx(),
                         center = Offset(centerX + radius * (value / 100f) * cos(angle), centerY + radius * (value / 100f) * sin(angle))
                     )
@@ -3407,7 +4475,7 @@ private fun DelayAnalysisCard(delayData: DelayAnalysisData) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "延迟成本分析",
+                    text = "拖延时间成本",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFE65100)
@@ -3415,7 +4483,7 @@ private fun DelayAnalysisCard(delayData: DelayAnalysisData) {
             }
 
             Text(
-                text = "拖延带来的时间损失统计",
+                text = "量化拖延造成的时间损失",
                 fontSize = 12.sp,
                 color = Color(0xFFBF360C),
                 modifier = Modifier.padding(top = 4.dp)
@@ -3529,14 +4597,14 @@ private fun TaskFunnelCard(funnelData: TaskFunnelData) {
                 .padding(16.dp)
         ) {
             Text(
-                text = "任务完成漏斗分析",
+                text = "任务流程健康度",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
 
             Text(
-                text = "从创建到完成的全流程流失情况",
+                text = "从创建到完成的全流程转化分析",
                 fontSize = 12.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 4.dp)
@@ -3658,4 +4726,110 @@ private fun TaskFunnelCard(funnelData: TaskFunnelData) {
         }
     }
 }
+
+/**
+ * 任务列表弹窗 - 显示筛选后的任务列表
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TaskListBottomSheet(
+    taskListType: TaskListType,
+    tasks: List<Task>,
+    timeRange: OverviewTimeRange,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = BgPrimary,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            // 标题栏
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = taskListType.title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "${timeRange.displayName} · 共 ${tasks.size} 项任务",
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+
+                // 关闭按钮
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
+                        contentDescription = "关闭",
+                        tint = TextSecondary
+                    )
+                }
+            }
+
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = Color(0xFFE0E0E0),
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+
+            // 任务列表
+            if (tasks.isEmpty()) {
+                // 空状态
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "📋",
+                            fontSize = 48.sp
+                        )
+                        Text(
+                            text = "暂无任务",
+                            fontSize = 15.sp,
+                            color = TextMuted
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(
+                        items = tasks,
+                        key = { task -> task.id }
+                    ) { task ->
+                        TaskItemCard(
+                            task = task,
+                            onClick = { /* 任务详情页面未在此实现 */ }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 

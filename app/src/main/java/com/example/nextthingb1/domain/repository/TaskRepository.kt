@@ -49,4 +49,7 @@ interface TaskRepository {
     // 重复任务相关
     suspend fun getTemplateTasks(): List<Task>
     suspend fun hasInstanceForDate(templateId: String, date: LocalDateTime): Boolean
+    suspend fun getInstancesByTemplateId(templateId: String): List<Task>
+    suspend fun deleteInstancesByTemplateId(templateId: String)
+    suspend fun deleteTemplateAndAllInstances(templateId: String)
 } 

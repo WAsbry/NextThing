@@ -583,6 +583,34 @@ class CreateTaskGeofenceUseCase @Inject constructor(
             Result.failure(e)
         }
     }
+
+    /**
+     * 增加围栏外延期次数
+     */
+    suspend fun incrementDeferCount(taskId: String): Result<Unit> {
+        return try {
+            taskGeofenceRepository.incrementDeferCount(taskId)
+            Timber.tag(TAG).d("✅ 延期次数+1: $taskId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "❌ 增加延期次数失败")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 重置围栏外延期次数
+     */
+    suspend fun resetDeferCount(taskId: String): Result<Unit> {
+        return try {
+            taskGeofenceRepository.resetDeferCount(taskId)
+            Timber.tag(TAG).d("✅ 延期次数重置: $taskId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "❌ 重置延期次数失败")
+            Result.failure(e)
+        }
+    }
 }
 
 // ========== 业务逻辑相关 UseCase ==========

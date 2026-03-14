@@ -11,6 +11,7 @@ import com.example.nextthingb1.domain.service.LocationService
 import com.example.nextthingb1.domain.service.WeatherService
 import com.example.nextthingb1.domain.usecase.TaskUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,12 +60,10 @@ class TodayViewModel @Inject constructor(
     init {
         // 生成今日重复任务实例
         generateTodayRecurringTasks()
-        loadTodayTasks()
-        checkLocationPermissionAndStatus()
-        // 先从数据库加载缓存位置
-        loadCachedLocationFromDatabase()
-        // 自动开始获取位置
-        autoStartLocationUpdate()
+        // 启动持续的任务数据监听
+        startTasksObserver()
+        // 串行初始化：权限检查 → 加载DB缓存 → 开始位置获取，避免竞态条件
+        initLocationFlow()
     }
 
     /**
@@ -103,24 +102,29 @@ class TodayViewModel @Inject constructor(
     // 初始化标志，防止初始化期间触发重复更新
     private var isInitializing = true
     
-    private fun loadTodayTasks() {
+    /**
+     * 启动任务数据持续监听
+     * 使用 viewModelScope 确保在 ViewModel 生命周期内持续订阅
+     */
+    private fun startTasksObserver() {
         viewModelScope.launch {
-            Timber.tag("DataFlow").d("━━━━━━ TodayViewModel.loadTodayTasks ━━━━━━")
+            Timber.tag("DataFlow").d("━━━━━━ TodayViewModel.startTasksObserver ━━━━━━")
             _uiState.value = _uiState.value.copy(isLoading = true)
             Timber.tag("DataFlow").d("开始加载今日任务，isLoading=true")
 
             try {
-                Timber.tag("DataFlow").d("调用 taskUseCases.getTodayTasks().collect")
+                Timber.tag("DataFlow").d("建立持久 Flow 订阅：taskUseCases.getTodayTasks()")
                 taskUseCases.getTodayTasks().collect { tasks ->
                     Timber.tag("DataFlow").d("━━━━━━ Flow回调收到数据 ━━━━━━")
                     Timber.tag("DataFlow").d("📊 收到 ${tasks.size} 个今日任务")
+                    Timber.tag("DataFlow").d("当前 Thread: ${Thread.currentThread().name}")
 
                     // 🔍 检查并更新逾期任务状态
                     val now = LocalDateTime.now()
                     val tasksToUpdate = mutableListOf<Task>()
 
                     tasks.forEachIndexed { index, task ->
-                        Timber.tag("DataFlow").d("  [$index] ${task.title} (${task.status})")
+                        Timber.tag("DataFlow").d("  [$index] ${task.title} | status=${task.status} | id=${task.id.take(8)}")
 
                         // 检查是否应该标记为逾期
                         if (task.status == TaskStatus.PENDING &&
@@ -132,25 +136,26 @@ class TodayViewModel @Inject constructor(
                         }
                     }
 
-                    // 批量更新逾期任务
+                    // 批量更新逾期任务（异步更新，不阻塞当前 Flow）
                     if (tasksToUpdate.isNotEmpty()) {
                         Timber.tag("DataFlow").d("🔄 发现 ${tasksToUpdate.size} 个任务需要更新为逾期状态")
-                        tasksToUpdate.forEach { task ->
-                            try {
-                                taskUseCases.updateTask(task)
-                                Timber.tag("DataFlow").d("  ✅ 已更新: ${task.title} → OVERDUE")
-                            } catch (e: Exception) {
-                                Timber.tag("DataFlow").e(e, "  ❌ 更新失败: ${task.title}")
+                        viewModelScope.launch {
+                            tasksToUpdate.forEach { task ->
+                                try {
+                                    taskUseCases.updateTask(task)
+                                    Timber.tag("DataFlow").d("  ✅ 已更新: ${task.title} → OVERDUE")
+                                } catch (e: Exception) {
+                                    Timber.tag("DataFlow").e(e, "  ❌ 更新失败: ${task.title}")
+                                }
                             }
                         }
-                        // 更新后重新返回，让 Flow 自动触发更新
-                        return@collect
+                        // 不 return，继续处理当前数据，Flow 会在更新后自动触发下一次
                     }
 
                     val completed = tasks.filter { it.status == TaskStatus.COMPLETED }
                     val pending = tasks.filter {
-                    it.status != TaskStatus.COMPLETED && it.status != TaskStatus.CANCELLED
-                }
+                        it.status == TaskStatus.PENDING || it.status == TaskStatus.OVERDUE || it.status == TaskStatus.DELAYED
+                    }
 
                     Timber.tag("DataFlow").d("📊 筛选结果: 已完成=${completed.size}, 待办=${pending.size}")
 
@@ -179,7 +184,7 @@ class TodayViewModel @Inject constructor(
     fun selectTab(tab: TaskTab) {
         val displayTasks = when (tab) {
             TaskTab.PENDING -> _uiState.value.allTasks.filter {
-                it.status != TaskStatus.COMPLETED && it.status != TaskStatus.CANCELLED
+                it.status == TaskStatus.PENDING || it.status == TaskStatus.OVERDUE || it.status == TaskStatus.DELAYED
             }
             TaskTab.COMPLETED -> _uiState.value.allTasks.filter {
                 it.status == TaskStatus.COMPLETED
@@ -195,18 +200,42 @@ class TodayViewModel @Inject constructor(
     fun toggleTaskStatus(taskId: String) {
         viewModelScope.launch {
             try {
+                Timber.tag("TaskToggle").d("━━━━━━ 开始切换任务状态 ━━━━━━")
+                Timber.tag("TaskToggle").d("taskId: ${taskId.take(8)}")
+
+                // 记录切换前的状态
+                val taskBefore = _uiState.value.allTasks.find { it.id == taskId }
+                Timber.tag("TaskToggle").d("切换前: ${taskBefore?.title} | status=${taskBefore?.status}")
+                Timber.tag("TaskToggle").d("当前 Tab: ${_uiState.value.selectedTab}")
+                Timber.tag("TaskToggle").d("当前 displayTasks 数量: ${_uiState.value.displayTasks.size}")
+
                 taskUseCases.toggleTaskStatus(taskId).fold(
                     onSuccess = {
-                        // 重新加载任务列表
-                        loadTodayTasks()
+                        Timber.tag("TaskToggle").d("✅ UseCase 执行成功")
+                        Timber.tag("TaskToggle").d("等待 Room Flow 自动触发更新...")
+
+                        // 延迟检查更新是否生效
+                        viewModelScope.launch {
+                            delay(500)  // 等待 500ms
+                            val taskAfter = _uiState.value.allTasks.find { it.id == taskId }
+                            Timber.tag("TaskToggle").d("500ms后检查: ${taskAfter?.title} | status=${taskAfter?.status}")
+
+                            if (taskAfter?.status == taskBefore?.status) {
+                                Timber.tag("TaskToggle").w("⚠️ 警告：500ms后状态未变化！Flow可能未触发")
+                            } else {
+                                Timber.tag("TaskToggle").d("✅ 状态已更新")
+                            }
+                        }
                     },
                     onFailure = { error ->
+                        Timber.tag("TaskToggle").e("❌ UseCase 执行失败: ${error.message}")
                         _uiState.value = _uiState.value.copy(
                             errorMessage = error.message
                         )
                     }
                 )
             } catch (e: Exception) {
+                Timber.tag("TaskToggle").e(e, "❌ 异常: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     errorMessage = e.message
                 )
@@ -275,7 +304,7 @@ class TodayViewModel @Inject constructor(
                             onSuccess = {
                                 Timber.d("任务已延期: ${task.title}")
                                 hidePostponeReasonDialog()
-                                loadTodayTasks()
+                                // Flow 会自动更新，不需要手动刷新
                             },
                             onFailure = { error ->
                                 Timber.e("延期任务失败: ${error.message}")
@@ -362,7 +391,7 @@ class TodayViewModel @Inject constructor(
                     onSuccess = {
                         Timber.d("任务已放弃: ${task.title}")
                         hideCancelReasonDialog()
-                        loadTodayTasks()
+                        // Flow 会自动更新，不需要手动刷新
                     },
                     onFailure = { error ->
                         Timber.e("放弃任务失败: ${error.message}")
@@ -382,6 +411,97 @@ class TodayViewModel @Inject constructor(
         }
     }
     
+    /**
+     * 直接执行延期任务（粒子动画结束后调用，不依赖 uiState 中的 postponeTaskId）
+     */
+    fun executePostponeTask(taskId: String, reason: String) {
+        viewModelScope.launch {
+            try {
+                val task = _uiState.value.allTasks.find { it.id == taskId }
+                if (task == null) {
+                    Timber.w("executePostponeTask: 找不到任务 $taskId")
+                    return@launch
+                }
+
+                val updatedDescription = if (task.description.isBlank()) {
+                    "【延期原因】\n$reason"
+                } else {
+                    "${task.description}\n\n【延期原因】\n$reason"
+                }
+
+                Timber.d("延期任务: ${task.title}, 原因: $reason")
+
+                taskUseCases.updateTask(
+                    task.copy(
+                        description = updatedDescription,
+                        updatedAt = LocalDateTime.now()
+                    )
+                ).fold(
+                    onSuccess = {
+                        taskUseCases.deferTask(taskId).fold(
+                            onSuccess = {
+                                Timber.d("任务已延期: ${task.title}")
+                            },
+                            onFailure = { error ->
+                                Timber.e("延期任务失败: ${error.message}")
+                                _uiState.value = _uiState.value.copy(errorMessage = error.message)
+                            }
+                        )
+                    },
+                    onFailure = { error ->
+                        Timber.e("更新任务描述失败: ${error.message}")
+                        _uiState.value = _uiState.value.copy(errorMessage = error.message)
+                    }
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "延期任务异常")
+                _uiState.value = _uiState.value.copy(errorMessage = e.message)
+            }
+        }
+    }
+
+    /**
+     * 直接执行放弃任务（粒子动画结束后调用，不依赖 uiState 中的 cancelTaskId）
+     */
+    fun executeCancelTask(taskId: String, reason: String) {
+        viewModelScope.launch {
+            try {
+                val task = _uiState.value.allTasks.find { it.id == taskId }
+                if (task == null) {
+                    Timber.w("executeCancelTask: 找不到任务 $taskId")
+                    return@launch
+                }
+
+                val updatedDescription = if (task.description.isBlank()) {
+                    "【放弃原因】\n$reason"
+                } else {
+                    "${task.description}\n\n【放弃原因】\n$reason"
+                }
+
+                Timber.d("放弃任务: ${task.title}, 原因: $reason")
+
+                taskUseCases.updateTask(
+                    task.copy(
+                        status = TaskStatus.CANCELLED,
+                        description = updatedDescription,
+                        updatedAt = LocalDateTime.now()
+                    )
+                ).fold(
+                    onSuccess = {
+                        Timber.d("任务已放弃: ${task.title}")
+                    },
+                    onFailure = { error ->
+                        Timber.e("放弃任务失败: ${error.message}")
+                        _uiState.value = _uiState.value.copy(errorMessage = error.message)
+                    }
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "放弃任务异常")
+                _uiState.value = _uiState.value.copy(errorMessage = e.message)
+            }
+        }
+    }
+
     fun showCreateTaskDialog() {
         // 快速创建任务功能为可选增强,当前通过底部导航栏"创建"按钮跳转
         // 可扩展:在首页添加快速创建对话框,简化操作流程
@@ -494,68 +614,23 @@ class TodayViewModel @Inject constructor(
     val showLocationHelpDialog: StateFlow<Boolean> = _showLocationHelpDialog.asStateFlow()
     
     /**
+     * 串行初始化位置流程：权限检查 → 加载DB缓存 → 开始位置获取
+     * 保证 doLoadCachedFromDB() 完成后才执行 doAutoStartLocationUpdate()，避免竞态条件
+     */
+    private fun initLocationFlow() {
+        viewModelScope.launch {
+            performPermissionCheck()
+            doLoadCachedFromDB()
+            doAutoStartLocationUpdate()
+        }
+    }
+
+    /**
      * 请求位置权限
      */
     fun requestLocationPermission() {
         _showPermissionDialog.value = true
         Timber.d("显示位置权限请求对话框")
-    }
-    
-    /**
-     * 强制检查权限状态并刷新
-     */
-    fun forceCheckPermissionsAndRefresh() {
-        viewModelScope.launch {
-            checkLocationPermissionAndStatus()
-            // 检查权限状态，如果有权限则进行静默更新
-            if (_uiState.value.hasLocationPermission && _uiState.value.isLocationEnabled) {
-                if (_uiState.value.currentLocationName == "需要位置权限" ||
-                    _uiState.value.currentLocationName == "请开启位置服务") {
-                    // 更新状态为可点击
-                    _uiState.value = _uiState.value.copy(
-                        currentLocationName = "正在获取位置...",
-                        isLocationLoading = false
-                    )
-                    // 开始静默更新
-                    silentLocationUpdate()
-                }
-            }
-        }
-    }
-
-    /**
-     * 当权限被授予后调用
-     */
-    fun onPermissionGranted() {
-        viewModelScope.launch {
-            Timber.tag("LocationUpdate").d("━━━━━ onPermissionGranted 被调用 ━━━━━")
-            Timber.tag("LocationUpdate").d("权限已授予")
-
-            // 如果正在初始化，跳过，因为autoStartLocationUpdate会处理
-            if (isInitializing) {
-                Timber.tag("LocationUpdate").w("⏭️ ViewModel正在初始化中，跳过onPermissionGranted更新")
-                Timber.tag("LocationUpdate").d("   autoStartLocationUpdate会在权限检查后自动获取位置")
-                Timber.tag("LocationUpdate").d("━━━━━ onPermissionGranted 结束（跳过）━━━━━")
-                return@launch
-            }
-
-            checkLocationPermissionAndStatus()
-
-            // 确认有权限且位置服务已启用
-            if (_uiState.value.hasLocationPermission && _uiState.value.isLocationEnabled) {
-                Timber.tag("LocationUpdate").d("✅ 权限和服务检查通过 → 调用 autoStartLocationUpdate()")
-                // 使用autoStartLocationUpdate而不是直接startLocationAcquisition，这样会检查缓存
-                autoStartLocationUpdate()
-            } else if (_uiState.value.hasLocationPermission && !_uiState.value.isLocationEnabled) {
-                // 有权限但位置服务未启用
-                Timber.tag("LocationUpdate").w("⚠️ 有权限但位置服务未启用")
-                _uiState.value = _uiState.value.copy(
-                    currentLocationName = "请开启位置服务",
-                    isLocationLoading = false
-                )
-            }
-            Timber.tag("LocationUpdate").d("━━━━━ onPermissionGranted 结束 ━━━━━")
-        }
     }
 
     /**
@@ -673,41 +748,40 @@ class TodayViewModel @Inject constructor(
 
     
     private fun checkLocationPermissionAndStatus() {
-        viewModelScope.launch {
-            val hasPermission = locationService.hasLocationPermission()
-            val isEnabled = locationService.isLocationEnabled()
-            
+        viewModelScope.launch { performPermissionCheck() }
+    }
+
+    private suspend fun performPermissionCheck() {
+        val hasPermission = locationService.hasLocationPermission()
+        val isEnabled = locationService.isLocationEnabled()
+
+        _uiState.value = _uiState.value.copy(
+            hasLocationPermission = hasPermission,
+            isLocationEnabled = isEnabled
+        )
+
+        if (!hasPermission) {
             _uiState.value = _uiState.value.copy(
-                hasLocationPermission = hasPermission,
-                isLocationEnabled = isEnabled
+                currentLocationName = "需要位置权限",
+                isLocationLoading = false
             )
-            
-            if (!hasPermission) {
+        } else if (!isEnabled) {
+            _uiState.value = _uiState.value.copy(
+                currentLocationName = "请开启位置服务",
+                isLocationLoading = false
+            )
+        } else if (_uiState.value.currentLocation == null) {
+            if (isCacheValid()) {
                 _uiState.value = _uiState.value.copy(
-                    currentLocationName = "需要位置权限",
+                    currentLocation = cachedLocationInfo,
+                    currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
                     isLocationLoading = false
                 )
-            } else if (!isEnabled) {
+            } else {
                 _uiState.value = _uiState.value.copy(
-                    currentLocationName = "请开启位置服务",
-                    isLocationLoading = false
+                    currentLocationName = "正在获取位置...",
+                    isLocationLoading = true
                 )
-            } else if (_uiState.value.currentLocation == null) {
-                // 有权限但没有位置信息时，检查缓存
-                if (isCacheValid()) {
-                    // 缓存有效，使用缓存位置
-                    _uiState.value = _uiState.value.copy(
-                        currentLocation = cachedLocationInfo,
-                        currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
-                        isLocationLoading = false
-                    )
-                } else {
-                    // 缓存无效，显示正在获取状态
-                    _uiState.value = _uiState.value.copy(
-                        currentLocationName = "正在获取位置...",
-                        isLocationLoading = true
-                    )
-                }
             }
         }
     }
@@ -719,48 +793,39 @@ class TodayViewModel @Inject constructor(
      */
     fun onScreenResumed() {
         Timber.tag("LocationUpdate").d("━━━━━ onScreenResumed 被调用 ━━━━━")
-        Timber.tag("LocationUpdate").d("用户切换回首页")
 
-        // 如果正在初始化，跳过此次更新，防止重复触发位置获取
         if (isInitializing) {
             Timber.tag("LocationUpdate").w("⏭️ ViewModel正在初始化中，跳过onScreenResumed更新")
-            Timber.tag("LocationUpdate").d("   初始化阶段会自动加载缓存和获取位置，无需重复触发")
             Timber.tag("LocationUpdate").d("━━━━━ onScreenResumed 结束（跳过）━━━━━")
             return
         }
 
-        Timber.tag("LocationUpdate").d("✅ 初始化已完成，继续执行onScreenResumed逻辑")
+        viewModelScope.launch {
+            val oldPermission = _uiState.value.hasLocationPermission
+            val oldLocationEnabled = _uiState.value.isLocationEnabled
 
-        // 🔄 刷新任务数据，确保任务状态是最新的（例如逾期状态）
-        Timber.tag("DataFlow").d("🔄 onScreenResumed: 刷新任务数据")
-        loadTodayTasks()
+            Timber.tag("LocationUpdate").d("旧权限状态: hasPermission=$oldPermission, isEnabled=$oldLocationEnabled")
 
-        val oldPermission = _uiState.value.hasLocationPermission
-        val oldLocationEnabled = _uiState.value.isLocationEnabled
+            // await 权限检查，确保读到最新状态
+            performPermissionCheck()
 
-        Timber.tag("LocationUpdate").d("旧权限状态: hasPermission=$oldPermission, isEnabled=$oldLocationEnabled")
+            val newPermission = _uiState.value.hasLocationPermission
+            val newLocationEnabled = _uiState.value.isLocationEnabled
 
-        checkLocationPermissionAndStatus()
+            Timber.tag("LocationUpdate").d("新权限状态: hasPermission=$newPermission, isEnabled=$newLocationEnabled")
 
-        // 如果权限状态发生变化，立即处理
-        val newPermission = _uiState.value.hasLocationPermission
-        val newLocationEnabled = _uiState.value.isLocationEnabled
+            if (!oldPermission && newPermission && newLocationEnabled) {
+                Timber.tag("LocationUpdate").d("🆕 权限刚被授予 → 调用 doAutoStartLocationUpdate()")
+                doAutoStartLocationUpdate()
+            } else if (newPermission && newLocationEnabled) {
+                Timber.tag("LocationUpdate").d("✅ 有权限 → 调用 silentLocationUpdate()")
+                silentLocationUpdate()
+            } else {
+                Timber.tag("LocationUpdate").w("⚠️ 权限不足，跳过位置更新")
+            }
 
-        Timber.tag("LocationUpdate").d("新权限状态: hasPermission=$newPermission, isEnabled=$newLocationEnabled")
-
-        if (!oldPermission && newPermission && newLocationEnabled) {
-            // 权限刚被授予，自动开始获取位置
-            Timber.tag("LocationUpdate").d("🆕 权限状态变化：刚被授予 → 调用 autoStartLocationUpdate()")
-            autoStartLocationUpdate()
-        } else if (newPermission && newLocationEnabled) {
-            // 有权限时进行静默更新
-            Timber.tag("LocationUpdate").d("✅ 有权限 → 调用 silentLocationUpdate()")
-            silentLocationUpdate()
-        } else {
-            Timber.tag("LocationUpdate").w("⚠️ 权限不足，跳过位置更新")
+            Timber.tag("LocationUpdate").d("━━━━━ onScreenResumed 结束 ━━━━━")
         }
-
-        Timber.tag("LocationUpdate").d("━━━━━ onScreenResumed 结束 ━━━━━")
     }
     
     /**
@@ -787,110 +852,93 @@ class TodayViewModel @Inject constructor(
      * 自动开始位置更新
      */
     private fun autoStartLocationUpdate() {
-        viewModelScope.launch {
-            Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 开始 ━━━━━")
-            Timber.tag("LocationUpdate").d("调用来源: 应用初始化或权限授予")
+        viewModelScope.launch { doAutoStartLocationUpdate() }
+    }
 
-            // 检查权限和服务状态
-            if (!locationService.hasLocationPermission()) {
-                Timber.tag("LocationUpdate").w("❌ 无位置权限，等待用户授权")
-                return@launch
+    private suspend fun doAutoStartLocationUpdate() {
+        Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 开始 ━━━━━")
+        Timber.tag("LocationUpdate").d("调用来源: 应用初始化或权限授予")
+
+        if (!locationService.hasLocationPermission()) {
+            Timber.tag("LocationUpdate").w("❌ 无位置权限，等待用户授权")
+            isInitializing = false
+            return
+        }
+
+        if (!locationService.isLocationEnabled()) {
+            Timber.tag("LocationUpdate").w("❌ 位置服务未启用，等待用户开启")
+            isInitializing = false
+            return
+        }
+
+        Timber.tag("LocationUpdate").d("✅ 权限和服务检查通过")
+
+        if (isCacheValid()) {
+            Timber.tag("LocationUpdate").d("✅ 缓存有效(<5分钟)，使用缓存位置: ${cachedLocationInfo?.locationName}")
+            _uiState.value = _uiState.value.copy(
+                currentLocation = cachedLocationInfo,
+                currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
+                isLocationLoading = false
+            )
+            if (_uiState.value.weatherInfo == null || weatherService.shouldRefreshWeather()) {
+                Timber.tag("LocationUpdate").d("🌤️ 使用缓存位置，开始调用天气服务...")
+                loadWeatherInfo()
             }
+            isInitializing = false
+            Timber.tag("LocationUpdate").d("🏁 初始化完成（使用缓存）")
+            Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 结束（使用缓存）━━━━━")
+            return
+        }
 
-            if (!locationService.isLocationEnabled()) {
-                Timber.tag("LocationUpdate").w("❌ 位置服务未启用，等待用户开启")
-                return@launch
-            }
+        if (cachedLocationInfo == null) {
+            Timber.tag("LocationUpdate").d("⚠️ 无缓存数据，首次获取位置（显示加载动画）")
+            startLocationAcquisition()
+            Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 结束（首次获取）━━━━━")
+        } else {
+            val cacheAge = (System.currentTimeMillis() - lastLocationUpdateTime) / 1000
+            Timber.tag("LocationUpdate").d("⚠️ 缓存已过期(${cacheAge}秒 > 300秒)，进行静默更新")
+            Timber.tag("LocationUpdate").d("   当前缓存: ${cachedLocationInfo?.locationName}")
 
-            Timber.tag("LocationUpdate").d("✅ 权限和服务检查通过")
+            _uiState.value = _uiState.value.copy(
+                currentLocation = cachedLocationInfo,
+                currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
+                isLocationLoading = false,
+                locationError = null
+            )
 
-            // 检查缓存是否有效
-            if (isCacheValid()) {
-                Timber.tag("LocationUpdate").d("✅ 缓存有效(<5分钟)，使用缓存位置: ${cachedLocationInfo?.locationName}")
-                _uiState.value = _uiState.value.copy(
-                    currentLocation = cachedLocationInfo,
-                    currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
-                    isLocationLoading = false
-                )
-                Timber.tag("LocationUpdate").d("   UI已更新显示缓存位置")
+            isInitializing = false
+            Timber.tag("LocationUpdate").d("🏁 初始化完成（显示缓存），后台静默获取新位置")
 
-                // 位置可用时，检查是否需要获取天气
-                if (_uiState.value.weatherInfo == null || weatherService.shouldRefreshWeather()) {
-                    Timber.tag("LocationUpdate").d("🌤️ 使用缓存位置，开始调用天气服务...")
-                    loadWeatherInfo()
-                }
-                Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 结束（使用缓存）━━━━━")
-                // 使用缓存也算初始化完成
-                isInitializing = false
-                Timber.tag("LocationUpdate").d("🏁 初始化完成（使用缓存），允许onScreenResumed触发更新")
-                return@launch
-            }
+            viewModelScope.launch {
+                try {
+                    Timber.tag("LocationUpdate").d("📡 后台静默调用 locationService.getCurrentLocation()")
+                    val newLocation = locationService.getCurrentLocation(forceRefresh = false)
 
-            // 缓存无效，需要区分两种情况
-            if (cachedLocationInfo == null) {
-                // 情况1: 完全没有缓存（首次启动）→ 显示加载动画
-                Timber.tag("LocationUpdate").d("⚠️ 无缓存数据，首次获取位置（显示加载动画）")
-                startLocationAcquisition()
-                Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 结束（首次获取）━━━━━")
-            } else {
-                // 情况2: 有缓存但已过期（>5分钟）→ 静默更新
-                val cacheAge = (System.currentTimeMillis() - lastLocationUpdateTime) / 1000
-                Timber.tag("LocationUpdate").d("⚠️ 缓存已过期(${cacheAge}秒 > 300秒)，进行静默更新")
-                Timber.tag("LocationUpdate").d("   当前缓存: ${cachedLocationInfo?.locationName}")
-                Timber.tag("LocationUpdate").d("   先显示缓存，后台静默获取新位置")
-
-                // 先显示缓存的位置（不显示加载动画）
-                _uiState.value = _uiState.value.copy(
-                    currentLocation = cachedLocationInfo,
-                    currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
-                    isLocationLoading = false,
-                    locationError = null
-                )
-
-                // 初始化完成，允许后续操作
-                isInitializing = false
-                Timber.tag("LocationUpdate").d("🏁 初始化完成（显示缓存），允许onScreenResumed触发更新")
-
-                // 后台静默获取新位置（不通过silentLocationUpdate，避免重复缓存检查）
-                viewModelScope.launch {
-                    try {
-                        Timber.tag("LocationUpdate").d("📡 后台静默调用 locationService.getCurrentLocation()")
-                        val newLocation = locationService.getCurrentLocation(forceRefresh = false)
-
-                        if (newLocation != null) {
-                            Timber.tag("LocationUpdate").d("✅ 后台获取成功: ${newLocation.locationName}")
-
-                            // 检测地址是否变化
-                            val addressChanged = isLocationAddressChanged(cachedLocationInfo, newLocation)
-                            Timber.tag("LocationUpdate").d("📊 地址对比: ${if (addressChanged) "已变化" else "未变化"}")
-
-                            // 无论是否变化，都更新缓存
-                            updateLocationCache(newLocation)
-
-                            // 仅地址变化时更新UI
-                            if (addressChanged) {
-                                Timber.tag("LocationUpdate").d("🔄 地址变化，更新UI")
-                                _uiState.value = _uiState.value.copy(
-                                    currentLocation = newLocation,
-                                    currentLocationName = newLocation.locationName,
-                                    isLocationLoading = false,
-                                    locationError = null
-                                )
-                                // 触发天气更新
-                                silentWeatherUpdate(newLocation)
-                            } else {
-                                Timber.tag("LocationUpdate").d("➡️ 地址未变化，仅更新缓存")
-                            }
+                    if (newLocation != null) {
+                        val addressChanged = isLocationAddressChanged(cachedLocationInfo, newLocation)
+                        Timber.tag("LocationUpdate").d("📊 地址对比: ${if (addressChanged) "已变化" else "未变化"}")
+                        updateLocationCache(newLocation)
+                        if (addressChanged) {
+                            Timber.tag("LocationUpdate").d("🔄 地址变化，更新UI")
+                            _uiState.value = _uiState.value.copy(
+                                currentLocation = newLocation,
+                                currentLocationName = newLocation.locationName,
+                                isLocationLoading = false,
+                                locationError = null
+                            )
+                            silentWeatherUpdate(newLocation)
                         } else {
-                            Timber.tag("LocationUpdate").w("❌ 后台获取失败，保持显示缓存")
+                            Timber.tag("LocationUpdate").d("➡️ 地址未变化，仅更新缓存")
                         }
-                    } catch (e: Exception) {
-                        Timber.tag("LocationUpdate").e(e, "💥 后台获取异常，保持显示缓存")
+                    } else {
+                        Timber.tag("LocationUpdate").w("❌ 后台获取失败，保持显示缓存")
                     }
+                } catch (e: Exception) {
+                    Timber.tag("LocationUpdate").e(e, "💥 后台获取异常，保持显示缓存")
                 }
-
-                Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 结束（静默更新）━━━━━")
             }
+
+            Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 结束（静默更新）━━━━━")
         }
     }
     
@@ -963,44 +1011,45 @@ class TodayViewModel @Inject constructor(
         }
     }
     
-    /**
-     * 从数据库加载缓存的位置信息
-     */
     private fun loadCachedLocationFromDatabase() {
-        viewModelScope.launch {
-            Timber.tag("LocationUpdate").d("━━━━━ 从数据库加载缓存位置 ━━━━━")
-            try {
-                val currentLocation = taskUseCases.locationRepository.getCurrentLocation()
-                if (currentLocation != null) {
-                    Timber.tag("LocationUpdate").d("✅ 数据库中找到缓存位置:")
-                    Timber.tag("LocationUpdate").d("   地址: ${currentLocation.locationName}")
-                    Timber.tag("LocationUpdate").d("   经纬度: (${currentLocation.latitude}, ${currentLocation.longitude})")
+        viewModelScope.launch { doLoadCachedFromDB() }
+    }
 
-                    cachedLocationInfo = currentLocation
-                    lastLocationUpdateTime = System.currentTimeMillis()
-                    Timber.tag("LocationUpdate").d("   已更新内存缓存和时间戳")
+    private suspend fun doLoadCachedFromDB() {
+        Timber.tag("LocationUpdate").d("━━━━━ 从数据库加载缓存位置 ━━━━━")
+        try {
+            val currentLocation = taskUseCases.locationRepository.getCurrentLocation()
+            if (currentLocation != null) {
+                Timber.tag("LocationUpdate").d("✅ 数据库中找到缓存位置:")
+                Timber.tag("LocationUpdate").d("   地址: ${currentLocation.locationName}")
+                Timber.tag("LocationUpdate").d("   经纬度: (${currentLocation.latitude}, ${currentLocation.longitude})")
 
-                    // 更新UI显示
-                    _uiState.value = _uiState.value.copy(
-                        currentLocation = currentLocation,
-                        currentLocationName = currentLocation.locationName,
-                        isLocationLoading = false
-                    )
-                    Timber.tag("LocationUpdate").d("✅ UI已更新显示数据库缓存位置")
+                cachedLocationInfo = currentLocation
+                // 使用位置记录的实际更新时间，避免伪造新鲜度
+                lastLocationUpdateTime = currentLocation.updatedAt
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli()
+                Timber.tag("LocationUpdate").d("   已更新内存缓存（使用实际时间戳）")
 
-                    // 如果有缓存位置，尝试获取天气
-                    if (_uiState.value.weatherInfo == null || weatherService.shouldRefreshWeather()) {
-                        Timber.tag("LocationUpdate").d("🌤️ 使用数据库缓存位置，开始调用天气服务...")
-                        loadWeatherInfo()
-                    }
-                } else {
-                    Timber.tag("LocationUpdate").d("⚠️ 数据库中没有缓存位置")
+                _uiState.value = _uiState.value.copy(
+                    currentLocation = currentLocation,
+                    currentLocationName = currentLocation.locationName,
+                    isLocationLoading = false
+                )
+                Timber.tag("LocationUpdate").d("✅ UI已更新显示数据库缓存位置")
+
+                if (_uiState.value.weatherInfo == null || weatherService.shouldRefreshWeather()) {
+                    Timber.tag("LocationUpdate").d("🌤️ 使用数据库缓存位置，开始调用天气服务...")
+                    loadWeatherInfo()
                 }
-            } catch (e: Exception) {
-                Timber.tag("LocationUpdate").e(e, "❌ 从数据库加载缓存位置失败: ${e.message}")
-            } finally {
-                Timber.tag("LocationUpdate").d("━━━━━ 数据库加载结束 ━━━━━")
+            } else {
+                Timber.tag("LocationUpdate").d("⚠️ 数据库中没有缓存位置")
             }
+        } catch (e: Exception) {
+            Timber.tag("LocationUpdate").e(e, "❌ 从数据库加载缓存位置失败: ${e.message}")
+        } finally {
+            Timber.tag("LocationUpdate").d("━━━━━ 数据库加载结束 ━━━━━")
         }
     }
 

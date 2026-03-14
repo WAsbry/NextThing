@@ -5,10 +5,23 @@ import com.example.nextthingb1.data.local.entity.TaskWithCategory
 import com.example.nextthingb1.data.mapper.CategoryMapper.toDomain
 import com.example.nextthingb1.domain.model.*
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonPrimitive
+import com.google.gson.JsonSerializer
 import com.google.gson.reflect.TypeToken
 import timber.log.Timber
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
-private val gson = Gson()
+private val gson: Gson = GsonBuilder()
+    .registerTypeAdapter(LocalDateTime::class.java, JsonSerializer<LocalDateTime> { src, _, _ ->
+        JsonPrimitive(src.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+    })
+    .registerTypeAdapter(LocalDateTime::class.java, JsonDeserializer { json, _, _ ->
+        LocalDateTime.parse(json.asString, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    })
+    .create()
 
 /**
  * 将 TaskWithCategory（联表查询结果）转换为 Task 领域模型

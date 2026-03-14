@@ -138,6 +138,12 @@ class MapPickerViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val address = withContext(Dispatchers.IO) {
+                    val search = geocodeSearch
+                    if (search == null) {
+                        Timber.tag("MapPicker").w("geocodeSearch 未初始化，跳过逆地理编码")
+                        return@withContext "获取地址失败"
+                    }
+
                     suspendCoroutine { continuation ->
                         val query = RegeocodeQuery(
                             LatLonPoint(latitude, longitude),
@@ -145,7 +151,7 @@ class MapPickerViewModel @Inject constructor(
                             GeocodeSearch.AMAP // 高德坐标系
                         )
 
-                        geocodeSearch?.setOnGeocodeSearchListener(
+                        search.setOnGeocodeSearchListener(
                             object : com.amap.api.services.geocoder.GeocodeSearch.OnGeocodeSearchListener {
                                 override fun onRegeocodeSearched(
                                     result: com.amap.api.services.geocoder.RegeocodeResult?,
@@ -171,7 +177,7 @@ class MapPickerViewModel @Inject constructor(
                             }
                         )
 
-                        geocodeSearch?.getFromLocationAsyn(query)
+                        search.getFromLocationAsyn(query)
                     }
                 }
 

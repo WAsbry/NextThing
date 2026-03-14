@@ -141,4 +141,16 @@ interface TaskGeofenceRepository {
      * @return 半径值（米），如果任务未关联地理围栏则返回 null
      */
     suspend fun getEffectiveRadius(taskId: String): Int?
+
+    /**
+     * 增加围栏外延期次数
+     * @param taskId 任务ID
+     */
+    suspend fun incrementDeferCount(taskId: String)
+
+    /**
+     * 重置围栏外延期次数为0
+     * @param taskId 任务ID
+     */
+    suspend fun resetDeferCount(taskId: String)
 }

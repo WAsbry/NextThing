@@ -19,7 +19,8 @@ data class AddGeofenceLocationUiState(
     val useCustomRadius: Boolean = false,
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val defaultRadius: Int = 200  // 全局默认半径
 )
 
 @HiltViewModel
@@ -37,6 +38,20 @@ class AddGeofenceLocationViewModel @Inject constructor(
 
     init {
         loadAvailableLocations()
+        loadDefaultRadius()
+    }
+
+    private fun loadDefaultRadius() {
+        viewModelScope.launch {
+            try {
+                val config = geofenceUseCases.getGeofenceConfig().first()
+                config?.let {
+                    _uiState.update { state -> state.copy(defaultRadius = it.defaultRadius) }
+                }
+            } catch (e: Exception) {
+                Timber.tag(TAG).e(e, "加载全局配置失败，使用默认值 200")
+            }
+        }
     }
 
     private fun loadAvailableLocations() {
@@ -44,14 +59,14 @@ class AddGeofenceLocationViewModel @Inject constructor(
             try {
                 _uiState.update { it.copy(isLoading = true) }
 
-                // 获取所有位置
-                locationRepository.getAllLocations().collect { locations ->
-                    // 过滤掉已经添加为地理围栏的位置
-                    val geofenceLocations = geofenceUseCases.getGeofenceLocations.getAllOnce()
+                // 同时订阅两个 Flow，确保原子性过滤：已设为围栏的地点不显示
+                combine(
+                    locationRepository.getAllLocations(),
+                    geofenceUseCases.getGeofenceLocations()
+                ) { locations, geofenceLocations ->
                     val geofenceLocationIds = geofenceLocations.map { it.locationInfo.id }.toSet()
-
-                    val available = locations.filter { it.id !in geofenceLocationIds }
-
+                    locations.filter { it.id !in geofenceLocationIds }
+                }.collect { available ->
                     _uiState.update {
                         it.copy(
                             availableLocations = available,
@@ -79,7 +94,7 @@ class AddGeofenceLocationViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 useCustomRadius = use,
-                customRadius = if (use) (it.customRadius ?: 200) else null
+                customRadius = if (use) (it.customRadius ?: it.defaultRadius) else null
             )
         }
     }
