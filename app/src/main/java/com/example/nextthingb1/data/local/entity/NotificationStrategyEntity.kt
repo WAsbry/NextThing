@@ -20,6 +20,7 @@ data class NotificationStrategyEntity(
     val customAudioName: String? = null,
     val presetAudioName: String? = null,
     val systemNotificationMode: SystemNotificationMode,
+    val advanceReminderMinutes: List<Int> = emptyList(),
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,
     val usageCount: Int,

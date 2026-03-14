@@ -232,6 +232,7 @@ private fun TimerSection(
                 animationSpec = tween(durationMillis = 300)
             )
             
+            val primaryColor = Primary
             Canvas(
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -249,7 +250,7 @@ private fun TimerSection(
                 
                 // 进度圆圈
                 drawArc(
-                    color = Primary,
+                    color = primaryColor,
                     startAngle = -90f,
                     sweepAngle = animatedProgress * 360f,
                     useCenter = false,

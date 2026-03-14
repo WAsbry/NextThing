@@ -84,7 +84,7 @@ fun LocationPermissionDialog(
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = TextSecondary
                             ),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                                 brush = Brush.linearGradient(
                                     colors = listOf(TextMuted, TextMuted)
                                 )

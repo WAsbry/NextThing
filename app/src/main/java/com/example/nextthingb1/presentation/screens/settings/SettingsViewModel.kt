@@ -3,147 +3,189 @@ package com.example.nextthingb1.presentation.screens.settings
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.nextthingb1.data.preferences.ThemePreferences
+import com.example.nextthingb1.domain.model.ThemeMode
+import com.example.nextthingb1.domain.usecase.AchievementUseCases
+import com.example.nextthingb1.domain.model.AchievementProgress
+import com.example.nextthingb1.domain.model.AchievementType
 import com.example.nextthingb1.domain.usecase.TaskUseCases
 import com.example.nextthingb1.domain.usecase.UserUseCases
+import com.example.nextthingb1.data.local.dao.TaskDao
+import com.example.nextthingb1.data.local.dao.GeofenceLocationDao
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
-import androidx.compose.ui.graphics.Color
-import com.example.nextthingb1.presentation.theme.*
 
 data class SettingsUiState(
     val username: String = "加载中...",
     val avatarUri: Uri? = null,
     val usageDays: Int = 0,
-    val settingSections: List<SettingSection> = emptyList(),
-    val locationEnhancementEnabled: Boolean = false,
-    val geofenceEnabled: Boolean = false,
-    val isLoading: Boolean = false,
-    val errorMessage: String? = null
+    // 任务统计（真实数据）
+    val completedCount: Int = 0,
+    val pendingCount: Int = 0,
+    val overdueCount: Int = 0,
+    val streakDays: Int = 0,
+    // 地理围栏数量
+    val geofenceCount: Int = 0,
+    // 成就
+    val recentAchievements: List<AchievementProgress> = emptyList(),
+    val unlockedAchievementsCount: Int = 0,
+    val totalAchievementsCount: Int = AchievementType.entries.size,
+    // 主题
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val showThemeDialog: Boolean = false,
+    // 清除已完成确认弹窗
+    val showClearConfirmDialog: Boolean = false,
+    // 操作结果消息（用于 Snackbar）
+    val actionMessage: String? = null,
+    val isLoading: Boolean = false
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val taskUseCases: TaskUseCases,
-    private val userUseCases: UserUseCases
+    private val userUseCases: UserUseCases,
+    private val achievementUseCases: AchievementUseCases,
+    private val themePreferences: ThemePreferences,
+    private val taskDao: TaskDao,
+    private val geofenceLocationDao: GeofenceLocationDao
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
-    
+
     init {
-        initializeSettings()
         loadUserInfo()
+        loadStatistics()
+        loadAchievements()
+        observeThemeMode()
     }
+
+    // ── 主题 ──────────────────────────────────────────────
+
+    private fun observeThemeMode() {
+        viewModelScope.launch {
+            themePreferences.themeMode.collect { mode ->
+                _uiState.value = _uiState.value.copy(themeMode = mode)
+            }
+        }
+    }
+
+    fun showThemeDialog() {
+        _uiState.value = _uiState.value.copy(showThemeDialog = true)
+    }
+
+    fun hideThemeDialog() {
+        _uiState.value = _uiState.value.copy(showThemeDialog = false)
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch {
+            themePreferences.setThemeMode(mode)
+            _uiState.value = _uiState.value.copy(showThemeDialog = false)
+        }
+    }
+
+    // ── 数据加载 ──────────────────────────────────────────
 
     private fun loadUserInfo() {
         viewModelScope.launch {
-            userUseCases.getCurrentUser().collect { user ->
-                if (user != null) {
-                    // 计算使用天数
-                    val currentTime = System.currentTimeMillis()
-                    val usageDays = ((currentTime - user.createdAt) / (24 * 60 * 60 * 1000)).toInt()
-
-                    _uiState.value = _uiState.value.copy(
-                        username = user.nickname,
-                        avatarUri = user.avatarUri?.let { Uri.parse(it) },
-                        usageDays = usageDays.coerceAtLeast(1) // 至少显示1天
-                    )
+            try {
+                userUseCases.getCurrentUser().collect { user ->
+                    if (user != null) {
+                        val currentTime = System.currentTimeMillis()
+                        val usageDays = ((currentTime - user.createdAt) / (24 * 60 * 60 * 1000)).toInt()
+                        _uiState.value = _uiState.value.copy(
+                            username = user.nickname,
+                            avatarUri = user.avatarUri?.let { Uri.parse(it) },
+                            usageDays = usageDays.coerceAtLeast(1)
+                        )
+                    }
                 }
+            } catch (e: Exception) {
+                Timber.e(e, "加载用户信息失败")
             }
         }
     }
 
-    private fun initializeSettings() {
+    private fun loadStatistics() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
-
             try {
-                // 初始化设置选项
-                val settingSections = listOf(
-                    SettingSection(
-                        items = listOf(
-                            SettingItem(
-                                id = "theme",
-                                title = "主题皮肤",
-                                subtitle = "个性化您的应用外观",
-                                icon = "🎨",
-                                color = Color(0xFF9C27B0),
-                                type = SettingType.ARROW
-                            ),
-                            SettingItem(
-                                id = "location_enhancement",
-                                title = "位置信息增强",
-                                subtitle = "自动获取当前位置信息",
-                                icon = "📍",
-                                color = Color(0xFF4FC3F7),
-                                type = SettingType.SWITCH,
-                                isEnabled = false
-                            ),
-                            SettingItem(
-                                id = "geofence",
-                                title = "地理围栏",
-                                subtitle = "基于位置的智能提醒",
-                                icon = "🛡️",
-                                color = Color(0xFF2196F3),
-                                type = SettingType.ARROW,
-                                isEnabled = false
-                            )
-                        )
-                    )
-                )
-
+                val completedCount = taskDao.getCompletedTasksCount()
+                val pendingCount = taskDao.getPendingTasksCount()
+                val overdueCount = taskDao.getOverdueTasksCount()
+                val geofenceCount = geofenceLocationDao.getCount()
                 _uiState.value = _uiState.value.copy(
-                    settingSections = settingSections,
-                    isLoading = false
+                    completedCount = completedCount,
+                    pendingCount = pendingCount,
+                    overdueCount = overdueCount,
+                    geofenceCount = geofenceCount
                 )
             } catch (e: Exception) {
+                Timber.e(e, "加载任务统计失败")
+            }
+        }
+    }
+
+    private fun loadAchievements() {
+        viewModelScope.launch {
+            try {
+                val (achievements, _) = achievementUseCases.checkAndUnlock()
+                val unlockedCount = achievements.count { it.isUnlocked }
+                // 从成就数据中取连续打卡天数（STREAK_100 的 currentValue 就是实际天数）
+                val streakDays = achievements
+                    .find { it.type == AchievementType.STREAK_100 }?.currentValue ?: 0
+                val recent = (achievements.filter { it.isUnlocked }
+                    .sortedByDescending { it.unlockedAt } +
+                    achievements.filter { !it.isUnlocked }
+                    .sortedByDescending { it.progress })
+                    .take(6)
                 _uiState.value = _uiState.value.copy(
-                    errorMessage = e.message,
-                    isLoading = false
+                    recentAchievements = recent,
+                    unlockedAchievementsCount = unlockedCount,
+                    streakDays = streakDays
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "加载成就失败")
+            }
+        }
+    }
+
+    // ── 清除已完成任务 ────────────────────────────────────
+
+    fun showClearConfirmDialog() {
+        _uiState.value = _uiState.value.copy(showClearConfirmDialog = true)
+    }
+
+    fun hideClearConfirmDialog() {
+        _uiState.value = _uiState.value.copy(showClearConfirmDialog = false)
+    }
+
+    fun clearCompletedTasks() {
+        viewModelScope.launch {
+            val countBefore = _uiState.value.completedCount
+            try {
+                taskUseCases.deleteCompletedTasks()
+                _uiState.value = _uiState.value.copy(
+                    completedCount = 0,
+                    showClearConfirmDialog = false,
+                    actionMessage = "已清除 $countBefore 条已完成任务"
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "清除已完成任务失败")
+                _uiState.value = _uiState.value.copy(
+                    showClearConfirmDialog = false,
+                    actionMessage = "清除失败，请重试"
                 )
             }
         }
     }
-    
-    fun onSettingClick(setting: SettingItem) {
-        when (setting.id) {
-            "theme" -> {
-                // 主题设置
-            }
-            "location_enhancement" -> {
-                toggleLocationEnhancement()
-            }
-            "geofence" -> {
-                toggleGeofence()
-            }
-        }
-    }
-    
-    fun clearErrorMessage() {
-        _uiState.value = _uiState.value.copy(errorMessage = null)
-    }
 
-    private fun toggleLocationEnhancement() {
-        val currentState = _uiState.value
-        _uiState.value = currentState.copy(
-            locationEnhancementEnabled = !currentState.locationEnhancementEnabled
-        )
-
-        // 位置增强设置持久化为可选功能,当前仅内存状态
-        // 地理围栏功能已有独立配置页面(GeofenceConfigScreen),这里的开关可移除
+    fun clearActionMessage() {
+        _uiState.value = _uiState.value.copy(actionMessage = null)
     }
-
-    private fun toggleGeofence() {
-        val currentState = _uiState.value
-        _uiState.value = currentState.copy(
-            geofenceEnabled = !currentState.geofenceEnabled
-        )
-
-        // 地理围栏配置已通过独立页面(GeofenceConfigScreen)管理
-        // 该开关功能可移除,统一使用专门的地理围栏配置界面
-    }
-} 
+}

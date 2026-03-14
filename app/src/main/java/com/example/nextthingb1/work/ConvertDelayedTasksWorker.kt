@@ -17,8 +17,9 @@ import java.time.LocalDateTime
  *
  * 延期转待办 Worker：
  * - 在每天凌晨（00:00:01）运行
- * - 将所有 DELAYED 状态的任务自动转为 PENDING
- * - 确保延期任务在次日成为待办任务
+ * - 将所有 DELAYED 状态且 dueDate <= 今天的任务转为 PENDING
+ * - 修复：原逻辑 dueDate == today 在 Worker 某天未执行时会导致任务永久卡死，
+ *   改为 dueDate <= today（即过期的 DELAYED 也要处理）
  */
 @HiltWorker
 class ConvertDelayedTasksWorker @AssistedInject constructor(
@@ -31,20 +32,17 @@ class ConvertDelayedTasksWorker @AssistedInject constructor(
         return try {
             Timber.d("ConvertDelayedTasksWorker: Starting delayed task conversion")
 
-            // Get all tasks from repository
             val tasks = taskRepository.getAllTasks().first()
             val now = LocalDateTime.now()
             val today = now.toLocalDate()
             var convertedCount = 0
 
-            // Find and convert delayed tasks
             tasks.forEach { task ->
-                // 延期转待办规则（以 dueDate 为核心）：
-                // 1. 状态为 DELAYED
-                // 2. dueDate = 今天（说明延期到今天，应该转为今天的待办任务）
+                // 修复：改用 <= today，而非 == today
+                // 若 Worker 某天未执行，dueDate 可能落后于 today，需一并处理
                 if (task.status == TaskStatus.DELAYED &&
                     task.dueDate != null &&
-                    task.dueDate.toLocalDate() == today) {
+                    !task.dueDate.toLocalDate().isAfter(today)) {
 
                     val updatedTask = task.copy(
                         status = TaskStatus.PENDING,
@@ -53,7 +51,7 @@ class ConvertDelayedTasksWorker @AssistedInject constructor(
                     taskRepository.updateTask(updatedTask)
                     convertedCount++
 
-                    Timber.d("Converted delayed task '${task.title}' to PENDING (dueDate is today: ${task.dueDate})")
+                    Timber.d("Converted delayed task '${task.title}' to PENDING (dueDate: ${task.dueDate})")
                 }
             }
 

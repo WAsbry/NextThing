@@ -15,7 +15,9 @@ import com.example.nextthingb1.data.local.dao.UserDao
 import com.example.nextthingb1.data.local.dao.GeofenceConfigDao
 import com.example.nextthingb1.data.local.dao.GeofenceLocationDao
 import com.example.nextthingb1.data.local.dao.TaskGeofenceDao
+import com.example.nextthingb1.data.local.dao.AchievementDao
 import com.example.nextthingb1.data.local.dao.GeofenceLocationStatisticsHistoryDao
+import com.example.nextthingb1.data.local.entity.AchievementEntity
 import com.example.nextthingb1.data.local.entity.CategoryEntity
 import com.example.nextthingb1.data.local.entity.TaskEntity
 import com.example.nextthingb1.data.local.entity.LocationEntity
@@ -42,9 +44,10 @@ import java.time.LocalDateTime
         GeofenceConfigEntity::class,
         GeofenceLocationEntity::class,
         TaskGeofenceEntity::class,
-        GeofenceLocationStatisticsHistoryEntity::class
+        GeofenceLocationStatisticsHistoryEntity::class,
+        AchievementEntity::class
     ],
-    version = 6,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -58,6 +61,7 @@ abstract class TaskDatabase : RoomDatabase() {
     abstract fun geofenceConfigDao(): GeofenceConfigDao
     abstract fun geofenceLocationDao(): GeofenceLocationDao
     abstract fun taskGeofenceDao(): TaskGeofenceDao
+    abstract fun achievementDao(): AchievementDao
     abstract fun geofenceLocationStatisticsHistoryDao(): GeofenceLocationStatisticsHistoryDao
     
     companion object {
@@ -65,6 +69,63 @@ abstract class TaskDatabase : RoomDatabase() {
 
         @Volatile
         private var INSTANCE: TaskDatabase? = null
+
+        // 数据库迁移：Version 8 -> Version 9
+        // 添加成就系统表
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                timber.log.Timber.tag("Migration").d("开始数据库迁移：Version 8 -> 9")
+                try {
+                    database.execSQL("""
+                        CREATE TABLE IF NOT EXISTS achievements (
+                            id TEXT NOT NULL PRIMARY KEY,
+                            isUnlocked INTEGER NOT NULL DEFAULT 0,
+                            unlockedAt INTEGER
+                        )
+                    """)
+                    timber.log.Timber.tag("Migration").d("✅✅✅ 数据库迁移完成：Version 8 -> 9")
+                } catch (e: Exception) {
+                    timber.log.Timber.tag("Migration").e(e, "❌ 数据库迁移失败")
+                    throw e
+                }
+            }
+        }
+
+        // 数据库迁移：Version 7 -> Version 8
+        // 为 task_geofences 表添加 geofenceDeferCount 字段（围栏外延期次数）
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                timber.log.Timber.tag("Migration").d("开始数据库迁移：Version 7 -> 8")
+                try {
+                    database.execSQL("""
+                        ALTER TABLE task_geofences
+                        ADD COLUMN geofenceDeferCount INTEGER NOT NULL DEFAULT 0
+                    """)
+                    timber.log.Timber.tag("Migration").d("✅✅✅ 数据库迁移完成：Version 7 -> 8")
+                } catch (e: Exception) {
+                    timber.log.Timber.tag("Migration").e(e, "❌ 数据库迁移失败")
+                    throw e
+                }
+            }
+        }
+
+        // 数据库迁移：Version 6 -> Version 7
+        // 为通知策略添加提前提醒时间字段
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                timber.log.Timber.tag("Migration").d("开始数据库迁移：Version 6 -> 7")
+                try {
+                    database.execSQL("""
+                        ALTER TABLE notification_strategies
+                        ADD COLUMN advanceReminderMinutes TEXT NOT NULL DEFAULT '[]'
+                    """)
+                    timber.log.Timber.tag("Migration").d("✅✅✅ 数据库迁移完成：Version 6 -> 7")
+                } catch (e: Exception) {
+                    timber.log.Timber.tag("Migration").e(e, "❌ 数据库迁移失败")
+                    throw e
+                }
+            }
+        }
 
         // 数据库迁移：Version 5 -> Version 6
         // 添加地理围栏月度统计历史表
@@ -376,7 +437,7 @@ abstract class TaskDatabase : RoomDatabase() {
             return INSTANCE ?: synchronized(this) {
                 timber.log.Timber.tag("DataFlow").d("━━━━━━ 初始化数据库 ━━━━━━")
                 timber.log.Timber.tag("DataFlow").d("数据库名称: $DATABASE_NAME")
-                timber.log.Timber.tag("DataFlow").d("数据库版本: 6 (地理围栏历史统计)")
+                timber.log.Timber.tag("DataFlow").d("数据库版本: 9 (成就系统)")
                 timber.log.Timber.tag("DataFlow").d("数据库路径: ${context.applicationContext.getDatabasePath(DATABASE_NAME).absolutePath}")
 
                 val instance = Room.databaseBuilder(
@@ -384,11 +445,11 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) // 添加迁移策略
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
-                            timber.log.Timber.tag("DataFlow").d("✅ 数据库首次创建完成 (Version 6)")
+                            timber.log.Timber.tag("DataFlow").d("✅ 数据库首次创建完成 (Version 8)")
 
                             // 异步初始化预置分类
                             CoroutineScope(Dispatchers.IO).launch {

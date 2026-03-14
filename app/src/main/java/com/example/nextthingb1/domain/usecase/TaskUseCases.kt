@@ -17,6 +17,7 @@ import javax.inject.Inject
 
 data class TaskUseCases @Inject constructor(
     val getAllTasks: GetAllTasksUseCase,
+    val getTaskById: GetTaskByIdUseCase,
     val getTodayTasks: GetTodayTasksUseCase,
     val createTask: CreateTaskUseCase,
     val updateTask: UpdateTaskUseCase,
@@ -30,6 +31,7 @@ data class TaskUseCases @Inject constructor(
     val getUrgentTasks: GetUrgentTasksUseCase,
     val getEarliestTaskDate: GetEarliestTaskDateUseCase,
     val generateRecurringTasks: GenerateRecurringTasksUseCase,
+    val deleteCompletedTasks: DeleteCompletedTasksUseCase,
     val locationRepository: LocationRepository
 )
 
@@ -38,6 +40,14 @@ class GetAllTasksUseCase @Inject constructor(
 ) {
     operator fun invoke(): Flow<List<Task>> {
         return repository.getAllTasks()
+    }
+}
+
+class GetTaskByIdUseCase @Inject constructor(
+    private val repository: TaskRepository
+) {
+    suspend operator fun invoke(taskId: String): Task? {
+        return repository.getTaskById(taskId)
     }
 }
 
@@ -72,7 +82,8 @@ class CreateTaskUseCase @Inject constructor(
         imageUri: String? = null,
         repeatFrequency: RepeatFrequency = RepeatFrequency(),
         notificationStrategyId: String? = null,
-        importanceUrgency: TaskImportanceUrgency? = null
+        importanceUrgency: TaskImportanceUrgency? = null,
+        locationInfo: com.example.nextthingb1.domain.model.LocationInfo? = null
     ): Result<String> {
         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Timber.tag(TAG).d("【UseCase】CreateTaskUseCase 开始执行")
@@ -111,9 +122,10 @@ class CreateTaskUseCase @Inject constructor(
                     category = category,
                     dueDate = finalDueDate,
                     tags = tags,
-                    isUrgent = finalDueDate.isBefore(LocalDateTime.now().plusHours(2)),
+                    isUrgent = dueDate != null && finalDueDate.isBefore(LocalDateTime.now().plusHours(2)),
                     imageUri = imageUri,
                     repeatFrequency = repeatFrequency,
+                    locationInfo = locationInfo,
                     notificationStrategyId = notificationStrategyId,
                     importanceUrgency = importanceUrgency,
                     isTemplate = isRecurringTask, // 重复任务创建为模板
@@ -189,14 +201,62 @@ class DeleteTaskUseCase @Inject constructor(
     private val repository: TaskRepository,
     private val taskAlarmManager: com.example.nextthingb1.util.TaskAlarmManager
 ) {
-    suspend operator fun invoke(taskId: String): Result<Unit> {
+    /**
+     * 删除任务
+     * @param taskId 要删除的任务ID
+     * @param deleteMode 删除模式（仅对重复任务有效）
+     */
+    suspend operator fun invoke(
+        taskId: String,
+        deleteMode: com.example.nextthingb1.domain.model.DeleteMode =
+            com.example.nextthingb1.domain.model.DeleteMode.DELETE_THIS_ONLY
+    ): Result<Unit> {
         return try {
+            // 获取任务信息
+            val task = repository.getTaskById(taskId)
+
+            if (task == null) {
+                return Result.failure(Exception("任务不存在"))
+            }
+
             // 取消闹钟
             taskAlarmManager.cancelTaskAlarm(taskId)
-            // 删除任务
-            repository.deleteTask(taskId)
+
+            // 判断是否为重复任务的实例
+            val isRecurringInstance = task.templateTaskId != null
+
+            when {
+                // 情况1：普通任务（非重复任务）
+                !isRecurringInstance -> {
+                    timber.log.Timber.d("删除普通任务: ${task.title}")
+                    repository.deleteTask(taskId)
+                }
+
+                // 情况2：重复任务实例 - 仅删除此任务
+                isRecurringInstance && deleteMode == com.example.nextthingb1.domain.model.DeleteMode.DELETE_THIS_ONLY -> {
+                    timber.log.Timber.d("仅删除重复任务实例: ${task.title}")
+                    repository.deleteTask(taskId)
+                }
+
+                // 情况3：重复任务实例 - 删除所有重复任务
+                isRecurringInstance && deleteMode == com.example.nextthingb1.domain.model.DeleteMode.DELETE_ALL_RECURRING -> {
+                    timber.log.Timber.d("删除所有重复任务: ${task.title}")
+                    val templateId = task.templateTaskId!!
+
+                    // 获取所有相关实例，取消它们的闹钟
+                    val instances = repository.getInstancesByTemplateId(templateId)
+                    instances.forEach { instance ->
+                        taskAlarmManager.cancelTaskAlarm(instance.id)
+                    }
+
+                    // 删除template和所有instances
+                    repository.deleteTemplateAndAllInstances(templateId)
+                }
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
+            timber.log.Timber.e(e, "删除任务失败")
             Result.failure(e)
         }
     }
@@ -207,8 +267,14 @@ class ToggleTaskStatusUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(taskId: String): Result<Unit> {
         return try {
+            timber.log.Timber.tag("UseCase").d("━━━━━━ ToggleTaskStatus 开始 ━━━━━━")
+            timber.log.Timber.tag("UseCase").d("taskId: ${taskId.take(8)}")
+
             val task = repository.getTaskById(taskId)
                 ?: return Result.failure(IllegalArgumentException("任务不存在"))
+
+            timber.log.Timber.tag("UseCase").d("任务标题: ${task.title}")
+            timber.log.Timber.tag("UseCase").d("当前状态: ${task.status}")
 
             // 严格的状态转换规则
             val newStatus = when (task.status) {
@@ -225,22 +291,32 @@ class ToggleTaskStatusUseCase @Inject constructor(
                 }
             }
 
+            timber.log.Timber.tag("UseCase").d("新状态: $newStatus")
+
             val updatedTask = task.copy(
                 status = newStatus,
                 completedAt = if (newStatus == TaskStatus.COMPLETED) LocalDateTime.now() else null,
                 updatedAt = LocalDateTime.now()
             )
 
+            timber.log.Timber.tag("UseCase").d("updatedTask.status: ${updatedTask.status}")
+            timber.log.Timber.tag("UseCase").d("准备调用 repository.updateTask()")
+
             repository.updateTask(updatedTask)
+
+            timber.log.Timber.tag("UseCase").d("✅ repository.updateTask() 完成")
+            timber.log.Timber.tag("UseCase").d("━━━━━━ ToggleTaskStatus 结束 ━━━━━━")
             Result.success(Unit)
         } catch (e: Exception) {
+            timber.log.Timber.tag("UseCase").e(e, "❌ ToggleTaskStatus 异常")
             Result.failure(e)
         }
     }
 }
 
 class DeferTaskUseCase @Inject constructor(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val taskAlarmManager: com.example.nextthingb1.util.TaskAlarmManager
 ) {
     suspend operator fun invoke(taskId: String): Result<Unit> {
         return try {
@@ -255,8 +331,8 @@ class DeferTaskUseCase @Inject constructor(
             val now = LocalDateTime.now()
             val today = now.toLocalDate()
 
-            // 检查是否在当天 23:59:59 之前
-            if (now.toLocalDate().isAfter(today)) {
+            // 检查是否已过当天 23:59（理论上 PENDING 任务不应有 dueDate 在过去，但做防御性检查）
+            if (task.dueDate != null && task.dueDate.toLocalDate().isBefore(today)) {
                 return Result.failure(IllegalStateException("已过当天，无法延期"))
             }
 
@@ -270,6 +346,13 @@ class DeferTaskUseCase @Inject constructor(
             )
 
             repository.updateTask(updatedTask)
+
+            // 取消旧闹钟，并为新 dueDate 重新调度
+            taskAlarmManager.cancelTaskAlarm(taskId)
+            if (updatedTask.notificationStrategyId != null) {
+                taskAlarmManager.scheduleTaskAlarm(updatedTask)
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -322,6 +405,14 @@ class DeleteAllTasksUseCase @Inject constructor(
     }
 }
 
+class DeleteCompletedTasksUseCase @Inject constructor(
+    private val repository: TaskRepository
+) {
+    suspend operator fun invoke() {
+        repository.deleteCompletedTasks()
+    }
+}
+
 class GetEarliestTaskDateUseCase @Inject constructor(
     private val repository: TaskRepository
 ) {
@@ -336,7 +427,8 @@ class GetEarliestTaskDateUseCase @Inject constructor(
  * 根据模板任务的重复频率,为指定日期生成任务实例
  */
 class GenerateRecurringTasksUseCase @Inject constructor(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val taskAlarmManager: com.example.nextthingb1.util.TaskAlarmManager
 ) {
     companion object {
         private const val TAG = "RecurringTask"
@@ -379,6 +471,11 @@ class GenerateRecurringTasksUseCase @Inject constructor(
                         // 5. 从模板创建实例任务
                         val instance = createInstanceFromTemplate(template, targetDate)
                         repository.insertTask(instance)
+
+                        // 为新实例调度闹钟（同 CreateTaskUseCase 的逻辑）
+                        if (instance.notificationStrategyId != null && instance.dueDate != null) {
+                            taskAlarmManager.scheduleTaskAlarm(instance)
+                        }
 
                         generatedCount++
                         Timber.tag(TAG).d("  ✅ 实例任务创建成功")
@@ -468,6 +565,8 @@ class GenerateRecurringTasksUseCase @Inject constructor(
             instanceDate = date.atStartOfDay(), // 实例日期
             dueDate = instanceDueDate, // 实例的截止时间
             status = TaskStatus.PENDING, // 初始状态为待办
+            // 重新计算 isUrgent（基于实例实际截止时间，而非模板创建时的状态）
+            isUrgent = instanceDueDate.isBefore(LocalDateTime.now().plusHours(2)),
             completedAt = null, // 未完成
             createdAt = LocalDateTime.now(), // 创建时间
             updatedAt = LocalDateTime.now() // 更新时间

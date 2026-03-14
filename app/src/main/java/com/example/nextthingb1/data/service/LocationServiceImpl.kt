@@ -5,9 +5,11 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.LocationManager
+import android.os.Build
 import android.os.Looper
 import androidx.core.app.ActivityCompat
 import com.example.nextthingb1.domain.model.LocationInfo
+import java.util.concurrent.atomic.AtomicBoolean
 import com.example.nextthingb1.domain.model.LocationType
 import com.example.nextthingb1.domain.service.LocationService
 import com.google.android.gms.location.*
@@ -191,17 +193,20 @@ class LocationServiceImpl @Inject constructor(
         Timber.d("⏱️ [LocationService] $locationType 开始，超时时间: ${timeout/1000}秒")
         
         suspendCancellableCoroutine { continuation ->
+            val isResumed = AtomicBoolean(false)
+
             val locationCallback = object : LocationCallback() {
                 override fun onLocationResult(locationResult: LocationResult) {
                     Timber.d("📍 [LocationService] $locationType 收到位置结果")
                     fusedLocationClient.removeLocationUpdates(this)
-                    
-                    locationResult.lastLocation?.let { location ->
-                        Timber.d("✅ [LocationService] $locationType 成功: 经度=${location.longitude}, 纬度=${location.latitude}, 精度=${location.accuracy}m")
-                        continuation.resume(location)
-                    } ?: run {
-                        Timber.w("⚠️ [LocationService] $locationType 返回空位置")
-                        continuation.resume(null)
+                    if (isResumed.compareAndSet(false, true)) {
+                        locationResult.lastLocation?.let { location ->
+                            Timber.d("✅ [LocationService] $locationType 成功: 经度=${location.longitude}, 纬度=${location.latitude}, 精度=${location.accuracy}m")
+                            continuation.resume(location)
+                        } ?: run {
+                            Timber.w("⚠️ [LocationService] $locationType 返回空位置")
+                            continuation.resume(null)
+                        }
                     }
                 }
 
@@ -209,7 +214,9 @@ class LocationServiceImpl @Inject constructor(
                     if (!availability.isLocationAvailable) {
                         Timber.w("❌ [LocationService] $locationType 不可用")
                         fusedLocationClient.removeLocationUpdates(this)
-                        continuation.resume(null)
+                        if (isResumed.compareAndSet(false, true)) {
+                            continuation.resume(null)
+                        }
                     }
                 }
             }
@@ -223,7 +230,9 @@ class LocationServiceImpl @Inject constructor(
                 )
             } catch (e: SecurityException) {
                 Timber.e(e, "❌ [LocationService] $locationType 权限错误")
-                continuation.resumeWithException(e)
+                if (isResumed.compareAndSet(false, true)) {
+                    continuation.resumeWithException(e)
+                }
             }
 
             continuation.invokeOnCancellation {
@@ -303,14 +312,17 @@ class LocationServiceImpl @Inject constructor(
 
     override fun observeLocationUpdates(): Flow<LocationInfo> = callbackFlow {
         Timber.d("👁️ [LocationService] 开始监听位置更新")
-        
+        val callbackScope = this
+
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 locationResult.lastLocation?.let { location ->
-                    Timber.d("📍 [LocationService] 位置更新: ${location.latitude}, ${location.longitude}")
-                    val locationInfo = convertToLocationInfo(location)
-                    updateLocationCache(locationInfo)
-                    trySend(locationInfo)
+                    callbackScope.launch {
+                        Timber.d("📍 [LocationService] 位置更新: ${location.latitude}, ${location.longitude}")
+                        val locationInfo = convertToLocationInfo(location)
+                        updateLocationCache(locationInfo)
+                        trySend(locationInfo)
+                    }
                 }
             }
         }
@@ -349,7 +361,7 @@ class LocationServiceImpl @Inject constructor(
         return cached
     }
 
-    private fun convertToLocationInfo(location: android.location.Location): LocationInfo {
+    private suspend fun convertToLocationInfo(location: android.location.Location): LocationInfo = withContext(Dispatchers.IO) {
         Timber.d("🔄 [LocationService] 开始地址解析...")
         
         var locationName = "获取地址中..."
@@ -362,6 +374,7 @@ class LocationServiceImpl @Inject constructor(
         var subThoroughfare = "" // 门牌号
 
         try {
+            @Suppress("DEPRECATION")
             val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
             if (!addresses.isNullOrEmpty()) {
                 val addr = addresses[0]
@@ -440,7 +453,7 @@ class LocationServiceImpl @Inject constructor(
             locationName = "位置(${String.format("%.4f", location.latitude)}, ${String.format("%.4f", location.longitude)})"
         }
 
-        return LocationInfo(
+        return@withContext LocationInfo(
             latitude = location.latitude,
             longitude = location.longitude,
             accuracy = location.accuracy,

@@ -115,4 +115,16 @@ interface TaskGeofenceDao {
      */
     @Query("SELECT COUNT(*) FROM task_geofences")
     suspend fun getCount(): Int
+
+    /**
+     * 增加围栏外延期次数
+     */
+    @Query("UPDATE task_geofences SET geofenceDeferCount = geofenceDeferCount + 1, updatedAt = :updatedAt WHERE taskId = :taskId")
+    suspend fun incrementDeferCount(taskId: String, updatedAt: String)
+
+    /**
+     * 重置围栏外延期次数为0
+     */
+    @Query("UPDATE task_geofences SET geofenceDeferCount = 0, updatedAt = :updatedAt WHERE taskId = :taskId")
+    suspend fun resetDeferCount(taskId: String, updatedAt: String)
 }

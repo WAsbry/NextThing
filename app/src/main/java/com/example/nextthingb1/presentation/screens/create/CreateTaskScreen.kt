@@ -23,6 +23,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.rememberAsyncImagePainter
 import android.net.Uri
@@ -35,7 +36,7 @@ import java.io.FileOutputStream
 import android.graphics.Bitmap
 import androidx.core.content.FileProvider
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
@@ -94,15 +95,14 @@ private fun formatDate(date: LocalDate?): String {
 @Composable
 fun CreateTaskScreen(
     onBackPressed: () -> Unit,
-    onNavigateToCreateLocation: () -> Unit,
     onNavigateToCreateNotificationStrategy: () -> Unit,
+    onEditNotificationStrategy: (String) -> Unit = {},
     onNavigateToGeofenceAdd: () -> Unit = {},
     onNavigateToGeofenceSettings: () -> Unit = {},
     viewModel: CreateTaskViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val categories by viewModel.categories.collectAsState()
-    val savedLocations by viewModel.savedLocations.collectAsState()
     val showCreateCategoryDialog by viewModel.showCreateCategoryDialog.collectAsState()
     val availableGeofenceLocations by viewModel.availableGeofenceLocations.collectAsState()
     val configuration = LocalConfiguration.current
@@ -148,7 +148,6 @@ fun CreateTaskScreen(
             isTimeExpanded = expandedCard == "time",
             isPreciseTimeExpanded = expandedCard == "precise_time",
             isCategoryExpanded = expandedCard == "category",
-            isLocationExpanded = expandedCard == "location",
             isImageExpanded = expandedCard == "image",
             isImportanceExpanded = expandedCard == "importance",
             isReminderExpanded = expandedCard == "reminder",
@@ -156,7 +155,6 @@ fun CreateTaskScreen(
             onTimeExpandToggle = { expandedCard = if (expandedCard == "time") null else "time" },
             onPreciseTimeExpandToggle = { expandedCard = if (expandedCard == "precise_time") null else "precise_time" },
             onCategoryExpandToggle = { expandedCard = if (expandedCard == "category") null else "category" },
-            onLocationExpandToggle = { expandedCard = if (expandedCard == "location") null else "location" },
             onImageExpandToggle = { expandedCard = if (expandedCard == "image") null else "image" },
             onImportanceExpandToggle = { expandedCard = if (expandedCard == "importance") null else "importance" },
             onReminderExpandToggle = { expandedCard = if (expandedCard == "reminder") null else "reminder" },
@@ -172,9 +170,6 @@ fun CreateTaskScreen(
             onShowDatePicker = { showDatePicker = true },
             preciseTime = uiState.preciseTime,
             onPreciseTimeSelected = { viewModel.updatePreciseTime(it) },
-            savedLocations = savedLocations,
-            onNavigateToCreateLocation = onNavigateToCreateLocation,
-            onDeleteLocation = { locationId -> viewModel.deleteLocation(locationId) },
             selectedImageUri = uiState.selectedImageUri,
             onImageSelected = { viewModel.updateSelectedImage(it) },
             onImageCleared = { viewModel.clearSelectedImage() },
@@ -184,6 +179,8 @@ fun CreateTaskScreen(
             selectedNotificationStrategyId = uiState.notificationStrategyId,
             onNotificationStrategySelected = { viewModel.updateNotificationStrategy(it) },
             onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
+            onEditNotificationStrategy = onEditNotificationStrategy,
+            onDeleteNotificationStrategy = { viewModel.deleteNotificationStrategy(it) },
             repeatFrequency = uiState.repeatFrequency,
             onRepeatFrequencyTypeChange = { viewModel.updateRepeatFrequencyType(it) },
             onRepeatWeekdaysChange = { viewModel.updateRepeatWeekdays(it) },
@@ -206,7 +203,8 @@ fun CreateTaskScreen(
                 onLocationSelected = { viewModel.updateSelectedGeofenceLocation(it) },
                 onNavigateToAddLocation = onNavigateToGeofenceAdd,
                 onNavigateToGeofenceSettings = onNavigateToGeofenceSettings,
-                isEditMode = true
+                isEditMode = true,
+                defaultRadius = uiState.defaultRadius
             )
         }
 
@@ -271,7 +269,7 @@ private fun TopNavigationSection(
                 modifier = Modifier.padding(start = 8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
@@ -398,7 +396,6 @@ private fun CollapsibleConfigSection(
     isTimeExpanded: Boolean,
     isPreciseTimeExpanded: Boolean,
     isCategoryExpanded: Boolean,
-    isLocationExpanded: Boolean,
     isImageExpanded: Boolean,
     isImportanceExpanded: Boolean,
     isReminderExpanded: Boolean,
@@ -406,7 +403,6 @@ private fun CollapsibleConfigSection(
     onTimeExpandToggle: () -> Unit,
     onPreciseTimeExpandToggle: () -> Unit,
     onCategoryExpandToggle: () -> Unit,
-    onLocationExpandToggle: () -> Unit,
     onImageExpandToggle: () -> Unit,
     onImportanceExpandToggle: () -> Unit,
     onReminderExpandToggle: () -> Unit,
@@ -422,9 +418,6 @@ private fun CollapsibleConfigSection(
     onShowDatePicker: () -> Unit,
     preciseTime: Pair<Int, Int>?,
     onPreciseTimeSelected: (Pair<Int, Int>?) -> Unit,
-    savedLocations: List<LocationInfo>,
-    onNavigateToCreateLocation: () -> Unit,
-    onDeleteLocation: (String) -> Unit,
     selectedImageUri: String?,
     onImageSelected: (String?) -> Unit,
     onImageCleared: () -> Unit,
@@ -434,6 +427,8 @@ private fun CollapsibleConfigSection(
     selectedNotificationStrategyId: String?,
     onNotificationStrategySelected: (String?) -> Unit,
     onNavigateToCreateNotificationStrategy: () -> Unit,
+    onEditNotificationStrategy: (String) -> Unit,
+    onDeleteNotificationStrategy: (String) -> Unit,
     repeatFrequency: com.example.nextthingb1.domain.model.RepeatFrequency,
     onRepeatFrequencyTypeChange: (com.example.nextthingb1.domain.model.RepeatFrequencyType) -> Unit,
     onRepeatWeekdaysChange: (Set<Int>) -> Unit,
@@ -474,7 +469,7 @@ private fun CollapsibleConfigSection(
             )
         }
 
-        // 第二行
+        // 第二行：分类选择、重要程度
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -494,26 +489,6 @@ private fun CollapsibleConfigSection(
                 modifier = Modifier.weight(1f)
             )
 
-            // 地点配置卡
-            LocationConfigCard(
-                screenHeight = screenHeight,
-                screenWidth = screenWidth,
-                isExpanded = isLocationExpanded,
-                onExpandToggle = onLocationExpandToggle,
-                savedLocations = savedLocations,
-                selectedLocation = null,
-                onLocationSelected = { onLocationExpandToggle() },
-                onNavigateToCreateLocation = onNavigateToCreateLocation,
-                onDeleteLocation = onDeleteLocation,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // 第三行
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
             // 重要性配置卡
             ImportanceConfigCard(
                 screenHeight = screenHeight,
@@ -524,7 +499,13 @@ private fun CollapsibleConfigSection(
                 onImportanceUrgencySelected = onImportanceUrgencySelected,
                 modifier = Modifier.weight(1f)
             )
+        }
 
+        // 第三行：任务图片、重复频次
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // 图片配置卡
             ImageConfigCard(
                 screenHeight = screenHeight,
@@ -536,13 +517,7 @@ private fun CollapsibleConfigSection(
                 onImageCleared = onImageCleared,
                 modifier = Modifier.weight(1f)
             )
-        }
 
-        // 第四行
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
             // 重复频次配置卡
             RepeatFrequencyConfigCard(
                 screenHeight = screenHeight,
@@ -555,7 +530,13 @@ private fun CollapsibleConfigSection(
                 onMonthDaysChange = onRepeatMonthDaysChange,
                 modifier = Modifier.weight(1f)
             )
+        }
 
+        // 第四行：通知策略（独占一行）
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // 通知策略配置卡
             NotificationStrategyConfigCard(
                 screenHeight = screenHeight,
@@ -566,7 +547,9 @@ private fun CollapsibleConfigSection(
                 selectedStrategyId = selectedNotificationStrategyId,
                 onStrategySelected = onNotificationStrategySelected,
                 onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
-                modifier = Modifier.weight(1f)
+                onEditStrategy = onEditNotificationStrategy,
+                onDeleteStrategy = onDeleteNotificationStrategy,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -1209,184 +1192,6 @@ internal fun CategoryPriorityConfigCard(
     }
 }
 
-// 地点配置卡
-@Composable
-internal fun LocationConfigCard(
-    screenHeight: androidx.compose.ui.unit.Dp,
-    screenWidth: androidx.compose.ui.unit.Dp,
-    isExpanded: Boolean,
-    onExpandToggle: () -> Unit,
-    savedLocations: List<LocationInfo>,
-    selectedLocation: LocationInfo?,
-    onLocationSelected: (LocationInfo?) -> Unit,
-    onNavigateToCreateLocation: () -> Unit,
-    onDeleteLocation: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    isEditMode: Boolean = true
-) {
-    // 内部状态管理选中的位置
-    var internalSelectedLocation by remember { mutableStateOf<LocationInfo?>(null) }
-    Column(modifier = modifier) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .clickable(enabled = isEditMode) { onExpandToggle() },
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
-            ) {
-                // 左上角标签
-                Text(
-                    text = "地理位置",
-                    color = Color(0xFF9E9E9E),
-                    fontSize = 10.sp,
-                    modifier = Modifier.align(Alignment.TopStart)
-                )
-
-                // 主要内容行
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.CenterStart)
-                        .padding(top = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "📍",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-
-                    Text(
-                        text = internalSelectedLocation?.locationName ?: "未选择",
-                        color = Color(0xFF424242),
-                        fontSize = 14.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    if (isEditMode) {
-                        Icon(
-                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = Color(0xFF9E9E9E),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        // 展开的位置选项菜单
-        if (isExpanded && isEditMode) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(8.dp)
-                ) {
-                    // 显示已保存的地点
-                    savedLocations.forEach { location ->
-                        LocationMenuItem(
-                            location = location,
-                            onClick = {
-                                internalSelectedLocation = location
-                                onLocationSelected(location)
-                            },
-                            onDelete = { locationId ->
-                                onDeleteLocation(locationId)
-                            }
-                        )
-                    }
-
-                    // 新建地点选项
-                    Text(
-                        text = "新建地点",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onNavigateToCreateLocation()
-                                onExpandToggle()
-                            }
-                            .padding(vertical = 8.dp, horizontal = 12.dp),
-                        color = Color(0xFF2196F3),
-                        fontSize = 14.sp
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LocationMenuItem(
-    location: LocationInfo,
-    onClick: () -> Unit,
-    onDelete: (String) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 4.dp, horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = location.locationName,
-            color = Color(0xFF424242),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
-
-        // 删除按钮（只对手动添加的地点显示）
-        if (location.locationType == com.example.nextthingb1.domain.model.LocationType.MANUAL) {
-            IconButton(
-                onClick = { onDelete(location.id) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    painter = painterResource(id = android.R.drawable.ic_menu_delete),
-                    contentDescription = "删除地点",
-                    tint = Color(0xFFE57373),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RealTimeLocationMenuItem(
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 4.dp, horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "实时位置",
-            color = Color(0xFF424242),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
 // 图片配置卡
 @Composable
 internal fun ImageConfigCard(
@@ -1768,6 +1573,7 @@ private fun ImportanceUrgencyMenuItem(
 }
 
 // 通知策略配置卡
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun NotificationStrategyConfigCard(
     screenHeight: androidx.compose.ui.unit.Dp,
@@ -1778,150 +1584,349 @@ internal fun NotificationStrategyConfigCard(
     selectedStrategyId: String?,
     onStrategySelected: (String?) -> Unit,
     onNavigateToCreateNotificationStrategy: () -> Unit,
+    onEditStrategy: (String) -> Unit = {},
+    onDeleteStrategy: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     isEditMode: Boolean = true
 ) {
+    var showDialog by remember { mutableStateOf(false) }
     val selectedStrategy = availableStrategies.find { it.id == selectedStrategyId }
 
-    Column(modifier = modifier) {
-        // 主卡片
-        Card(
+    // 简洁的主卡片
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(80.dp)
+            .clickable(enabled = isEditMode) { showDialog = true },
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .clickable(enabled = isEditMode) { onExpandToggle() },
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
-            shape = RoundedCornerShape(8.dp)
+                .fillMaxSize()
+                .padding(12.dp)
         ) {
-            Box(
+            // 左上角标签
+            Text(
+                text = "通知策略",
+                color = Color(0xFF9E9E9E),
+                fontSize = 10.sp,
+                modifier = Modifier.align(Alignment.TopStart)
+            )
+
+            // 主要内容行
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
+                    .fillMaxWidth()
+                    .align(Alignment.CenterStart)
+                    .padding(top = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // 左上角标签
                 Text(
-                    text = "通知策略",
-                    color = Color(0xFF9E9E9E),
-                    fontSize = 10.sp,
-                    modifier = Modifier.align(Alignment.TopStart)
+                    text = "🔔",
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(end = 8.dp)
                 )
 
-                // 主要内容行
+                Text(
+                    text = selectedStrategy?.name ?: "未设置",
+                    color = if (selectedStrategy != null) Color(0xFF424242) else Color(0xFF9E9E9E),
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (isEditMode) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = Color(0xFF9E9E9E),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    // 底部弹出对话框
+    if (showDialog && isEditMode) {
+        val sheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = false
+        )
+
+        ModalBottomSheet(
+            onDismissRequest = { showDialog = false },
+            sheetState = sheetState,
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            dragHandle = {
+                Surface(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    color = Color.Transparent
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 32.dp, height = 4.dp)
+                            .background(
+                                color = Color(0xFFE0E0E0),
+                                shape = RoundedCornerShape(2.dp)
+                            )
+                    )
+                }
+            }
+        ) {
+            Box(modifier = Modifier.fillMaxHeight(0.85f)) {
+                NotificationStrategyBottomSheet(
+                    availableStrategies = availableStrategies,
+                    selectedStrategyId = selectedStrategyId,
+                    onStrategySelected = onStrategySelected,
+                    onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
+                    onEditStrategy = onEditStrategy,
+                    onDeleteStrategy = onDeleteStrategy,
+                    onDismiss = { showDialog = false }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 通知策略配置底部对话框
+ */
+@Composable
+private fun NotificationStrategyBottomSheet(
+    availableStrategies: List<NotificationStrategy>,
+    selectedStrategyId: String?,
+    onStrategySelected: (String?) -> Unit,
+    onNavigateToCreateNotificationStrategy: () -> Unit,
+    onEditStrategy: (String) -> Unit = {},
+    onDeleteStrategy: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var strategyToDelete by remember { mutableStateOf<NotificationStrategy?>(null) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // 固定的标题栏（不滚动）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(top = 8.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "🔔 通知策略",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+            TextButton(onClick = onDismiss) {
+                Text("完成", color = Color(0xFF2196F3))
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFFE0E0E0))
+
+        // 可滚动的内容区域
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // 不使用选项
+            item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .align(Alignment.CenterStart)
-                        .padding(top = 14.dp),
+                        .clickable {
+                            onStrategySelected(null)
+                            onDismiss()
+                        }
+                        .padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "🔔",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 8.dp)
+                    RadioButton(
+                        selected = selectedStrategyId == null,
+                        onClick = {
+                            onStrategySelected(null)
+                            onDismiss()
+                        },
+                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF2196F3))
                     )
-
-                    Text(
-                        text = selectedStrategy?.name ?: "未设置",
-                        color = if (selectedStrategy != null) Color(0xFF424242) else Color(0xFF9E9E9E),
-                        fontSize = 14.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    if (isEditMode) {
-                        Icon(
-                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = Color(0xFF9E9E9E),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        // 展开的内容区域
-        if (isExpanded && isEditMode) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(8.dp)
-                ) {
-                    // 不使用通知策略选项
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "不使用",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onStrategySelected(null)
-                                onExpandToggle()
-                            }
-                            .padding(vertical = 8.dp, horizontal = 12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
                         color = if (selectedStrategyId == null) Color(0xFF2196F3) else Color(0xFF424242),
+                        fontWeight = if (selectedStrategyId == null) FontWeight.Medium else FontWeight.Normal,
                         fontSize = 14.sp
                     )
+                }
+            }
 
-                    // 显示已保存的通知策略列表
-                    if (availableStrategies.isNotEmpty()) {
-                        availableStrategies.forEach { strategy ->
-                            Text(
-                                text = strategy.name,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        onStrategySelected(strategy.id)
-                                        onExpandToggle()
-                                    }
-                                    .padding(vertical = 8.dp, horizontal = 12.dp),
-                                color = if (strategy.id == selectedStrategyId) Color(0xFF2196F3) else Color(0xFF424242),
-                                fontSize = 14.sp
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = "暂无通知策略",
-                            color = Color(0xFF9E9E9E),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp)
-                        )
-                    }
-
-                    // 新建策略按钮
-                    TextButton(
-                        onClick = {
-                            onNavigateToCreateNotificationStrategy()
-                        },
+            // 策略列表
+            if (availableStrategies.isNotEmpty()) {
+                items(availableStrategies) { strategy ->
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp)
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                        RadioButton(
+                            selected = selectedStrategyId == strategy.id,
+                            onClick = {
+                                onStrategySelected(strategy.id)
+                                onDismiss()
+                            },
+                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF2196F3))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = strategy.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (selectedStrategyId == strategy.id) Color(0xFF2196F3) else Color(0xFF424242),
+                            fontWeight = if (selectedStrategyId == strategy.id) FontWeight.Medium else FontWeight.Normal,
+                            fontSize = 14.sp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    onStrategySelected(strategy.id)
+                                    onDismiss()
+                                }
+                        )
+
+                        // 编辑按钮
+                        IconButton(
+                            onClick = {
+                                onEditStrategy(strategy.id)
+                                onDismiss()
+                            },
+                            modifier = Modifier.size(36.dp)
                         ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "编辑策略",
+                                tint = Color(0xFF2196F3),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // 删除按钮
+                        IconButton(
+                            onClick = { strategyToDelete = strategy },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "删除策略",
+                                tint = Color(0xFFEF5350),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            } else {
+                // 无策略提示
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9E6))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(text = "📣", fontSize = 32.sp)
                             Text(
-                                text = "➕",
-                                fontSize = 16.sp,
-                                modifier = Modifier.padding(end = 8.dp)
+                                text = "还没有通知策略",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF424242),
+                                fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = "新建策略",
-                                color = Color(0xFF424242),
-                                fontSize = 14.sp,
-                                modifier = Modifier.weight(1f),
-                                textAlign = TextAlign.Start
+                                text = "创建通知策略可以设置任务提醒时间",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF666666),
+                                fontSize = 12.sp
                             )
                         }
                     }
                 }
             }
+
+            // 新建策略按钮
+            item {
+                HorizontalDivider(color = Color(0xFFE0E0E0), modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = {
+                        onNavigateToCreateNotificationStrategy()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFF2196F3)
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFF2196F3))
+                ) {
+                    Text("➕ 新建策略", fontSize = 14.sp)
+                }
+            }
+
+            // 底部安全区域
+            item {
+                Spacer(modifier = Modifier.height(48.dp))
+            }
         }
+    }
+
+    // 删除确认对话框
+    strategyToDelete?.let { strategy ->
+        AlertDialog(
+            onDismissRequest = { strategyToDelete = null },
+            title = {
+                Text(
+                    text = "确认删除",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "确定要删除通知策略「${strategy.name}」吗？",
+                    fontSize = 14.sp,
+                    color = Color(0xFF424242)
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteStrategy(strategy.id)
+                        strategyToDelete = null
+                    }
+                ) {
+                    Text("删除", color = Color(0xFFEF5350), fontWeight = FontWeight.Medium)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { strategyToDelete = null }
+                ) {
+                    Text("取消", color = Color(0xFF757575))
+                }
+            },
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 }
 

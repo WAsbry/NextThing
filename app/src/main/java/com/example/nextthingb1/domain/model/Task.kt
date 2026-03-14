@@ -106,6 +106,21 @@ enum class TaskStatus {
     CANCELLED    // 放弃：用户主动放弃的任务（终态）
 }
 
+/**
+ * 删除任务的模式
+ */
+enum class DeleteMode {
+    /**
+     * 仅删除此任务（只删除当前instance，template继续存在，未来还会生成）
+     */
+    DELETE_THIS_ONLY,
+
+    /**
+     * 删除所有重复任务（删除template，所有未来的instance都不会再生成）
+     */
+    DELETE_ALL_RECURRING
+}
+
 data class TaskStatistics(
     val totalTasks: Int = 0,
     val completedTasks: Int = 0,

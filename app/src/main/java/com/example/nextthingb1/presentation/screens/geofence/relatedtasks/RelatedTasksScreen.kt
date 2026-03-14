@@ -295,13 +295,11 @@ private fun TaskCard(
 
                 // 优先级
                 task.importanceUrgency?.let { iu ->
-                    if (task.category != null) {
-                        Text(
-                            text = " · ",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                    }
+                    Text(
+                        text = " · ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
                     Text(
                         text = when (iu) {
                             com.example.nextthingb1.domain.model.TaskImportanceUrgency.IMPORTANT_URGENT -> "⭐ 重要紧急"

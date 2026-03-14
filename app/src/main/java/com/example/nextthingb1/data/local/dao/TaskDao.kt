@@ -40,7 +40,7 @@ interface TaskDao {
     @Transaction
     @Query("""
         SELECT * FROM tasks
-        WHERE dueDate < :currentTime AND status != 'COMPLETED' AND isTemplate = 0
+        WHERE dueDate < :currentTime AND status = 'PENDING' AND isTemplate = 0
         ORDER BY dueDate ASC
     """)
     fun getOverdueTasks(currentTime: LocalDateTime = LocalDateTime.now()): Flow<List<TaskWithCategory>>
@@ -56,6 +56,14 @@ interface TaskDao {
         ORDER BY createdAt DESC
     """)
     fun getTasksByDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<TaskWithCategory>>
+
+    @Transaction
+    @Query("""
+        SELECT * FROM tasks
+        WHERE createdAt BETWEEN :startDate AND :endDate AND isTemplate = 0
+        ORDER BY createdAt DESC
+    """)
+    suspend fun getTasksByDateRangeOnce(startDate: LocalDateTime, endDate: LocalDateTime): List<TaskWithCategory>
 
     @Transaction
     @Query("""
@@ -127,6 +135,21 @@ interface TaskDao {
     """)
     suspend fun getTasksInWeek(weekStart: LocalDateTime, weekEnd: LocalDateTime): List<TaskEntity>
 
+    // ========== 成就系统查询 ==========
+
+    // 统计每个分类的已完成任务数（全量，不限时间范围）
+    @Query("""
+        SELECT categoryId, COUNT(*) as count
+        FROM tasks
+        WHERE status = 'COMPLETED' AND isTemplate = 0
+        GROUP BY categoryId
+    """)
+    suspend fun getCompletedTaskCountByCategory(): List<CategoryTaskCount>
+
+    // 重复任务模板数量（用于"重复高手"成就）
+    @Query("SELECT COUNT(*) FROM tasks WHERE isTemplate = 1")
+    suspend fun getTemplateTasksCount(): Int
+
     // ========== 重复任务相关查询 ==========
 
     @Transaction
@@ -137,6 +160,7 @@ interface TaskDao {
     @Query("""
         SELECT * FROM tasks
         WHERE templateTaskId = :templateId AND date(instanceDate) = date(:date)
+        ORDER BY createdAt ASC
         LIMIT 1
     """)
     suspend fun getTaskInstance(templateId: String, date: LocalDateTime): TaskWithCategory?
@@ -146,6 +170,17 @@ interface TaskDao {
         WHERE templateTaskId = :templateId AND date(instanceDate) = date(:date)
     """)
     suspend fun hasInstanceForDate(templateId: String, date: LocalDateTime): Boolean
+
+    // 重复任务删除相关
+    @Transaction
+    @Query("SELECT * FROM tasks WHERE templateTaskId = :templateId")
+    suspend fun getInstancesByTemplateId(templateId: String): List<TaskWithCategory>
+
+    @Query("DELETE FROM tasks WHERE templateTaskId = :templateId")
+    suspend fun deleteInstancesByTemplateId(templateId: String)
+
+    @Query("DELETE FROM tasks WHERE id = :templateId OR templateTaskId = :templateId")
+    suspend fun deleteTemplateAndAllInstances(templateId: String)
 }
 
 /**

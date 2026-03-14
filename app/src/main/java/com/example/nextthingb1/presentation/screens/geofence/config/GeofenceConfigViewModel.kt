@@ -152,6 +152,9 @@ class GeofenceConfigViewModel @Inject constructor(
             try {
                 _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
+                // 标记是否已完成首次加载（用于将 isLoading 置为 false）
+                var initialLoadDone = false
+
                 // 并行加载配置和地点列表
                 launch {
                     geofenceUseCases.getGeofenceConfig().collect { config ->
@@ -163,7 +166,9 @@ class GeofenceConfigViewModel @Inject constructor(
                                     defaultRadius = config.defaultRadius,
                                     locationAccuracyThreshold = config.locationAccuracyThreshold,
                                     batteryOptimization = config.batteryOptimization,
-                                    notifyWhenOutside = config.notifyWhenOutside
+                                    notifyWhenOutside = config.notifyWhenOutside,
+                                    // 配置首次到达后即可清除 loading 状态
+                                    isLoading = if (!initialLoadDone) { initialLoadDone = true; false } else it.isLoading
                                 )
                             }
                         }
@@ -218,8 +223,7 @@ class GeofenceConfigViewModel @Inject constructor(
                     }
                 }
 
-                _uiState.update { it.copy(isLoading = false) }
-                Timber.tag(TAG).d("✅ 数据加载完成")
+                Timber.tag(TAG).d("✅ 数据加载已启动")
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "❌ 加载数据失败")
                 _uiState.update {

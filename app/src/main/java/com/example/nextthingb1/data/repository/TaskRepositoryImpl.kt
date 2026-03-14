@@ -52,9 +52,11 @@ class TaskRepositoryImpl @Inject constructor(
         val entity = task.toEntity()
         timber.log.Timber.tag(TAG).d("转换为Entity后:")
         timber.log.Timber.tag(TAG).d("  importanceUrgencyJson: ${entity.importanceUrgencyJson}")
+        timber.log.Timber.tag(TAG).d("  entity.status: ${entity.status}")
 
         taskDao.updateTask(entity)
         timber.log.Timber.tag(TAG).d("✅ 任务已更新到数据库")
+        timber.log.Timber.tag(TAG).d("  最终写入数据库的 status: ${entity.status}")
     }
 
     override suspend fun deleteTask(taskId: String) {
@@ -128,9 +130,10 @@ class TaskRepositoryImpl @Inject constructor(
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.getTodayTasks ━━━━━━")
         timber.log.Timber.tag(TAG).d("查询今日任务")
         return taskDao.getTodayTasks().map { taskWithCategories ->
-            timber.log.Timber.tag(TAG).d("📊 今日任务返回 ${taskWithCategories.size} 个任务")
+            timber.log.Timber.tag(TAG).d("━━━━━━ Room Flow 触发 ━━━━━━")
+            timber.log.Timber.tag(TAG).d("📊 Room 返回 ${taskWithCategories.size} 个今日任务")
             taskWithCategories.forEachIndexed { index, twc ->
-                timber.log.Timber.tag(TAG).d("  [$index] 今日任务: ${twc.task.title}, dueDate=${twc.task.dueDate}")
+                timber.log.Timber.tag(TAG).d("  [$index] ${twc.task.title} | status=${twc.task.status} | id=${twc.task.id.take(8)}")
             }
             taskWithCategories.toDomainList()
         }
@@ -189,7 +192,33 @@ class TaskRepositoryImpl @Inject constructor(
         startDate: LocalDateTime,
         endDate: LocalDateTime
     ): TaskStatistics {
-        return getTaskStatistics()
+        val tasksInRange = taskDao.getTasksByDateRangeOnce(startDate, endDate)
+        val totalTasks = tasksInRange.size
+        val completedTasks = tasksInRange.count { it.task.status == TaskStatus.COMPLETED }
+        val pendingTasks = tasksInRange.count { it.task.status == TaskStatus.PENDING }
+        val overdueTasks = tasksInRange.count { it.task.status == TaskStatus.OVERDUE }
+        val completionRate = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f
+
+        val allCategoriesEntities = categoryDao.getAllCategoriesList()
+        val categoryStats = tasksInRange
+            .groupingBy { it.task.categoryId }
+            .eachCount()
+            .mapNotNull { (categoryId, count) ->
+                val categoryEntity = allCategoriesEntities.find { it.id == categoryId }
+                categoryEntity?.let { it.toDomain() to count }
+            }.toMap()
+
+        return TaskStatistics(
+            totalTasks = totalTasks,
+            completedTasks = completedTasks,
+            pendingTasks = pendingTasks,
+            overdueTasks = overdueTasks,
+            completionRate = completionRate,
+            averageCompletionTime = 0,
+            mostProductiveHour = 9,
+            categoryStats = categoryStats,
+            weeklyStats = emptyList()
+        )
     }
     
     override suspend fun getCategoryStatistics(): Map<Category, Int> {
@@ -253,5 +282,21 @@ class TaskRepositoryImpl @Inject constructor(
     override suspend fun hasInstanceForDate(templateId: String, date: LocalDateTime): Boolean {
         timber.log.Timber.tag(TAG).v("检查模板任务 $templateId 在 ${date.toLocalDate()} 是否已有实例")
         return taskDao.hasInstanceForDate(templateId, date)
+    }
+
+    override suspend fun getInstancesByTemplateId(templateId: String): List<Task> {
+        timber.log.Timber.tag(TAG).d("查询模板任务 $templateId 的所有实例")
+        val instances = taskDao.getInstancesByTemplateId(templateId)
+        return instances.toDomainList()
+    }
+
+    override suspend fun deleteInstancesByTemplateId(templateId: String) {
+        timber.log.Timber.tag(TAG).d("删除模板任务 $templateId 的所有实例")
+        taskDao.deleteInstancesByTemplateId(templateId)
+    }
+
+    override suspend fun deleteTemplateAndAllInstances(templateId: String) {
+        timber.log.Timber.tag(TAG).d("删除模板任务 $templateId 及其所有实例")
+        taskDao.deleteTemplateAndAllInstances(templateId)
     }
 } 

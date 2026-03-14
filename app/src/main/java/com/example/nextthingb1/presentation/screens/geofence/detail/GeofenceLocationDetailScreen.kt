@@ -160,6 +160,7 @@ fun GeofenceLocationDetailScreen(
                 item {
                     GeofenceConfigCard(
                         customRadius = location.customRadius,
+                        defaultRadius = uiState.defaultRadius,
                         onRadiusChange = { viewModel.updateCustomRadius(it) },
                         latitude = location.locationInfo.latitude,
                         longitude = location.locationInfo.longitude,
@@ -301,7 +302,7 @@ private fun LocationInfoCard(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = Border)
+                HorizontalDivider(color = Border)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 显示当前编辑的坐标
@@ -337,6 +338,7 @@ private fun LocationInfoCard(
 @Composable
 private fun GeofenceConfigCard(
     customRadius: Int?,
+    defaultRadius: Int,
     onRadiusChange: (Int?) -> Unit,
     latitude: Double,
     longitude: Double,
@@ -344,8 +346,8 @@ private fun GeofenceConfigCard(
     onViewOnMap: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    var sliderValue by remember(customRadius) {
-        mutableStateOf((customRadius ?: 200).toFloat())
+    var sliderValue by remember(customRadius, defaultRadius) {
+        mutableStateOf((customRadius ?: defaultRadius).toFloat())
     }
     var useCustom by remember(customRadius) {
         mutableStateOf(customRadius != null)
@@ -448,7 +450,7 @@ private fun GeofenceConfigCard(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Divider(color = Border)
+            HorizontalDivider(color = Border)
             Spacer(modifier = Modifier.height(16.dp))
 
             // 在地图上查看按钮
@@ -550,7 +552,7 @@ private fun UsageStatisticsCard(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Divider(color = Border)
+            HorizontalDivider(color = Border)
             Spacer(modifier = Modifier.height(16.dp))
 
             // 月度统计
@@ -625,7 +627,7 @@ private fun UsageStatisticsCard(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Divider(color = Border)
+            HorizontalDivider(color = Border)
             Spacer(modifier = Modifier.height(16.dp))
 
             // 常用标记

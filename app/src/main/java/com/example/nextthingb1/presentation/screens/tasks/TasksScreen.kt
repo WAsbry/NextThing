@@ -712,7 +712,7 @@ private fun UnifiedTopSection(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
-                            progress = completionRate,
+                            progress = { completionRate },
                             modifier = Modifier.size(56.dp),
                             strokeWidth = 5.dp,
                             color = Color.White,

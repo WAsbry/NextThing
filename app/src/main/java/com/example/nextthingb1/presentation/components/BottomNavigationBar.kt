@@ -92,14 +92,14 @@ private fun BottomNavItem(
             "user" -> android.R.drawable.ic_menu_preferences
             else -> android.R.drawable.ic_menu_help
         }
-        
+
         Icon(
             painter = painterResource(id = iconResource),
             contentDescription = label,
             tint = if (isSelected) TextPrimary else TextMuted,
             modifier = Modifier.size(20.dp)
         )
-        
+
         Text(
             text = label,
             color = if (isSelected) TextPrimary else TextMuted,
@@ -107,4 +107,4 @@ private fun BottomNavItem(
             textAlign = TextAlign.Center
         )
     }
-} 
+}

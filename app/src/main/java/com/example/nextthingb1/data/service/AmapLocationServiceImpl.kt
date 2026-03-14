@@ -18,7 +18,10 @@ import com.example.nextthingb1.domain.service.AccuracyLevel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,15 +46,18 @@ class AmapLocationServiceImpl @Inject constructor(
 
     private var amapLocationClient: AMapLocationClient? = null
     private val geocoder: Geocoder = Geocoder(context, Locale.getDefault())
-    
+
     private var lastLocationUpdateTime: Long = 0
     private var cachedLocation: LocationInfo? = null
-    
+
     // 位置状态流
     private val _locationUpdates = MutableStateFlow<LocationInfo?>(null)
-    
-    // 并发控制：防止同时进行多个定位请求
-    private var isLocationInProgress = false
+
+    // 并发控制：防止同时进行多个定位请求（线程安全）
+    private val isLocationInProgress = AtomicBoolean(false)
+
+    // 类级别协程作用域，在 onDestroy 时取消
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     companion object {
         private const val LOCATION_CACHE_DURATION = 3 * 60 * 1000L // 3分钟缓存，更频繁更新
@@ -125,7 +131,7 @@ class AmapLocationServiceImpl @Inject constructor(
         Timber.d("🔍 [AmapLocationService] ⏰ 开始时间: ${java.text.SimpleDateFormat("HH:mm:ss.SSS").format(java.util.Date())}")
         
         // 并发控制检查
-        if (isLocationInProgress && !forceRefresh) {
+        if (isLocationInProgress.get() && !forceRefresh) {
             Timber.d("⏳ [AmapLocationService] 🔄 已有定位请求进行中，跳过重复请求")
             cachedLocation?.let {
                 Timber.d("⏳ [AmapLocationService] 📦 返回现有缓存位置: ${it.locationName}")
@@ -166,7 +172,7 @@ class AmapLocationServiceImpl @Inject constructor(
                 Timber.d("⚡ [AmapLocationService] 🔄 后台启动精确定位...")
                 updateLocationCache(quickLocation)
                 // 异步在后台获取更精确位置
-                CoroutineScope(Dispatchers.IO).launch {
+                serviceScope.launch {
                     try {
                         Timber.d("🎯 [AmapLocationService] 🚀 后台精确定位开始...")
                         val betterResult = getAmapLocation()
@@ -190,7 +196,7 @@ class AmapLocationServiceImpl @Inject constructor(
             Timber.d("🗺️ [AmapLocationService] 📱 客户端状态: 已初始化")
             
             // 设置定位进行中状态
-            isLocationInProgress = true
+            isLocationInProgress.set(true)
             
             try {
                 val amapStartTime = System.currentTimeMillis()
@@ -206,7 +212,7 @@ class AmapLocationServiceImpl @Inject constructor(
                     updateLocationCache(locationInfo)
                     
                     // 重置定位状态
-                    isLocationInProgress = false
+                    isLocationInProgress.set(false)
                     
                     Timber.d("============================================================")
                     return locationInfo
@@ -219,7 +225,7 @@ class AmapLocationServiceImpl @Inject constructor(
                 Timber.e(e, "💥 [AmapLocationService] 🔥 高德定位异常")
             } finally {
                 // 确保无论如何都重置状态
-                isLocationInProgress = false
+                isLocationInProgress.set(false)
             }
         } else {
             Timber.w("🗺️ [AmapLocationService] ⚠️ 高德客户端未初始化，跳过高德定位")
@@ -238,7 +244,7 @@ class AmapLocationServiceImpl @Inject constructor(
         val totalTime = System.currentTimeMillis() - startTime
         
         // 重置状态
-        isLocationInProgress = false
+        isLocationInProgress.set(false)
 
         return if (fallbackResult != null) {
             Timber.d("🔄 [AmapLocationService] ✅ Google服务定位成功！")
@@ -272,38 +278,27 @@ class AmapLocationServiceImpl @Inject constructor(
                 null
             }
 
-            // 根据省电模式配置选择定位模式
-            val locationMode = if (geofenceConfig?.batteryOptimization == true) {
-                AMapLocationClientOption.AMapLocationMode.Battery_Saving
-            } else {
-                AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
-            }
-
-            val locationModeDesc = if (geofenceConfig?.batteryOptimization == true) "省电模式" else "高精度模式"
-            Timber.d("🔋 [AmapLocationService] 定位模式: $locationModeDesc (配置: batteryOptimization=${geofenceConfig?.batteryOptimization})")
+            // 始终用省电模式（WiFi + 基站），速度最快，1-2s 内出结果
+            // 高精度模式需等 GPS 冷启动，耗时 5s+，对本应用不必要
+            val locationMode = AMapLocationClientOption.AMapLocationMode.Battery_Saving
+            Timber.d("🔋 [AmapLocationService] 定位模式: 省电模式（WiFi+基站，速度优先）")
 
             // 配置高德定位参数
             val option = AMapLocationClientOption().apply {
-                this.locationMode = locationMode // 根据配置动态设置
-                isOnceLocationLatest = true // 单次定位获取最新结果
-                isWifiScan = true // 强制扫描Wi-Fi（室内定位关键）
-                isNeedAddress = true // 需要地址信息
-                httpTimeOut = 8000L // 缩短超时时间到8秒
-                isLocationCacheEnable = false // 禁用位置缓存，获取实时位置
-                isMockEnable = false // 禁用模拟位置
-                locationPurpose = AMapLocationClientOption.AMapLocationPurpose.SignIn // 签到场景，提升精度
-                interval = 1000L // 快速定位间隔1秒
-                isOnceLocation = true // 单次定位模式
-                isSensorEnable = true // 开启传感器，提升室内精度
-                isWifiActiveScan = true // 主动扫描Wi-Fi
+                this.locationMode = locationMode
+                isOnceLocationLatest = false // 返回第一个可用结果，不等最优（关键：避免 5s+ 延迟）
+                isOnceLocation = true        // 单次定位
+                isWifiScan = true            // 被动 WiFi 扫描（室内定位）
+                isWifiActiveScan = false     // 关闭主动 WiFi 扫描（减少延迟）
+                isNeedAddress = true         // 返回地址文字（需要网络逆地理编码）
+                httpTimeOut = 6000L          // 网络超时 6s
+                isLocationCacheEnable = true // 允许 SDK 内部缓存（重启后快速返回）
+                isMockEnable = false
+                isSensorEnable = false       // 关闭传感器融合（省电模式下无意义，还增加延迟）
+                locationPurpose = AMapLocationClientOption.AMapLocationPurpose.Sport
             }
             locationClient.setLocationOption(option)
-            Timber.d("🚀 [AmapLocationService] ✅ 定位参数配置完成")
-            Timber.d("🚀 [AmapLocationService] 📋 配置摘要:")
-            Timber.d("🚀 [AmapLocationService] - 模式: $locationModeDesc")
-            Timber.d("🚀 [AmapLocationService] - 超时: ${8000L/1000}秒")
-            Timber.d("🚀 [AmapLocationService] - Wi-Fi扫描: 开启")
-            Timber.d("🚀 [AmapLocationService] - 传感器: 开启")
+            Timber.d("🚀 [AmapLocationService] ✅ 定位参数配置完成（省电模式，超时 6s）")
 
             // 使用超时控制的定位获取
             val location = withTimeoutOrNull(AMAP_LOCATION_TIMEOUT) {
@@ -569,13 +564,6 @@ class AmapLocationServiceImpl @Inject constructor(
         cachedLocation = locationInfo
         lastLocationUpdateTime = System.currentTimeMillis()
         _locationUpdates.value = locationInfo
-        
-        // 启动协程异步发送位置更新
-        CoroutineScope(Dispatchers.IO).launch {
-            delay(100) // 短暂延迟确保UI更新
-            _locationUpdates.value = locationInfo
-        }
-        
         Timber.d("💾 [AmapLocationService] 更新位置缓存: ${locationInfo.locationName}")
     }
 
@@ -617,6 +605,7 @@ class AmapLocationServiceImpl @Inject constructor(
 
     fun onDestroy() {
         try {
+            serviceScope.cancel()
             amapLocationClient?.stopLocation()
             amapLocationClient?.onDestroy()
             amapLocationClient = null

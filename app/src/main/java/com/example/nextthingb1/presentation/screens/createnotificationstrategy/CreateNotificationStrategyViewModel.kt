@@ -32,6 +32,53 @@ class CreateNotificationStrategyViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CreateNotificationStrategyUiState())
     val uiState: StateFlow<CreateNotificationStrategyUiState> = _uiState.asStateFlow()
 
+    /**
+     * 加载现有策略（编辑模式）
+     */
+    fun loadStrategy(strategyId: String) {
+        viewModelScope.launch {
+            try {
+                val strategy = notificationStrategyRepository.getStrategyById(strategyId)
+                if (strategy != null) {
+                    // 构建 AudioFileInfo（如果有自定义音频路径）
+                    val audioFileInfo = strategy.customAudioPath?.let { path ->
+                        AudioFileInfo(
+                            uri = Uri.parse(path),
+                            fileName = strategy.customAudioName ?: "自定义音频",
+                            displayName = strategy.customAudioName ?: "自定义音频",
+                            duration = null,
+                            fileSize = null
+                        )
+                    }
+
+                    // 构建 PresetAudio（如果有预置音频）
+                    val presetAudio = strategy.presetAudioName?.let { fileName ->
+                        PresetAudio.findByFileName(fileName)
+                    }
+
+                    _uiState.value = _uiState.value.copy(
+                        strategyId = strategy.id,
+                        isEditMode = true,
+                        name = strategy.name,
+                        vibrationSetting = strategy.vibrationSetting,
+                        soundSetting = strategy.soundSetting,
+                        volume = strategy.volume,
+                        customAudioFileInfo = audioFileInfo,
+                        customAudioName = strategy.customAudioName ?: "",
+                        selectedPresetAudio = presetAudio,
+                        systemNotificationMode = strategy.systemNotificationMode,
+                        advanceReminderMinutes = strategy.advanceReminderMinutes
+                    )
+                    Timber.d("策略加载成功: ${strategy.name}")
+                } else {
+                    Timber.w("未找到策略: $strategyId")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "加载策略失败: $strategyId")
+            }
+        }
+    }
+
     fun updateName(name: String) {
         _uiState.value = _uiState.value.copy(name = name)
     }
@@ -50,6 +97,17 @@ class CreateNotificationStrategyViewModel @Inject constructor(
 
     fun updateSystemNotificationMode(mode: SystemNotificationMode) {
         _uiState.value = _uiState.value.copy(systemNotificationMode = mode)
+    }
+
+    fun toggleAdvanceReminder(minutes: Int) {
+        val current = _uiState.value.advanceReminderMinutes.toMutableList()
+        if (current.contains(minutes)) {
+            current.remove(minutes)
+        } else {
+            current.add(minutes)
+            current.sort()
+        }
+        _uiState.value = _uiState.value.copy(advanceReminderMinutes = current)
     }
 
     fun updateCustomAudioFile(audioFileInfo: AudioFileInfo, customName: String) {
@@ -171,34 +229,37 @@ class CreateNotificationStrategyViewModel @Inject constructor(
             val assetPath = "audio/${presetAudio.fileName}"
             context.assets.openFd(assetPath).use { assetFileDescriptor ->
                 val mediaPlayer = MediaPlayer()
-                mediaPlayer.setDataSource(
-                    assetFileDescriptor.fileDescriptor,
-                    assetFileDescriptor.startOffset,
-                    assetFileDescriptor.length
-                )
+                try {
+                    mediaPlayer.setDataSource(
+                        assetFileDescriptor.fileDescriptor,
+                        assetFileDescriptor.startOffset,
+                        assetFileDescriptor.length
+                    )
 
-                // 设置音量
-                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION)
-                val targetVolume = (maxVolume * volume / 100f).toInt()
-                audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, targetVolume, 0)
+                    // 设置音量
+                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION)
+                    val targetVolume = (maxVolume * volume / 100f).toInt()
+                    audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, targetVolume, 0)
 
-                // 使用AudioAttributes替代已弃用的setAudioStreamType
-                val audioAttributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-                mediaPlayer.setAudioAttributes(audioAttributes)
+                    // 使用AudioAttributes替代已弃用的setAudioStreamType
+                    val audioAttributes = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    mediaPlayer.setAudioAttributes(audioAttributes)
 
-                mediaPlayer.prepare()
-                mediaPlayer.start()
+                    mediaPlayer.prepare()
+                    mediaPlayer.start()
 
-                // 播放完成后释放资源
-                mediaPlayer.setOnCompletionListener { player ->
-                    player.release()
+                    // 播放完成后释放资源
+                    mediaPlayer.setOnCompletionListener { player ->
+                        player.release()
+                    }
+                } catch (e: Exception) {
+                    mediaPlayer.release()
+                    throw e
                 }
-
-                // 播放完成后自动释放，不限制时长
             }
         } catch (e: Exception) {
             Timber.e(e, "Error playing preset audio: ${presetAudio.fileName}")
@@ -272,25 +333,47 @@ class CreateNotificationStrategyViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val strategy = com.example.nextthingb1.domain.model.NotificationStrategy(
-                    id = java.util.UUID.randomUUID().toString(),
-                    name = currentState.name,
-                    isGeofenceEnabled = false,
-                    vibrationSetting = currentState.vibrationSetting,
-                    soundSetting = currentState.soundSetting,
-                    volume = currentState.volume,
-                    customAudioPath = currentState.customAudioFileInfo?.uri?.toString(),
-                    customAudioName = currentState.customAudioName.takeIf { it.isNotBlank() },
-                    presetAudioName = currentState.selectedPresetAudio?.fileName,
-                    systemNotificationMode = currentState.systemNotificationMode,
-                    createdAt = java.time.LocalDateTime.now(),
-                    updatedAt = java.time.LocalDateTime.now(),
-                    usageCount = 0,
-                    lastUsedAt = null
-                )
-
-                notificationStrategyRepository.insertStrategy(strategy)
-                Timber.d("Notification strategy saved successfully: ${currentState.name}")
+                if (currentState.isEditMode && currentState.strategyId != null) {
+                    // 编辑模式：更新现有策略
+                    val existingStrategy = notificationStrategyRepository.getStrategyById(currentState.strategyId)
+                    if (existingStrategy != null) {
+                        val updatedStrategy = existingStrategy.copy(
+                            name = currentState.name,
+                            vibrationSetting = currentState.vibrationSetting,
+                            soundSetting = currentState.soundSetting,
+                            volume = currentState.volume,
+                            customAudioPath = currentState.customAudioFileInfo?.uri?.toString(),
+                            customAudioName = currentState.customAudioName.takeIf { it.isNotBlank() },
+                            presetAudioName = currentState.selectedPresetAudio?.fileName,
+                            systemNotificationMode = currentState.systemNotificationMode,
+                            advanceReminderMinutes = currentState.advanceReminderMinutes,
+                            updatedAt = java.time.LocalDateTime.now()
+                        )
+                        notificationStrategyRepository.updateStrategy(updatedStrategy)
+                        Timber.d("通知策略更新成功: ${currentState.name}")
+                    }
+                } else {
+                    // 新建模式：插入新策略
+                    val strategy = com.example.nextthingb1.domain.model.NotificationStrategy(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = currentState.name,
+                        isGeofenceEnabled = false,
+                        vibrationSetting = currentState.vibrationSetting,
+                        soundSetting = currentState.soundSetting,
+                        volume = currentState.volume,
+                        customAudioPath = currentState.customAudioFileInfo?.uri?.toString(),
+                        customAudioName = currentState.customAudioName.takeIf { it.isNotBlank() },
+                        presetAudioName = currentState.selectedPresetAudio?.fileName,
+                        systemNotificationMode = currentState.systemNotificationMode,
+                        advanceReminderMinutes = currentState.advanceReminderMinutes,
+                        createdAt = java.time.LocalDateTime.now(),
+                        updatedAt = java.time.LocalDateTime.now(),
+                        usageCount = 0,
+                        lastUsedAt = null
+                    )
+                    notificationStrategyRepository.insertStrategy(strategy)
+                    Timber.d("通知策略保存成功: ${currentState.name}")
+                }
                 _uiState.value = _uiState.value.copy(isSaved = true)
             } catch (e: Exception) {
                 Timber.e(e, "Failed to save notification strategy")
@@ -300,6 +383,8 @@ class CreateNotificationStrategyViewModel @Inject constructor(
 }
 
 data class CreateNotificationStrategyUiState(
+    val strategyId: String? = null,
+    val isEditMode: Boolean = false,
     val name: String = "",
     val vibrationSetting: VibrationSetting = VibrationSetting.NONE,
     val soundSetting: SoundSetting = SoundSetting.NONE,
@@ -308,6 +393,7 @@ data class CreateNotificationStrategyUiState(
     val customAudioName: String = "",
     val selectedPresetAudio: PresetAudio? = null,
     val systemNotificationMode: SystemNotificationMode = SystemNotificationMode.STATUS_BAR,
+    val advanceReminderMinutes: List<Int> = emptyList(),
     val isLoading: Boolean = false,
     val isSaved: Boolean = false
 ) {

@@ -2,6 +2,7 @@ package com.example.nextthingb1.di
 
 import android.content.Context
 import androidx.room.Room
+import com.example.nextthingb1.data.local.dao.AchievementDao
 import com.example.nextthingb1.data.local.dao.CategoryDao
 import com.example.nextthingb1.data.local.dao.LocationDao
 import com.example.nextthingb1.data.local.dao.NotificationStrategyDao
@@ -11,6 +12,7 @@ import com.example.nextthingb1.data.local.dao.GeofenceConfigDao
 import com.example.nextthingb1.data.local.dao.GeofenceLocationDao
 import com.example.nextthingb1.data.local.dao.TaskGeofenceDao
 import com.example.nextthingb1.data.local.database.TaskDatabase
+import com.example.nextthingb1.data.repository.AchievementRepositoryImpl
 import com.example.nextthingb1.data.repository.CategoryRepositoryImpl
 import com.example.nextthingb1.data.repository.TaskRepositoryImpl
 import com.example.nextthingb1.data.repository.LocationRepositoryImpl
@@ -21,6 +23,8 @@ import com.example.nextthingb1.data.repository.GeofenceConfigRepositoryImpl
 import com.example.nextthingb1.data.repository.GeofenceLocationRepositoryImpl
 import com.example.nextthingb1.data.repository.TaskGeofenceRepositoryImpl
 import com.example.nextthingb1.data.service.CategoryPreferencesManagerImpl
+import com.example.nextthingb1.data.preferences.ThemePreferences
+import com.example.nextthingb1.domain.repository.AchievementRepository
 import com.example.nextthingb1.domain.repository.CategoryRepository
 import com.example.nextthingb1.domain.repository.TaskRepository
 import com.example.nextthingb1.domain.repository.LocationRepository
@@ -49,6 +53,17 @@ object DatabaseModule {
         return TaskDatabase.getDatabase(context)
     }
     
+    @Provides
+    fun provideAchievementDao(database: TaskDatabase): AchievementDao {
+        return database.achievementDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAchievementRepository(achievementDao: AchievementDao): AchievementRepository {
+        return AchievementRepositoryImpl(achievementDao)
+    }
+
     @Provides
     fun provideTaskDao(database: TaskDatabase): TaskDao {
         return database.taskDao()
@@ -140,6 +155,14 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideThemePreferences(
+        @ApplicationContext context: Context
+    ): ThemePreferences {
+        return ThemePreferences(context)
+    }
+
+    @Provides
+    @Singleton
     fun provideNotificationHelper(
         @ApplicationContext context: Context
     ): NotificationHelper {
@@ -157,9 +180,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideTaskAlarmManager(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        notificationStrategyRepository: com.example.nextthingb1.domain.repository.NotificationStrategyRepository
     ): com.example.nextthingb1.util.TaskAlarmManager {
-        return com.example.nextthingb1.util.TaskAlarmManager(context)
+        return com.example.nextthingb1.util.TaskAlarmManager(context, notificationStrategyRepository)
     }
 
     @Provides

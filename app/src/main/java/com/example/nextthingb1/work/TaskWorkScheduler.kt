@@ -182,7 +182,7 @@ object TaskWorkScheduler {
             .build()
 
         val countdownRequest = PeriodicWorkRequestBuilder<CountdownNotificationWorker>(
-            repeatInterval = 1,
+            repeatInterval = 15, // Android WorkManager 最小周期为 15 分钟
             repeatIntervalTimeUnit = TimeUnit.MINUTES
         )
             .setConstraints(constraints)
@@ -199,7 +199,7 @@ object TaskWorkScheduler {
             countdownRequest
         )
 
-        Timber.i("Scheduled countdown notification updates to run every 1 minute")
+        Timber.i("Scheduled countdown notification updates to run every 15 minutes (Android WorkManager minimum)")
     }
 
     /**
@@ -264,11 +264,15 @@ object TaskWorkScheduler {
      * @param context Application context
      */
     fun cancelAllWork(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(OVERDUE_CHECK_WORK_NAME)
-        WorkManager.getInstance(context).cancelUniqueWork(DELAYED_CONVERT_WORK_NAME)
-        WorkManager.getInstance(context).cancelUniqueWork(TASK_NOTIFICATION_WORK_NAME)
-        WorkManager.getInstance(context).cancelUniqueWork(COUNTDOWN_UPDATE_WORK_NAME)
-        WorkManager.getInstance(context).cancelUniqueWork(RECURRING_TASKS_WORK_NAME)
+        val wm = WorkManager.getInstance(context)
+        wm.cancelUniqueWork(OVERDUE_CHECK_WORK_NAME)
+        wm.cancelUniqueWork("${OVERDUE_CHECK_WORK_NAME}_immediate")
+        wm.cancelUniqueWork(DELAYED_CONVERT_WORK_NAME)
+        wm.cancelUniqueWork("${DELAYED_CONVERT_WORK_NAME}_immediate")
+        wm.cancelUniqueWork(TASK_NOTIFICATION_WORK_NAME)
+        wm.cancelUniqueWork(COUNTDOWN_UPDATE_WORK_NAME)
+        wm.cancelUniqueWork(RECURRING_TASKS_WORK_NAME)
+        wm.cancelUniqueWork("${RECURRING_TASKS_WORK_NAME}_immediate")
         Timber.i("Cancelled all task work")
     }
 

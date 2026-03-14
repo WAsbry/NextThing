@@ -224,6 +224,20 @@ class TaskGeofenceRepositoryImpl @Inject constructor(
         // 返回快照半径
         return taskGeofence.radius
     }
+
+    override suspend fun incrementDeferCount(taskId: String) {
+        taskGeofenceDao.incrementDeferCount(
+            taskId = taskId,
+            updatedAt = LocalDateTime.now().toString()
+        )
+    }
+
+    override suspend fun resetDeferCount(taskId: String) {
+        taskGeofenceDao.resetDeferCount(
+            taskId = taskId,
+            updatedAt = LocalDateTime.now().toString()
+        )
+    }
 }
 
 

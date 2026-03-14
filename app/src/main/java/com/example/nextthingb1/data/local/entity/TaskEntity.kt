@@ -21,7 +21,8 @@ import java.time.LocalDateTime
         Index(value = ["categoryId"]), // 添加索引提升查询性能
         Index(value = ["templateTaskId"]), // 模板任务ID索引
         Index(value = ["instanceDate"]), // 实例日期索引
-        Index(value = ["isTemplate"]) // 模板标志索引
+        Index(value = ["isTemplate"]), // 模板标志索引
+        Index(value = ["templateTaskId", "instanceDate"], unique = true) // 防止重复生成同一天的实例
     ]
 )
 data class TaskEntity(

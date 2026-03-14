@@ -76,13 +76,23 @@ class WeatherServiceImpl @Inject constructor(
      */
     private fun getAppCertificateFingerprint(context: Context): String {
         return try {
-            val packageInfo = context.packageManager.getPackageInfo(
-                context.packageName,
-                android.content.pm.PackageManager.GET_SIGNATURES
-            )
+            val signatures = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                val packageInfo = context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+                )
+                packageInfo.signingInfo?.apkContentsSigners
+            } else {
+                @Suppress("DEPRECATION")
+                val packageInfo = context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.GET_SIGNATURES
+                )
+                @Suppress("DEPRECATION")
+                packageInfo.signatures
+            }
 
-            val signatures = packageInfo.signatures
-            if (signatures.isNotEmpty()) {
+            if (!signatures.isNullOrEmpty()) {
                 val cert = signatures[0]
                 val digest = java.security.MessageDigest.getInstance("SHA1")
                 val certHash = digest.digest(cert.toByteArray())

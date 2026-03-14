@@ -27,7 +27,10 @@ data class GeofenceLocationDetailUiState(
     val editLatitude: Double = 0.0,
     val editLongitude: Double = 0.0,
     val editAddress: String = "",
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+
+    // 全局配置
+    val defaultRadius: Int = 200  // 全局默认半径
 )
 
 @HiltViewModel
@@ -48,6 +51,20 @@ class GeofenceLocationDetailViewModel @Inject constructor(
 
     init {
         loadLocation()
+        loadDefaultRadius()
+    }
+
+    private fun loadDefaultRadius() {
+        viewModelScope.launch {
+            try {
+                val config = geofenceUseCases.getGeofenceConfig().first()
+                config?.let {
+                    _uiState.update { state -> state.copy(defaultRadius = it.defaultRadius) }
+                }
+            } catch (e: Exception) {
+                Timber.tag(TAG).e(e, "加载全局配置失败，使用默认值 200")
+            }
+        }
     }
 
     private fun loadLocation() {
@@ -55,32 +72,21 @@ class GeofenceLocationDetailViewModel @Inject constructor(
             try {
                 _uiState.update { it.copy(isLoading = true) }
 
-                // 加载地点信息
-                geofenceUseCases.getGeofenceLocations.getById(locationId).collect { location ->
+                // 合并地点 Flow 与关联任务 Flow，确保 relatedTasksCount 实时同步
+                combine(
+                    geofenceUseCases.getGeofenceLocations.getById(locationId),
+                    geofenceUseCases.getTaskGeofence.getByLocationId(locationId)
+                ) { location, taskGeofences ->
+                    location to taskGeofences.size
+                }.collect { (location, tasksCount) ->
                     if (location != null) {
-                        // 计算统计数据
-                        val monthlyCheckCount = location.monthlyCheckCount
-                        val monthlyHitCount = location.monthlyHitCount
-                        val hitRate = location.getHitRate()
-
                         _uiState.update {
                             it.copy(
                                 location = location,
-                                monthlyCheckCount = monthlyCheckCount,
-                                monthlyHitCount = monthlyHitCount,
-                                hitRate = hitRate
-                            )
-                        }
-
-                        // 加载关联任务数量
-                        val tasksCount = geofenceUseCases.getTaskGeofence
-                            .getByLocationId(locationId)
-                            .first()
-                            .size
-
-                        _uiState.update {
-                            it.copy(
                                 relatedTasksCount = tasksCount,
+                                monthlyCheckCount = location.monthlyCheckCount,
+                                monthlyHitCount = location.monthlyHitCount,
+                                hitRate = location.getHitRate(),
                                 isLoading = false
                             )
                         }

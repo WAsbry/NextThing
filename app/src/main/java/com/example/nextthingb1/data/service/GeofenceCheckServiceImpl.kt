@@ -41,7 +41,10 @@ class GeofenceCheckServiceImpl @Inject constructor(
     }
 
     // 位置缓存
+    @Volatile
     private var cachedLocation: LocationInfo? = null
+
+    @Volatile
     private var cacheTimestamp: Long = 0L
 
     // ========== 主要检查方法 ==========

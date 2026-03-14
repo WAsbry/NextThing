@@ -15,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.rememberNavController
+import com.example.nextthingb1.data.preferences.ThemePreferences
+import com.example.nextthingb1.domain.model.ThemeMode
 import com.example.nextthingb1.presentation.navigation.NextThingNavigation
 import com.example.nextthingb1.presentation.theme.NextThingB1Theme
 import com.example.nextthingb1.util.PermissionHelper
@@ -36,6 +38,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var permissionManager: PermissionManager
+
+    @Inject
+    lateinit var themePreferences: ThemePreferences
 
     private lateinit var locationPermissionLauncher: ActivityResultLauncher<Array<String>>
     private var notificationPermissionLauncher: ActivityResultLauncher<String>? = null
@@ -67,10 +72,12 @@ class MainActivity : ComponentActivity() {
                 Timber.tag("NotificationTask").w("⚠️ 通知权限被拒绝")
             }
         }
-        
+
         enableEdgeToEdge()
         setContent {
-            NextThingB1Theme {
+            val themeMode by themePreferences.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+
+            NextThingB1Theme(themeMode = themeMode) {
                 CompositionLocalProvider(LocalPermissionLauncher provides locationPermissionLauncher) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
@@ -89,8 +96,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-// 我注意到，此页面同样存在，顶部没有贴紧屏幕顶部的问题，需要你进行解决这个问题
 
 @Composable
 fun NextThingApp(

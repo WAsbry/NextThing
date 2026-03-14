@@ -135,7 +135,7 @@ fun AddGeofenceLocationScreen(
                     LocationSelectionItem(
                         location = location,
                         isSelected = uiState.selectedLocation?.id == location.id,
-                        radius = if (uiState.useCustomRadius) uiState.customRadius ?: 200 else 200,
+                        radius = if (uiState.useCustomRadius) uiState.customRadius ?: uiState.defaultRadius else uiState.defaultRadius,
                         onClick = { viewModel.selectLocation(location) },
                         onRadiusClick = { showRadiusDialog = true }
                     )
@@ -188,7 +188,7 @@ fun AddGeofenceLocationScreen(
     // 半径调整对话框
     if (showRadiusDialog) {
         RadiusAdjustmentDialog(
-            currentRadius = if (uiState.useCustomRadius) uiState.customRadius ?: 200 else 200,
+            currentRadius = if (uiState.useCustomRadius) uiState.customRadius ?: uiState.defaultRadius else uiState.defaultRadius,
             onDismiss = { showRadiusDialog = false },
             onConfirm = { newRadius ->
                 viewModel.toggleUseCustomRadius(true)
@@ -259,7 +259,7 @@ private fun RadiusConfigCard(
             // 滑块区域（启用自定义时显示）
             if (useCustom) {
                 Spacer(modifier = Modifier.height(20.dp))
-                Divider(color = Border.copy(alpha = 0.5f), thickness = 0.5.dp)
+                HorizontalDivider(color = Border.copy(alpha = 0.5f), thickness = 0.5.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 当前值显示
@@ -426,7 +426,7 @@ private fun LocationSelectionItem(
 
             // 底部：坐标信息和半径（仅选中时显示半径）
             Spacer(modifier = Modifier.height(12.dp))
-            Divider(color = Border.copy(alpha = 0.5f), thickness = 0.5.dp)
+            HorizontalDivider(color = Border.copy(alpha = 0.5f), thickness = 0.5.dp)
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(

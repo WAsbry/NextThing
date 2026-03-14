@@ -1,30 +1,27 @@
 package com.example.nextthingb1.presentation.navigation
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.navArgument
 import com.example.nextthingb1.presentation.theme.BgPrimary
-import com.example.nextthingb1.presentation.theme.Primary
 import com.example.nextthingb1.presentation.screens.today.TodayScreen
 import com.example.nextthingb1.presentation.screens.today.TodayViewModel
 import com.example.nextthingb1.presentation.screens.tasks.TasksScreen
@@ -44,7 +41,9 @@ import com.example.nextthingb1.presentation.screens.createnotificationstrategy.C
 import com.example.nextthingb1.presentation.screens.taskdetail.TaskDetailScreen
 import com.example.nextthingb1.presentation.screens.taskdetail.TaskDetailViewModel
 import com.example.nextthingb1.presentation.screens.userinfo.UserInfoScreen
+import com.example.nextthingb1.presentation.screens.achievement.AchievementScreen
 import com.example.nextthingb1.presentation.screens.login.LoginScreen
+import com.example.nextthingb1.presentation.screens.splash.SplashScreen
 import com.example.nextthingb1.presentation.screens.geofence.config.GeofenceConfigScreen
 import com.example.nextthingb1.presentation.screens.geofence.detail.GeofenceLocationDetailScreen
 import com.example.nextthingb1.presentation.screens.geofence.add.AddGeofenceLocationScreen
@@ -52,9 +51,6 @@ import com.example.nextthingb1.presentation.screens.mappicker.MapPickerScreen
 import com.example.nextthingb1.presentation.components.BottomNavigationBar
 import androidx.compose.runtime.LaunchedEffect
 import com.example.nextthingb1.domain.usecase.UserUseCases
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import kotlinx.coroutines.flow.first
 
 @Composable
 fun NextThingNavigation(
@@ -64,35 +60,12 @@ fun NextThingNavigation(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // 检查是否有用户登录
-    val startDestination = remember { mutableStateOf<String?>(null) }
-
-    // 这个好像是什么异步的东西吧
-    LaunchedEffect(Unit) {
-        val currentUser = userUseCases.getCurrentUser().first()
-        startDestination.value = if (currentUser == null) {
-            Screen.Login.route
-        } else {
-            Screen.Today.route
-        }
-    }
-
-    // 等待确定起始目的地
-    if (startDestination.value == null) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(BgPrimary),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(color = Primary)
-        }
-        return
-    }
-
     Scaffold(
         bottomBar = {
-            if (currentRoute != Screen.Focus.route && currentRoute != Screen.Login.route) {
+            val hideBottomBar = currentRoute == Screen.Focus.route
+                || currentRoute == Screen.Login.route
+                || currentRoute == Screen.Splash.route
+            if (!hideBottomBar) {
                 BottomNavigationBar(
                     currentRoute = currentRoute,
                     onNavigate = { route ->
@@ -108,9 +81,26 @@ fun NextThingNavigation(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = startDestination.value!!,
+            startDestination = Screen.Splash.route,
             modifier = Modifier.padding(paddingValues)
         ) {
+            // 启动页：完成权限申请后跳转
+            composable(Screen.Splash.route) {
+                SplashScreen(
+                    userUseCases = userUseCases,
+                    onNavigateToLogin = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToHome = {
+                        navController.navigate(Screen.Today.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
             composable(Screen.Login.route) {
                 LoginScreen(
                     onLoginSuccess = {
@@ -151,11 +141,11 @@ fun NextThingNavigation(
                     onBackPressed = {
                         navController.popBackStack()
                     },
-                    onNavigateToCreateLocation = {
-                        navController.navigate(Screen.CreateLocation.route)
-                    },
                     onNavigateToCreateNotificationStrategy = {
                         navController.navigate(Screen.CreateNotificationStrategy.route)
+                    },
+                    onEditNotificationStrategy = { strategyId ->
+                        navController.navigate(Screen.CreateNotificationStrategy.createRoute(strategyId))
                     },
                     onNavigateToGeofenceAdd = {
                         navController.navigate("geofence_location_add")
@@ -228,10 +218,21 @@ fun NextThingNavigation(
                 )
             }
 
-            composable(Screen.CreateNotificationStrategy.route) {
+            composable(
+                route = "create_notification_strategy?strategyId={strategyId}",
+                arguments = listOf(
+                    navArgument("strategyId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                val strategyId = backStackEntry.arguments?.getString("strategyId")
                 val viewModel: CreateNotificationStrategyViewModel = hiltViewModel()
                 CreateNotificationStrategyScreen(
                     viewModel = viewModel,
+                    strategyId = strategyId,
                     onBackPressed = {
                         navController.popBackStack()
                     }
@@ -252,7 +253,16 @@ fun NextThingNavigation(
                     },
                     onNavigateToGeofence = {
                         navController.navigate("geofence_config")
+                    },
+                    onNavigateToAchievement = {
+                        navController.navigate(Screen.Achievement.route)
                     }
+                )
+            }
+
+            composable(Screen.Achievement.route) {
+                AchievementScreen(
+                    onBackPressed = { navController.popBackStack() }
                 )
             }
 
@@ -260,8 +270,10 @@ fun NextThingNavigation(
                 GeofenceConfigScreen(navController = navController)
             }
 
-            composable("geofence_location_detail/{locationId}") { backStackEntry ->
-                val locationId = backStackEntry.arguments?.getString("locationId") ?: ""
+            composable(
+                route = "geofence_location_detail/{locationId}",
+                arguments = listOf(navArgument("locationId") { type = NavType.StringType })
+            ) {
                 GeofenceLocationDetailScreen(navController = navController)
             }
 
@@ -269,8 +281,10 @@ fun NextThingNavigation(
                 AddGeofenceLocationScreen(navController = navController)
             }
 
-            composable("geofence_related_tasks/{locationId}") { backStackEntry ->
-                val locationId = backStackEntry.arguments?.getString("locationId") ?: ""
+            composable(
+                route = "geofence_related_tasks/{locationId}",
+                arguments = listOf(navArgument("locationId") { type = NavType.StringType })
+            ) {
                 com.example.nextthingb1.presentation.screens.geofence.relatedtasks.RelatedTasksScreen(
                     navController = navController
                 )
@@ -314,14 +328,24 @@ fun NextThingNavigation(
 }
 
 sealed class Screen(val route: String, val title: String, val icon: String) {
+    object Splash : Screen("splash", "启动", "splash")
     object Login : Screen("login", "登录", "login")
     object Today : Screen("today", "首页", "home")
     object Tasks : Screen("tasks", "任务", "list")
     object CreateTask : Screen("create_task", "创建", "add")
     object CreateLocation : Screen("create_location", "新建地点", "location")
-    object CreateNotificationStrategy : Screen("create_notification_strategy", "新建通知策略", "notification")
+    object CreateNotificationStrategy : Screen("create_notification_strategy", "新建通知策略", "notification") {
+        fun createRoute(strategyId: String? = null): String {
+            return if (strategyId != null) {
+                "create_notification_strategy?strategyId=$strategyId"
+            } else {
+                "create_notification_strategy"
+            }
+        }
+    }
     object Stats : Screen("stats", "统计", "chart-pie")
     object Settings : Screen("settings", "我的", "user")
+    object Achievement : Screen("achievement", "成就", "trophy")
     object UserInfo : Screen("user_info", "用户信息", "user-info")
     object Focus : Screen("focus", "专注", "clock")
     object TaskDetail : Screen("task_detail/{taskId}", "任务详情", "detail")

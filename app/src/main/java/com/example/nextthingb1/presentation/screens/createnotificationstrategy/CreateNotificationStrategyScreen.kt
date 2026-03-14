@@ -10,7 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,12 +39,20 @@ import com.example.nextthingb1.util.AudioFileInfo
 @Composable
 fun CreateNotificationStrategyScreen(
     onBackPressed: () -> Unit,
+    strategyId: String? = null,
     viewModel: CreateNotificationStrategyViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
+
+    // 编辑模式：加载现有策略
+    LaunchedEffect(strategyId) {
+        strategyId?.let {
+            viewModel.loadStrategy(it)
+        }
+    }
 
     // 如果保存成功，自动返回
     LaunchedEffect(uiState.isSaved) {
@@ -62,7 +70,8 @@ fun CreateNotificationStrategyScreen(
         TopNavigationSection(
             screenHeight = screenHeight,
             screenWidth = screenWidth,
-            onBackPressed = onBackPressed
+            onBackPressed = onBackPressed,
+            isEditMode = uiState.isEditMode
         )
 
         // 主要内容区域
@@ -96,15 +105,29 @@ fun CreateNotificationStrategyScreen(
                 volume = uiState.volume,
                 customAudioFileInfo = uiState.customAudioFileInfo,
                 customAudioName = uiState.customAudioName,
-                selectedPresetAudio = uiState.selectedPresetAudio,
                 onSoundSelected = { viewModel.updateSoundSetting(it) },
                 onVolumeChanged = { viewModel.updateVolume(it) },
                 onPlayPreview = { viewModel.playSoundPreview() },
                 onCustomAudioSelected = { audioFileInfo, customName ->
                     viewModel.updateCustomAudioFile(audioFileInfo, customName)
                 },
-                onPresetAudioSelected = { viewModel.updatePresetAudio(it) },
                 onClearCustomAudio = { viewModel.clearCustomAudio() }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 通知模式设置
+            NotificationModeSection(
+                selectedMode = uiState.systemNotificationMode,
+                onModeSelected = { viewModel.updateSystemNotificationMode(it) }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 提前提醒设置
+            AdvanceReminderSection(
+                selectedMinutes = uiState.advanceReminderMinutes,
+                onToggleMinutes = { viewModel.toggleAdvanceReminder(it) }
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -125,7 +148,8 @@ fun CreateNotificationStrategyScreen(
 private fun TopNavigationSection(
     screenHeight: androidx.compose.ui.unit.Dp,
     screenWidth: androidx.compose.ui.unit.Dp,
-    onBackPressed: () -> Unit
+    onBackPressed: () -> Unit,
+    isEditMode: Boolean = false
 ) {
     Box(
         modifier = Modifier
@@ -143,7 +167,7 @@ private fun TopNavigationSection(
                 modifier = Modifier.padding(start = 8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
                     tint = Color.White
                 )
@@ -151,7 +175,7 @@ private fun TopNavigationSection(
 
             // 页面标题
             Text(
-                text = "新建通知策略",
+                text = if (isEditMode) "编辑通知策略" else "新建通知策略",
                 color = Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium,
@@ -298,12 +322,10 @@ private fun SoundSection(
     volume: Int,
     customAudioFileInfo: AudioFileInfo?,
     customAudioName: String,
-    selectedPresetAudio: PresetAudio?,
     onSoundSelected: (SoundSetting) -> Unit,
     onVolumeChanged: (Int) -> Unit,
     onPlayPreview: () -> Unit,
     onCustomAudioSelected: (AudioFileInfo, String) -> Unit,
-    onPresetAudioSelected: (PresetAudio) -> Unit,
     onClearCustomAudio: () -> Unit
 ) {
     Card(
@@ -323,26 +345,19 @@ private fun SoundSection(
                 modifier = Modifier.padding(bottom = 12.dp)
             )
 
-            // 声音选项
-            SoundSetting.values().forEach { sound ->
-                SoundOptionItem(
-                    sound = sound,
-                    isSelected = sound == selectedSound,
-                    onClick = { onSoundSelected(sound) }
-                )
-            }
-
-            // 预置音频选择
-            if (selectedSound == SoundSetting.PRESET_AUDIO) {
-                Spacer(modifier = Modifier.height(12.dp))
-                PresetAudioSelector(
-                    selectedPresetAudio = selectedPresetAudio,
-                    onPresetAudioSelected = onPresetAudioSelected
-                )
-            }
+            // 声音选项（过滤掉预置音效和录音文件）
+            SoundSetting.values()
+                .filter { it != SoundSetting.PRESET_AUDIO && it != SoundSetting.RECORDING_AUDIO }
+                .forEach { sound ->
+                    SoundOptionItem(
+                        sound = sound,
+                        isSelected = sound == selectedSound,
+                        onClick = { onSoundSelected(sound) }
+                    )
+                }
 
             // 自定义音频选择
-            if (selectedSound == SoundSetting.CUSTOM_AUDIO || selectedSound == SoundSetting.RECORDING_AUDIO) {
+            if (selectedSound == SoundSetting.CUSTOM_AUDIO) {
                 Spacer(modifier = Modifier.height(12.dp))
                 CustomAudioSelector(
                     customAudioFileInfo = customAudioFileInfo,
@@ -474,6 +489,146 @@ private fun BottomActionSection(
                 color = Color.White,
                 fontSize = 16.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun NotificationModeSection(
+    selectedMode: SystemNotificationMode,
+    onModeSelected: (SystemNotificationMode) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "通知方式",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF424242)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            SystemNotificationMode.entries.forEach { mode ->
+                val isSelected = selectedMode == mode
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) Color(0xFFE3F2FD) else Color.Transparent)
+                        .clickable { onModeSelected(mode) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = mode.icon,
+                        fontSize = 20.sp
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = mode.displayName,
+                            fontSize = 14.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) Color(0xFF1976D2) else Color(0xFF424242)
+                        )
+                        Text(
+                            text = mode.description,
+                            fontSize = 12.sp,
+                            color = Color(0xFF9E9E9E)
+                        )
+                    }
+                    if (isSelected) {
+                        Text(text = "\u2713", fontSize = 18.sp, color = Color(0xFF1976D2))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdvanceReminderSection(
+    selectedMinutes: List<Int>,
+    onToggleMinutes: (Int) -> Unit
+) {
+    data class ReminderOption(val minutes: Int, val label: String)
+
+    val options = listOf(
+        ReminderOption(5, "5分钟"),
+        ReminderOption(15, "15分钟"),
+        ReminderOption(30, "30分钟"),
+        ReminderOption(60, "1小时"),
+        ReminderOption(120, "2小时"),
+        ReminderOption(1440, "1天")
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "提前提醒",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF424242)
+            )
+            Text(
+                text = "在截止时间之前发送预提醒（可多选）",
+                fontSize = 12.sp,
+                color = Color(0xFF9E9E9E)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 使用 FlowRow 布局显示选项标签
+            val chunked = options.chunked(3)
+            chunked.forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    row.forEach { option ->
+                        val isSelected = selectedMinutes.contains(option.minutes)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) Color(0xFF71CBF4) else Color.White)
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) Color(0xFF71CBF4) else Color(0xFFE0E0E0),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable { onToggleMinutes(option.minutes) }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = option.label,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) Color.White else Color(0xFF616161)
+                            )
+                        }
+                    }
+                    // 填充剩余空间
+                    repeat(3 - row.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }

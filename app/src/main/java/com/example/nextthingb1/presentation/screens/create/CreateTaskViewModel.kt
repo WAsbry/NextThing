@@ -23,10 +23,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 @HiltViewModel
@@ -55,10 +57,43 @@ class CreateTaskViewModel @Inject constructor(
     val availableGeofenceLocations: StateFlow<List<GeofenceLocation>> = _availableGeofenceLocations.asStateFlow()
 
     init {
+        initializeDefaultDateTime()
         initializeCategories()
         loadSavedLocations()
         loadNotificationStrategies()
         loadAvailableGeofenceLocations()
+        loadDefaultRadius()
+    }
+
+    private fun initializeDefaultDateTime() {
+        val now = LocalDateTime.now()
+        val currentDate = now.toLocalDate()
+        val currentTime = Pair(now.hour, now.minute)
+
+        // 格式化显示字符串，例如 "2026-01-12 14:30"
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        val dateTimeString = now.format(formatter)
+
+        _uiState.value = _uiState.value.copy(
+            selectedDate = currentDate,
+            preciseTime = currentTime,
+            dueDate = dateTimeString
+        )
+
+        Timber.d("初始化默认时间: selectedDate=$currentDate, preciseTime=$currentTime, dueDate=$dateTimeString")
+    }
+
+    private fun loadDefaultRadius() {
+        viewModelScope.launch {
+            try {
+                val config = geofenceUseCases.getGeofenceConfig().first()
+                config?.let {
+                    _uiState.value = _uiState.value.copy(defaultRadius = it.defaultRadius)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "加载全局配置失败，使用默认值 200")
+            }
+        }
     }
 
     private fun initializeCategories() {
@@ -68,6 +103,8 @@ class CreateTaskViewModel @Inject constructor(
 
                 // 首先获取上次选择的分类
                 val lastSelectedCategoryId = categoryPreferencesManager.getLastSelectedCategoryId()
+
+                var defaultCategorySet = false
 
                 categoryRepository.getAllCategories().collect { categories ->
                     // 将Category转换为CategoryItem
@@ -87,8 +124,11 @@ class CreateTaskViewModel @Inject constructor(
                     val sortedCategories = categoryPreferencesManager.sortCategoriesByUsage(categoryItems)
                     _categories.value = sortedCategories
 
-                    // 设置默认选中的分类
-                    loadLastSelectedCategory(lastSelectedCategoryId)
+                    // 仅在第一次收到数据时设置默认分类；后续 DB 变化不覆盖用户的当前选择
+                    if (!defaultCategorySet) {
+                        loadLastSelectedCategory(lastSelectedCategoryId)
+                        defaultCategorySet = true
+                    }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to initialize categories")
@@ -228,36 +268,6 @@ class CreateTaskViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(dueDate = dueDate)
     }
 
-    fun selectLocation(location: LocationInfo?) {
-        _uiState.value = _uiState.value.copy(selectedLocation = location)
-    }
-
-    fun deleteLocation(locationId: String) {
-        viewModelScope.launch {
-            try {
-                locationUseCases.deleteLocation(locationId).fold(
-                    onSuccess = {
-                        // 删除成功，地点列表会自动更新（通过Flow）
-                        // 如果删除的是当前选中的地点，清除选择
-                        if (_uiState.value.selectedLocation?.id == locationId) {
-                            _uiState.value = _uiState.value.copy(selectedLocation = null)
-                        }
-                    },
-                    onFailure = { error ->
-                        // 删除失败的处理
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "删除地点失败: ${error.message}"
-                        )
-                    }
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "删除地点时发生错误: ${e.message}"
-                )
-            }
-        }
-    }
-
     fun updateImportanceUrgency(importanceUrgency: TaskImportanceUrgency?) {
         _uiState.value = _uiState.value.copy(importanceUrgency = importanceUrgency)
     }
@@ -326,6 +336,21 @@ class CreateTaskViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(notificationStrategyId = strategyId)
     }
 
+    fun deleteNotificationStrategy(strategyId: String) {
+        viewModelScope.launch {
+            try {
+                // 如果删除的是当前选中的策略，清除选中状态
+                if (_uiState.value.notificationStrategyId == strategyId) {
+                    _uiState.value = _uiState.value.copy(notificationStrategyId = null)
+                }
+                notificationStrategyRepository.deleteStrategy(strategyId)
+                Timber.d("通知策略删除成功: $strategyId")
+            } catch (e: Exception) {
+                Timber.e(e, "删除通知策略失败: $strategyId")
+            }
+        }
+    }
+
     fun updateGeofenceEnabled(enabled: Boolean) {
         _uiState.value = _uiState.value.copy(geofenceEnabled = enabled)
         // 如果禁用，清除选中的地点
@@ -335,7 +360,12 @@ class CreateTaskViewModel @Inject constructor(
     }
 
     fun updateSelectedGeofenceLocation(locationId: String?) {
-        _uiState.value = _uiState.value.copy(selectedGeofenceLocationId = locationId)
+        _uiState.value = _uiState.value.copy(
+            selectedGeofenceLocationId = locationId,
+            // 当选择地点时，自动启用地理围栏；清除地点时，保持当前启用状态
+            geofenceEnabled = if (locationId != null) true else _uiState.value.geofenceEnabled
+        )
+        Timber.tag("TaskGeofence").d("选择地理围栏地点: locationId=$locationId, geofenceEnabled=${_uiState.value.geofenceEnabled}")
     }
 
     fun createTask() {
@@ -399,7 +429,26 @@ class CreateTaskViewModel @Inject constructor(
                     }
                 }
 
+                // 确定要保存的位置信息
+                // 只从地理围栏地点获取locationInfo
+                Timber.tag("TaskGeofence").d("━━━━━━ 地理围栏信息检查 ━━━━━━")
+                Timber.tag("TaskGeofence").d("  geofenceEnabled: ${currentState.geofenceEnabled}")
+                Timber.tag("TaskGeofence").d("  selectedGeofenceLocationId: ${currentState.selectedGeofenceLocationId}")
+                Timber.tag("TaskGeofence").d("  可用地理围栏地点数量: ${_availableGeofenceLocations.value.size}")
+
+                val locationInfoToSave = if (currentState.geofenceEnabled && currentState.selectedGeofenceLocationId != null) {
+                    // 从可用的地理围栏地点列表中查找选中的地点
+                    val selectedLocation = _availableGeofenceLocations.value.find { it.id == currentState.selectedGeofenceLocationId }
+                    Timber.tag("TaskGeofence").d("  找到的地点: ${selectedLocation?.locationInfo?.locationName ?: "null"}")
+                    selectedLocation?.locationInfo
+                } else {
+                    Timber.tag("TaskGeofence").d("  地理围栏未启用或未选择地点，不保存locationInfo")
+                    null
+                }
+                Timber.tag("TaskGeofence").d("━━━━━━━━━━━━━━━━━━━━━━━━━")
+
                 Timber.tag("NotificationTask").d("准备调用 taskUseCases.createTask()...")
+                Timber.tag("NotificationTask").d("  locationInfo: ${locationInfoToSave?.locationName ?: "null"}")
 
                 val result = taskUseCases.createTask(
                     title = currentState.title,
@@ -409,7 +458,8 @@ class CreateTaskViewModel @Inject constructor(
                     imageUri = currentState.selectedImageUri,
                     repeatFrequency = currentState.repeatFrequency,
                     notificationStrategyId = currentState.notificationStrategyId,
-                    importanceUrgency = currentState.importanceUrgency
+                    importanceUrgency = currentState.importanceUrgency,
+                    locationInfo = locationInfoToSave
                 )
 
                 if (result.isSuccess) {
@@ -456,7 +506,6 @@ data class CreateTaskUiState(
     val selectedDate: LocalDate? = null, // 选择的日期
     val preciseTime: Pair<Int, Int>? = null, // 精确时间（小时, 分钟），null表示未设置
     val isLoading: Boolean = false,
-    val selectedLocation: LocationInfo? = null,
     val importanceUrgency: TaskImportanceUrgency? = TaskImportanceUrgency.IMPORTANT_NOT_URGENT,
     val selectedImageUri: String? = null,
     val repeatFrequency: RepeatFrequency = RepeatFrequency(),
@@ -464,6 +513,7 @@ data class CreateTaskUiState(
     val availableNotificationStrategies: List<NotificationStrategy> = emptyList(), // 可用的通知策略列表
     val geofenceEnabled: Boolean = false, // 是否启用地理围栏
     val selectedGeofenceLocationId: String? = null, // 选中的地理围栏地点ID
+    val defaultRadius: Int = 200, // 全局默认半径
     val errorMessage: String? = null
 ) {
     // 获取对应的Category，用于创建任务

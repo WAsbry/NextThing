@@ -29,6 +29,15 @@ class Converters {
         return gson.fromJson(value, listType) ?: emptyList()
     }
 
+    @TypeConverter
+    fun fromIntList(value: List<Int>): String = gson.toJson(value)
+
+    @TypeConverter
+    fun toIntList(value: String): List<Int> {
+        val listType = object : TypeToken<List<Int>>() {}.type
+        return gson.fromJson(value, listType) ?: emptyList()
+    }
+
     // Enum converters
     @TypeConverter
     fun fromTaskCategory(category: TaskCategory): String = category.name
