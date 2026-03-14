@@ -4,6 +4,9 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nextthingb1.data.preferences.ThemePreferences
+import com.example.nextthingb1.data.preferences.AIPreferences
+import com.example.nextthingb1.data.preferences.AIProvider
+import com.example.nextthingb1.data.preferences.IFlyPreferences
 import com.example.nextthingb1.domain.model.ThemeMode
 import com.example.nextthingb1.domain.usecase.AchievementUseCases
 import com.example.nextthingb1.domain.model.AchievementProgress
@@ -42,7 +45,18 @@ data class SettingsUiState(
     val showClearConfirmDialog: Boolean = false,
     // 操作结果消息（用于 Snackbar）
     val actionMessage: String? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    // AI 配置
+    val aiProvider: AIProvider = AIProvider.DEEPSEEK,
+    val aiApiKey: String = "",
+    val aiModel: String = "",
+    val showAIConfigDialog: Boolean = false,
+    // 讯飞 ASR 配置
+    val iflyAppId: String = "",
+    val iflyApiKey: String = "",
+    val iflyApiSecret: String = "",
+    val iflyAccent: String = "lmz",
+    val showIFlyConfigDialog: Boolean = false
 )
 
 @HiltViewModel
@@ -52,7 +66,9 @@ class SettingsViewModel @Inject constructor(
     private val achievementUseCases: AchievementUseCases,
     private val themePreferences: ThemePreferences,
     private val taskDao: TaskDao,
-    private val geofenceLocationDao: GeofenceLocationDao
+    private val geofenceLocationDao: GeofenceLocationDao,
+    private val aiPreferences: AIPreferences,
+    private val iflyPreferences: IFlyPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -63,6 +79,8 @@ class SettingsViewModel @Inject constructor(
         loadStatistics()
         loadAchievements()
         observeThemeMode()
+        observeAISettings()
+        observeIFlySettings()
     }
 
     // ── 主题 ──────────────────────────────────────────────
@@ -187,5 +205,83 @@ class SettingsViewModel @Inject constructor(
 
     fun clearActionMessage() {
         _uiState.value = _uiState.value.copy(actionMessage = null)
+    }
+
+    // ── AI 配置 ───────────────────────────────────────────
+
+    private fun observeAISettings() {
+        viewModelScope.launch {
+            aiPreferences.provider.collect { provider ->
+                _uiState.value = _uiState.value.copy(aiProvider = provider)
+            }
+        }
+        viewModelScope.launch {
+            aiPreferences.apiKey.collect { key ->
+                _uiState.value = _uiState.value.copy(aiApiKey = key)
+            }
+        }
+        viewModelScope.launch {
+            aiPreferences.model.collect { model ->
+                _uiState.value = _uiState.value.copy(aiModel = model)
+            }
+        }
+    }
+
+    fun showAIConfigDialog() {
+        _uiState.value = _uiState.value.copy(showAIConfigDialog = true)
+    }
+
+    fun hideAIConfigDialog() {
+        _uiState.value = _uiState.value.copy(showAIConfigDialog = false)
+    }
+
+    fun saveAIConfig(provider: AIProvider, apiKey: String, model: String) {
+        viewModelScope.launch {
+            aiPreferences.setProvider(provider)
+            aiPreferences.setApiKey(apiKey)
+            aiPreferences.setModel(model)
+            _uiState.value = _uiState.value.copy(
+                showAIConfigDialog = false,
+                actionMessage = if (apiKey.isNotBlank()) "AI 配置已保存" else "AI 配置已清除"
+            )
+        }
+    }
+
+    // ── 讯飞 ASR 配置 ──────────────────────────────────────────
+
+    private fun observeIFlySettings() {
+        viewModelScope.launch {
+            iflyPreferences.appId.collect { _uiState.value = _uiState.value.copy(iflyAppId = it) }
+        }
+        viewModelScope.launch {
+            iflyPreferences.apiKey.collect { _uiState.value = _uiState.value.copy(iflyApiKey = it) }
+        }
+        viewModelScope.launch {
+            iflyPreferences.apiSecret.collect { _uiState.value = _uiState.value.copy(iflyApiSecret = it) }
+        }
+        viewModelScope.launch {
+            iflyPreferences.accent.collect { _uiState.value = _uiState.value.copy(iflyAccent = it) }
+        }
+    }
+
+    fun showIFlyConfigDialog() {
+        _uiState.value = _uiState.value.copy(showIFlyConfigDialog = true)
+    }
+
+    fun hideIFlyConfigDialog() {
+        _uiState.value = _uiState.value.copy(showIFlyConfigDialog = false)
+    }
+
+    fun saveIFlyConfig(appId: String, apiKey: String, apiSecret: String, accent: String) {
+        viewModelScope.launch {
+            iflyPreferences.setAppId(appId)
+            iflyPreferences.setApiKey(apiKey)
+            iflyPreferences.setApiSecret(apiSecret)
+            iflyPreferences.setAccent(accent)
+            _uiState.value = _uiState.value.copy(
+                showIFlyConfigDialog = false,
+                actionMessage = if (appId.isNotBlank()) "讯飞配置已保存" else "讯飞配置已清除"
+            )
+        }
     }
 }

@@ -19,12 +19,17 @@ import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.NotificationStrategy
 import com.example.nextthingb1.domain.model.GeofenceLocation
 import com.example.nextthingb1.domain.usecase.GeofenceUseCases
+import com.example.nextthingb1.domain.model.AITaskParseResult
+import com.example.nextthingb1.domain.service.AITaskParser
+import com.example.nextthingb1.domain.service.ASRService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -38,11 +43,16 @@ class CreateTaskViewModel @Inject constructor(
     private val categoryPreferencesManager: CategoryPreferencesManager,
     private val locationUseCases: LocationUseCases,
     private val notificationStrategyRepository: NotificationStrategyRepository,
-    private val geofenceUseCases: GeofenceUseCases
+    private val geofenceUseCases: GeofenceUseCases,
+    private val aiTaskParser: AITaskParser,
+    private val asrService: ASRService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateTaskUiState())
     val uiState: StateFlow<CreateTaskUiState> = _uiState.asStateFlow()
+
+    private val _isASRRecording = MutableStateFlow(false)
+    val isASRRecording: StateFlow<Boolean> = _isASRRecording.asStateFlow()
 
     private val _categories = MutableStateFlow<List<CategoryItem>>(emptyList())
     val categories: StateFlow<List<CategoryItem>> = _categories.asStateFlow()
@@ -368,6 +378,107 @@ class CreateTaskViewModel @Inject constructor(
         Timber.tag("TaskGeofence").d("选择地理围栏地点: locationId=$locationId, geofenceEnabled=${_uiState.value.geofenceEnabled}")
     }
 
+    // ── AI 自然语言解析 ────────────────────────────────────
+
+    fun updateAIInputText(text: String) {
+        _uiState.value = _uiState.value.copy(aiInputText = text)
+    }
+
+    fun parseWithAI() {
+        val text = _uiState.value.aiInputText.trim()
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isAIParsing = true, aiError = null, aiParseResult = null, showAIResult = false
+            )
+            val categoryNames = _categories.value.map { it.displayName }
+            val locationNames = _availableGeofenceLocations.value.map { it.locationInfo.locationName }
+            aiTaskParser.parseTaskFromText(text, categoryNames, locationNames)
+                .onSuccess { parsed ->
+                    _uiState.value = _uiState.value.copy(
+                        isAIParsing = false, aiParseResult = parsed, showAIResult = true
+                    )
+                    Timber.tag("AI").d("解析成功: title=${parsed.title}, confidence=${parsed.confidence}")
+                }
+                .onFailure { error ->
+                    Timber.tag("AI").e(error, "AI解析失败")
+                    _uiState.value = _uiState.value.copy(
+                        isAIParsing = false,
+                        aiError = error.message ?: "AI解析失败，请检查设置中的 API Key"
+                    )
+                }
+        }
+    }
+
+    fun applyAIResult() {
+        val result = _uiState.value.aiParseResult ?: return
+        updateTitle(result.title)
+        result.description?.let { updateDescription(it) }
+        result.dueDate?.let { dt ->
+            updateSelectedDate(dt.toLocalDate())
+            updatePreciseTime(Pair(dt.hour, dt.minute))
+            updateDueDate(dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
+        }
+        result.categoryName?.let { name ->
+            _categories.value.find { it.displayName == name }?.let { updateSelectedCategory(it) }
+        }
+        result.importance?.let { updateImportanceUrgency(it) }
+        result.repeatType?.let { type ->
+            updateRepeatFrequencyType(type)
+            if (type == RepeatFrequencyType.WEEKLY) {
+                result.repeatWeekdays?.let { updateRepeatWeekdays(it) }
+            }
+        }
+        _uiState.value = _uiState.value.copy(showAIResult = false, aiInputText = "")
+    }
+
+    fun applyAIResultAndCreate() {
+        applyAIResult()
+        createTask()
+    }
+
+    fun dismissAIResult() {
+        _uiState.value = _uiState.value.copy(showAIResult = false, aiParseResult = null)
+    }
+
+    fun clearAIError() {
+        _uiState.value = _uiState.value.copy(aiError = null)
+    }
+
+    // ── 讯飞 ASR 语音识别 ─────────────────────────────────────
+
+    fun startASR() {
+        if (_isASRRecording.value) return
+        _isASRRecording.value = true
+        _uiState.value = _uiState.value.copy(aiError = null)
+
+        asrService.start(
+            onPartial = { text ->
+                // 实时显示中间结果
+                _uiState.value = _uiState.value.copy(aiInputText = text)
+            },
+            onFinal = { text ->
+                _isASRRecording.value = false
+                _uiState.value = _uiState.value.copy(aiInputText = text)
+                Timber.tag("ASR").d("最终识别结果: $text")
+                if (text.isNotBlank()) {
+                    parseWithAI()
+                }
+            },
+            onError = { error ->
+                _isASRRecording.value = false
+                _uiState.value = _uiState.value.copy(aiError = error)
+            }
+        )
+    }
+
+    fun stopASR() {
+        asrService.stop()
+        // isASRRecording 会在 onFinal/onError 回调后置为 false
+    }
+
+    // ─────────────────────────────────────────────────────
+
     fun createTask() {
         val currentState = _uiState.value
         if (currentState.title.isBlank()) {
@@ -376,16 +487,19 @@ class CreateTaskViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            try {
-                Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                Timber.tag("NotificationTask").d("【ViewModel】createTask 被调用")
-                Timber.tag("NotificationTask").d("任务信息：")
-                Timber.tag("NotificationTask").d("  标题: ${currentState.title}")
-                Timber.tag("NotificationTask").d("  描述: ${currentState.description}")
-                Timber.tag("NotificationTask").d("  分类: ${currentState.category}")
-                Timber.tag("NotificationTask").d("  selectedDate: ${currentState.selectedDate}")
-                Timber.tag("NotificationTask").d("  preciseTime: ${currentState.preciseTime}")
-                Timber.tag("NotificationTask").d("  notificationStrategyId: ${currentState.notificationStrategyId}")
+            // ⚠️ NonCancellable: 即使 ViewModel 被销毁（页面返回）也必须完成 DB 写入
+            // 否则 onBackPressed() 取消协程导致任务丢失
+            withContext(NonCancellable) {
+                try {
+                    Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    Timber.tag("NotificationTask").d("【ViewModel】createTask 被调用")
+                    Timber.tag("NotificationTask").d("任务信息：")
+                    Timber.tag("NotificationTask").d("  标题: ${currentState.title}")
+                    Timber.tag("NotificationTask").d("  描述: ${currentState.description}")
+                    Timber.tag("NotificationTask").d("  分类: ${currentState.category}")
+                    Timber.tag("NotificationTask").d("  selectedDate: ${currentState.selectedDate}")
+                    Timber.tag("NotificationTask").d("  preciseTime: ${currentState.preciseTime}")
+                    Timber.tag("NotificationTask").d("  notificationStrategyId: ${currentState.notificationStrategyId}")
 
                 // 计算截止时间
                 val dueDateTime = when {
@@ -494,6 +608,7 @@ class CreateTaskViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "Failed to create task")
             }
+            } // withContext(NonCancellable)
         }
     }
 }
@@ -514,7 +629,13 @@ data class CreateTaskUiState(
     val geofenceEnabled: Boolean = false, // 是否启用地理围栏
     val selectedGeofenceLocationId: String? = null, // 选中的地理围栏地点ID
     val defaultRadius: Int = 200, // 全局默认半径
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    // AI 自然语言解析
+    val aiInputText: String = "",
+    val isAIParsing: Boolean = false,
+    val aiParseResult: AITaskParseResult? = null,
+    val aiError: String? = null,
+    val showAIResult: Boolean = false
 ) {
     // 获取对应的Category，用于创建任务
     val category: Category

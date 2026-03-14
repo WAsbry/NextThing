@@ -21,6 +21,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -70,6 +73,11 @@ import com.example.nextthingb1.domain.model.LocationInfo
 import com.example.nextthingb1.domain.model.TaskImportanceUrgency
 import com.example.nextthingb1.domain.model.NotificationStrategy
 import com.example.nextthingb1.presentation.theme.*
+import com.example.nextthingb1.domain.model.AITaskParseResult
+import com.example.nextthingb1.domain.model.RepeatFrequencyType
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 
 // 日期格式化辅助函数
 private fun formatDate(date: LocalDate?): String {
@@ -105,19 +113,42 @@ fun CreateTaskScreen(
     val categories by viewModel.categories.collectAsState()
     val showCreateCategoryDialog by viewModel.showCreateCategoryDialog.collectAsState()
     val availableGeofenceLocations by viewModel.availableGeofenceLocations.collectAsState()
+    val isASRRecording by viewModel.isASRRecording.collectAsState()
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
+    val context = LocalContext.current
 
     // 折叠状态管理 - 使用单一状态追踪当前展开的卡片
     var expandedCard by remember { mutableStateOf<String?>(null) }
-    var isListening by remember { mutableStateOf(false) }
     var isGeofenceExpanded by remember { mutableStateOf(false) }
 
     // 日期选择状态
     var showDatePicker by remember { mutableStateOf(false) }
 
-    // 移除本地状态，在LocationConfigCard内部处理
+    // 麦克风权限请求
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.startASR()
+        else viewModel.clearAIError().also {
+            viewModel.updateAIInputText("")
+            // 通过 aiError 显示提示
+            // 直接设置错误文字
+        }
+    }
+
+    fun onVoiceClick() {
+        if (isASRRecording) {
+            viewModel.stopASR()
+        } else {
+            val hasPerm = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+            if (hasPerm) viewModel.startASR()
+            else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -128,9 +159,24 @@ fun CreateTaskScreen(
         TopNavigationSection(
             screenHeight = screenHeight,
             screenWidth = screenWidth,
-            isListening = isListening,
+            isListening = isASRRecording,
             onBackPressed = onBackPressed,
-            onVoiceClick = { isListening = !isListening }
+            onVoiceClick = { onVoiceClick() }
+        )
+
+        // AI 智能输入区域
+        AIInputSection(
+            aiInputText = uiState.aiInputText,
+            isAIParsing = uiState.isAIParsing,
+            aiParseResult = uiState.aiParseResult,
+            showAIResult = uiState.showAIResult,
+            aiError = uiState.aiError,
+            onInputChange = { viewModel.updateAIInputText(it) },
+            onParse = { viewModel.parseWithAI() },
+            onApplyAndEdit = { viewModel.applyAIResult() },
+            onApplyAndCreate = { viewModel.applyAIResultAndCreate(); onBackPressed() },
+            onDismissResult = { viewModel.dismissAIResult() },
+            onDismissError = { viewModel.clearAIError() }
         )
 
         // 核心输入区 (28%高度)
@@ -2477,5 +2523,243 @@ private fun MonthDaySelector(
                 )
             }
         }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════
+// AI 智能输入组件
+// ══════════════════════════════════════════════════════════════
+
+@Composable
+private fun AIInputSection(
+    aiInputText: String,
+    isAIParsing: Boolean,
+    aiParseResult: AITaskParseResult?,
+    showAIResult: Boolean,
+    aiError: String?,
+    onInputChange: (String) -> Unit,
+    onParse: () -> Unit,
+    onApplyAndEdit: () -> Unit,
+    onApplyAndCreate: () -> Unit,
+    onDismissResult: () -> Unit,
+    onDismissError: () -> Unit
+) {
+    val primaryColor = Primary
+    val borderColor = Border
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        // 标题
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("✨", fontSize = 16.sp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "AI 智能输入",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = primaryColor
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // 输入框 + 按钮
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = aiInputText,
+                onValueChange = onInputChange,
+                placeholder = {
+                    Text(
+                        "试试：明天下午3点开项目周会",
+                        fontSize = 13.sp,
+                        color = Color(0xFFBDBDBD)
+                    )
+                },
+                modifier = Modifier.weight(1f),
+                maxLines = 3,
+                enabled = !isAIParsing,
+                shape = RoundedCornerShape(10.dp),
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = primaryColor,
+                    unfocusedBorderColor = borderColor
+                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { onParse() })
+            )
+
+            // 解析按钮
+            val btnEnabled = aiInputText.isNotBlank() && !isAIParsing
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = if (btnEnabled) primaryColor else primaryColor.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .clickable(enabled = btnEnabled, onClick = onParse),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isAIParsing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("🔮", fontSize = 20.sp)
+                }
+            }
+        }
+
+        // 错误提示
+        if (aiError != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3F3)),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, Color(0xFFFFCDD2))
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = aiError,
+                        fontSize = 12.sp,
+                        color = Color(0xFFD32F2F),
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = onDismissError,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("关闭", fontSize = 12.sp, color = Color(0xFFD32F2F))
+                    }
+                }
+            }
+        }
+
+        // AI 解析结果卡片
+        if (showAIResult && aiParseResult != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            AIResultCard(
+                result = aiParseResult,
+                onApplyAndEdit = onApplyAndEdit,
+                onApplyAndCreate = onApplyAndCreate,
+                onDismiss = onDismissResult
+            )
+        }
+    }
+}
+
+@Composable
+private fun AIResultCard(
+    result: AITaskParseResult,
+    onApplyAndEdit: () -> Unit,
+    onApplyAndCreate: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val primaryColor = Primary
+    val successColor = Success
+    val warningColor = Warning
+    Card(
+        colors = CardDefaults.cardColors(containerColor = primaryColor.copy(alpha = 0.04f)),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.2f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // 标题行
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "AI 解析结果",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = primaryColor
+                )
+                val conf = (result.confidence * 100).toInt()
+                Text(
+                    text = "置信度 $conf%",
+                    fontSize = 11.sp,
+                    color = if (result.confidence >= 0.8f) successColor else warningColor
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            AIResultRow("📝", "标题", result.title)
+            result.dueDate?.let {
+                AIResultRow(
+                    "📅", "时间",
+                    it.format(java.time.format.DateTimeFormatter.ofPattern("MM月dd日 HH:mm"))
+                )
+            }
+            result.categoryName?.let { AIResultRow("📁", "分类", it) }
+            result.importance?.let { AIResultRow("🔥", "优先级", it.displayName) }
+            result.locationName?.let { AIResultRow("📍", "地点", it) }
+            if (result.repeatType != null && result.repeatType != RepeatFrequencyType.NONE) {
+                AIResultRow("🔄", "重复", result.repeatType.name)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 操作按钮
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Text("取消", fontSize = 12.sp)
+                }
+                OutlinedButton(
+                    onClick = onApplyAndEdit,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, primaryColor),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Text("继续编辑", fontSize = 12.sp, color = primaryColor)
+                }
+                Button(
+                    onClick = onApplyAndCreate,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Text("直接创建", fontSize = 12.sp, color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AIResultRow(emoji: String, label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(emoji, fontSize = 13.sp)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("$label：", fontSize = 12.sp, color = TextSecondary)
+        Text(value, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
     }
 }
