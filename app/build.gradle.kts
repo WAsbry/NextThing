@@ -1,28 +1,34 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.compose.compiler)
-    id("kotlin-kapt")
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
     id("kotlin-parcelize")
-    kotlin("plugin.serialization") version "1.9.22"
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) load(file.inputStream())
 }
 
 android {
-    namespace = "com.example.nextthingb1"
+    namespace = "com.nextthing.app"
     compileSdk = 34
-    
+
     signingConfigs {
         create("release") {
             storeFile = file("release.keystore")
-            storePassword = "zrj80235324"
-            keyAlias = "release"
-            keyPassword = "zrj80235324"
+            storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD") ?: ""
+            keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS") ?: "release"
+            keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD") ?: ""
         }
     }
 
     defaultConfig {
-        applicationId = "com.example.nextthingb1"
+        applicationId = "com.nextthing.app"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -32,6 +38,10 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        buildConfigField("String", "AMAP_API_KEY", "\"${localProperties.getProperty("AMAP_API_KEY") ?: ""}\"")
+
+        manifestPlaceholders["AMAP_API_KEY"] = localProperties.getProperty("AMAP_API_KEY") ?: ""
     }
 
     buildTypes {
@@ -53,7 +63,6 @@ android {
         }
     }
 
-    // 配置 APK 输出文件名并自动复制到项目根目录
     applicationVariants.all {
         val variant = this
         variant.outputs
@@ -65,23 +74,20 @@ android {
                 }
             }
 
-        // Release 构建完成后自动复制 APK 到项目根目录
         if (variant.buildType.name == "release") {
             variant.assembleProvider?.configure {
                 doLast {
-                    val apkFile = file("${buildDir}/outputs/apk/release/NextThing-release.apk")
+                    val apkFile = file("${layout.buildDirectory.get()}/outputs/apk/release/NextThing-release.apk")
                     val destFile = file("${rootProject.projectDir}/NextThing-release.apk")
                     if (apkFile.exists()) {
                         apkFile.copyTo(destFile, overwrite = true)
-                        println("✅ APK 已复制到项目根目录: ${destFile.absolutePath}")
-                    } else {
-                        println("⚠️ APK 文件不存在: ${apkFile.absolutePath}")
                     }
                 }
             }
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -90,10 +96,15 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.15"
     }
 
     lint {
-        abortOnError = false
+        abortOnError = true
         warningsAsErrors = false
     }
 
@@ -120,13 +131,13 @@ dependencies {
 
     // Hilt
     implementation("com.google.dagger:hilt-android:2.48.1")
-    kapt("com.google.dagger:hilt-compiler:2.48.1")
+    ksp("com.google.dagger:hilt-compiler:2.48.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
@@ -149,27 +160,25 @@ dependencies {
     // BouncyCastle for EdDSA support
     implementation("org.bouncycastle:bcprov-jdk15on:1.70")
 
-    // 和风天气SDK - 由于Maven仓库问题，使用直接API调用
-    // implementation("com.qweather:qweather-sdk:4.5.9")
-
     // WorkManager + Hilt integration
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.hilt:hilt-work:1.1.0")
-    kapt("androidx.hilt:hilt-compiler:1.1.0")
+    ksp("androidx.hilt:hilt-compiler:1.1.0")
 
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     // Kotlinx Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     // App Startup
     implementation("androidx.startup:startup-runtime:1.1.1")
 
     // Location Services
     implementation("com.google.android.gms:play-services-location:21.0.1")
-    // 高德定位SDK
     implementation("com.amap.api:location:6.4.3")
+    implementation("com.amap.api:map2d:6.0.0")
+    implementation("com.amap.api:search:9.7.0")
     implementation("com.google.android.gms:play-services-maps:18.2.0")
 
     testImplementation(libs.junit)
@@ -183,13 +192,10 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation("com.google.dagger:hilt-android-testing:2.48.1")
-    kaptAndroidTest("com.google.dagger:hilt-compiler:2.48.1")
+    kspAndroidTest("com.google.dagger:hilt-compiler:2.48.1")
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    // LeakCanary - 已禁用，避免通知干扰
-    // debugImplementation("com.squareup.leakcanary:leakcanary-android:2.12")
 
-    // 新增：Desugar依赖（支持低版本Android的java.time包）
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

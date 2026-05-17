@@ -1,0 +1,39 @@
+package com.nextthing.app.domain.repository
+
+import com.nextthing.app.domain.model.LocationInfo
+import com.nextthing.app.domain.model.LocationStatistics
+import com.nextthing.app.domain.model.LocationType
+import kotlinx.coroutines.flow.Flow
+
+interface LocationRepository {
+    
+    // 基础CRUD操作
+    fun getAllLocations(): Flow<List<LocationInfo>>
+    suspend fun getCurrentLocation(): LocationInfo?
+    suspend fun getLocationById(locationId: String): LocationInfo?
+    fun getLocationsByType(type: LocationType): Flow<List<LocationInfo>>
+    fun getTodayLocations(): Flow<List<LocationInfo>>
+    
+    // 位置操作
+    suspend fun insertLocation(location: LocationInfo): Result<LocationInfo>
+    suspend fun updateLocation(location: LocationInfo)
+    suspend fun deleteLocationById(locationId: String): Result<Unit>
+    suspend fun setAsCurrentLocation(locationId: String): Result<Unit>
+    suspend fun saveCurrentLocation(location: LocationInfo): Result<Unit>
+    suspend fun incrementUsageCount(locationId: String): Result<Unit>
+    suspend fun getMostUsedLocations(limit: Int = 10): List<LocationInfo>
+    
+    // 地理查询
+    suspend fun getLocationsInArea(
+        minLat: Double, maxLat: Double,
+        minLng: Double, maxLng: Double
+    ): List<LocationInfo>
+    
+    // 统计信息
+    suspend fun getLocationStatistics(): LocationStatistics
+    
+    // 权限和系统定位
+    suspend fun requestLocationPermission(): Boolean
+    suspend fun getCurrentSystemLocation(): LocationInfo?
+    suspend fun isLocationEnabled(): Boolean
+} 
