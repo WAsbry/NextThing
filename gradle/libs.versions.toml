@@ -1,6 +1,7 @@
 [versions]
 androidGradlePlugin = "8.6.0"
-kotlin = "2.0.0"
+kotlin = "1.9.25"
+ksp = "1.9.25-1.0.20"
 composeBom = "2024.10.01"  # Compose BOM 版本
 coreKtx = "1.12.0"
 appcompat = "1.6.1"
@@ -17,10 +18,12 @@ junit = "4.13.2"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
+android-library = { id = "com.android.library", version.ref = "androidGradlePlugin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 org-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 
 [libraries]
 # AndroidX 基础库
@@ -71,3 +74,8 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+# Kotlinx
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version = "1.7.3" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version = "1.7.3" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.6.3" }

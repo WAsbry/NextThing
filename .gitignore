@@ -14,5 +14,15 @@
 .cxx
 local.properties
 
-# Claude Code 配置文件
+# Release APK files
+*.apk
+NextThing-release.apk
+
+# Private keys (never commit)
+*.pem
+release.keystore
+
+# Documentation files (optional)
+# 更新日志.md
+# doc/更新日志.md
 .claude/
