@@ -14,7 +14,9 @@ import com.nextthing.app.util.NotificationHelper
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofenceStatusCodes
 import com.google.android.gms.location.GeofencingEvent
-import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,39 +24,40 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.LocalDateTime
-import javax.inject.Inject
 
-/**
- * 地理围栏事件广播接收器
- *
- * 接收系统地理围栏的进入/离开事件，并执行相应处理
- */
-@AndroidEntryPoint
 class GeofenceBroadcastReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "GeofenceBroadcast"
     }
 
-    @Inject
-    lateinit var taskGeofenceRepository: TaskGeofenceRepository
+    @EntryPoint
+    @InstallIn(dagger.hilt.components.SingletonComponent::class)
+    interface GeofenceEntryPoint {
+        fun taskGeofenceRepository(): TaskGeofenceRepository
+        fun geofenceLocationRepository(): GeofenceLocationRepository
+        fun geofenceUseCases(): GeofenceUseCases
+        fun notificationHelper(): NotificationHelper
+        fun taskRepository(): TaskRepository
+        fun notificationStrategyRepository(): NotificationStrategyRepository
+    }
 
-    @Inject
-    lateinit var geofenceLocationRepository: GeofenceLocationRepository
-
-    @Inject
-    lateinit var geofenceUseCases: GeofenceUseCases
-
-    @Inject
-    lateinit var notificationHelper: NotificationHelper
-
-    @Inject
-    lateinit var taskRepository: TaskRepository
-
-    @Inject
-    lateinit var notificationStrategyRepository: NotificationStrategyRepository
+    private lateinit var taskGeofenceRepository: TaskGeofenceRepository
+    private lateinit var geofenceLocationRepository: GeofenceLocationRepository
+    private lateinit var geofenceUseCases: GeofenceUseCases
+    private lateinit var notificationHelper: NotificationHelper
+    private lateinit var taskRepository: TaskRepository
+    private lateinit var notificationStrategyRepository: NotificationStrategyRepository
 
     override fun onReceive(context: Context, intent: Intent) {
+        val entryPoint = EntryPointAccessors.fromApplication(context, GeofenceEntryPoint::class.java)
+        taskGeofenceRepository = entryPoint.taskGeofenceRepository()
+        geofenceLocationRepository = entryPoint.geofenceLocationRepository()
+        geofenceUseCases = entryPoint.geofenceUseCases()
+        notificationHelper = entryPoint.notificationHelper()
+        taskRepository = entryPoint.taskRepository()
+        notificationStrategyRepository = entryPoint.notificationStrategyRepository()
+
         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Timber.tag(TAG).d("收到地理围栏广播")
 

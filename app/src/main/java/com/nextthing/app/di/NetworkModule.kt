@@ -1,5 +1,6 @@
 package com.nextthing.app.di
 
+import com.nextthing.app.data.remote.api.AuthApi
 import com.nextthing.app.data.remote.api.TaskApi
 import com.nextthing.app.data.remote.api.SyncApi
 import com.nextthing.app.data.remote.interceptor.AuthInterceptor
@@ -20,6 +21,8 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
+    private const val BASE_URL = "http://124.223.60.93:8080/"
+
     @Provides
     @Singleton
     fun provideGson(): Gson = GsonBuilder()
@@ -28,7 +31,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
@@ -36,7 +39,7 @@ object NetworkModule {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
-            .addInterceptor(AuthInterceptor())
+            .addInterceptor(authInterceptor)
             .addInterceptor(logging)
             .build()
     }
@@ -45,11 +48,15 @@ object NetworkModule {
     @Singleton
     fun provideRetrofit(gson: Gson, client: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("https://api.example.com/") // 待后端服务部署后配置真实地址,当前使用本地数据库
+            .baseUrl(BASE_URL)
             .addConverterFactory(GsonConverterFactory.create(gson))
             .client(client)
             .build()
     }
+
+    @Provides
+    @Singleton
+    fun provideAuthApi(retrofit: Retrofit): AuthApi = retrofit.create(AuthApi::class.java)
 
     @Provides
     @Singleton
@@ -58,4 +65,4 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideSyncApi(retrofit: Retrofit): SyncApi = retrofit.create(SyncApi::class.java)
-} 
+}

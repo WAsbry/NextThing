@@ -50,7 +50,8 @@ data class TaskEntity(
     val isTemplate: Boolean = false, // 是否为模板任务（用于重复任务）
     val templateTaskId: String? = null, // 如果是实例任务，指向模板任务的ID
     val instanceDate: LocalDateTime? = null, // 如果是实例任务，对应的日期
-    val syncStatus: SyncStatus = SyncStatus.SYNCED, // 同步状态
-    val serverUpdatedAt: Long? = null, // 服务器最后更新时间（用于冲突检测）
-    val syncError: String? = null // 同步错误信息
+    val syncStatus: SyncStatus = SyncStatus.SYNCED,
+    val serverUpdatedAt: Long? = null,
+    val syncError: String? = null,
+    val deleted: Boolean = false
 ) 

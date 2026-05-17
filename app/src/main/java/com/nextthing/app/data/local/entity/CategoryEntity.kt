@@ -15,6 +15,7 @@ data class CategoryEntity(
     val sortOrder: Int, // 排序顺序，数字越小越靠前
     val createdAt: LocalDateTime,
     val isEnabled: Boolean = true, // 是否启用（支持隐藏分类）
-    val syncStatus: SyncStatus = SyncStatus.SYNCED, // 同步状态
-    val serverUpdatedAt: Long? = null // 服务器最后更新时间
+    val syncStatus: SyncStatus = SyncStatus.SYNCED,
+    val serverUpdatedAt: Long? = null,
+    val deleted: Boolean = false
 )

@@ -5,12 +5,13 @@ import android.content.SharedPreferences
 import com.nextthing.app.domain.model.CategoryItem
 import com.nextthing.app.domain.model.TaskCategory
 import com.nextthing.app.domain.service.CategoryPreferencesManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class CategoryPreferencesManagerImpl @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) : CategoryPreferencesManager {
 
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences(

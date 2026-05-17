@@ -176,10 +176,12 @@ class CreateNotificationStrategyViewModel @Inject constructor(
         val currentSound = currentState.soundSetting
         val currentVolume = currentState.volume
 
+        Timber.d("🎵 [Preview] 点击试听按钮: sound=${currentSound.displayName}, type=${currentSound.soundType}, volume=$currentVolume")
+
         viewModelScope.launch {
             try {
                 if (currentSound.soundType == SoundType.NONE) {
-                    Timber.d("Sound is set to NONE, no preview to play")
+                    Timber.d("🎵 [Preview] 声音为NONE，跳过")
                     return@launch
                 }
 
@@ -189,72 +191,81 @@ class CreateNotificationStrategyViewModel @Inject constructor(
                     SoundType.NOTIFICATION,
                     SoundType.DEFAULT_NOTIFICATION,
                     SoundType.RINGTONE -> {
+                        Timber.d("🎵 [Preview] 系统铃声分支，soundType=${currentSound.soundType}")
                         val soundUri = getSoundUri(currentSound.soundType)
+                        Timber.d("🎵 [Preview] getSoundUri返回: $soundUri")
                         if (soundUri != null) {
                             playSoundWithUri(soundUri, currentVolume)
+                        } else {
+                            Timber.w("🎵 [Preview] soundUri为null，无法播放")
                         }
                     }
 
                     SoundType.PRESET_AUDIO -> {
+                        Timber.d("🎵 [Preview] 预置音频分支")
                         currentState.selectedPresetAudio?.let { presetAudio ->
                             playPresetAudio(presetAudio, currentVolume)
-                        }
+                        } ?: Timber.w("🎵 [Preview] selectedPresetAudio为null")
                     }
 
                     SoundType.CUSTOM_AUDIO,
                     SoundType.RECORDING_AUDIO -> {
-                        Timber.d("Attempting to play custom audio. customAudioFileInfo: ${currentState.customAudioFileInfo}")
+                        Timber.d("🎵 [Preview] 自定义音频分支, fileInfo=${currentState.customAudioFileInfo}")
                         currentState.customAudioFileInfo?.let { audioInfo ->
-                            Timber.d("Playing custom audio with URI: ${audioInfo.uri}")
                             playCustomAudio(audioInfo.uri, currentVolume)
-                        } ?: run {
-                            Timber.w("Custom audio selected but customAudioFileInfo is null")
-                        }
+                        } ?: Timber.w("🎵 [Preview] customAudioFileInfo为null")
                     }
                 }
-
-                Timber.d("Playing sound preview: ${currentSound.displayName} at volume $currentVolume")
             } catch (e: Exception) {
-                Timber.e(e, "Failed to play sound preview")
+                Timber.e(e, "🎵 [Preview] 播放失败")
             }
         }
     }
 
     private fun getSoundUri(soundType: SoundType): Uri? {
-        return when (soundType) {
+        val uri = when (soundType) {
             SoundType.NONE -> null
             SoundType.NOTIFICATION -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             SoundType.DEFAULT_NOTIFICATION -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             SoundType.RINGTONE -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            SoundType.PRESET_AUDIO -> null // 预置音频通过playPresetAudio处理
-            SoundType.CUSTOM_AUDIO -> null // 自定义音频通过playCustomAudio处理
-            SoundType.RECORDING_AUDIO -> null // 录音文件通过playCustomAudio处理
+            SoundType.PRESET_AUDIO -> null
+            SoundType.CUSTOM_AUDIO -> null
+            SoundType.RECORDING_AUDIO -> null
         }
+        Timber.d("🎵 [Preview] getSoundUri($soundType) = $uri")
+        return uri
     }
 
     private fun playSoundWithUri(uri: Uri, volume: Int) {
         try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val ringerMode = audioManager.ringerMode
+            Timber.d("🎵 [Preview] 系统铃声模式: $ringerMode (0=静音, 1=震动, 2=正常)")
+            if (ringerMode == AudioManager.RINGER_MODE_SILENT || ringerMode == AudioManager.RINGER_MODE_VIBRATE) {
+                _uiState.value = _uiState.value.copy() // 触发状态更新
+                android.widget.Toast.makeText(context, "手机处于静音/震动模式，试听无声音", android.widget.Toast.LENGTH_SHORT).show()
+                return
+            }
+
             val ringtone = RingtoneManager.getRingtone(context, uri)
+            Timber.d("🎵 [Preview] ringtone对象: ${ringtone != null}, title=${ringtone?.getTitle(context)}")
             if (ringtone != null) {
-                // 设置音量（通过AudioManager）
-                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION)
-                val targetVolume = (maxVolume * volume / 100f).toInt()
-                audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, targetVolume, 0)
-
-                // 播放铃声
+                // 不改系统音量，避免勿扰模式下 SecurityException
                 ringtone.play()
+                Timber.d("🎵 [Preview] ringtone.play() 已调用, isPlaying=${ringtone.isPlaying}")
 
-                // 设置延迟停止，避免播放过长
                 viewModelScope.launch {
-                    kotlinx.coroutines.delay(2000) // 2秒后停止
+                    kotlinx.coroutines.delay(2000)
                     if (ringtone.isPlaying) {
                         ringtone.stop()
+                        Timber.d("🎵 [Preview] 2秒后自动停止")
                     }
                 }
+            } else {
+                Timber.w("🎵 [Preview] RingtoneManager.getRingtone返回null")
             }
         } catch (e: Exception) {
-            Timber.e(e, "Error playing sound with URI: $uri")
+            Timber.e(e, "🎵 [Preview] playSoundWithUri异常")
         }
     }
 

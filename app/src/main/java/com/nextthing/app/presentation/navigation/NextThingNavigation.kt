@@ -131,6 +131,9 @@ fun NextThingNavigation(
                     },
                     onNavigateToTaskDetail = { taskId ->
                         navController.navigate("task_detail/$taskId")
+                    },
+                    onNavigateToCalendar = {
+                        navController.navigate(Screen.Calendar.route)
                     }
                 )
             }
@@ -325,12 +328,30 @@ fun NextThingNavigation(
                     },
                     onNavigateToThemeSettings = {
                         navController.navigate(Screen.ThemeSettings.route)
+                    },
+                    onNavigateToSync = {
+                        navController.navigate(Screen.Sync.route)
                     }
                 )
             }
 
             composable(Screen.ThemeSettings.route) {
                 ThemeSettingsScreen(
+                    onBackPressed = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Calendar.route) {
+                com.nextthing.app.presentation.screens.calendar.CalendarScreen(
+                    onNavigateToTaskDetail = { taskId ->
+                        navController.navigate("task_detail/$taskId")
+                    },
+                    onBackPressed = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Sync.route) {
+                com.nextthing.app.presentation.screens.sync.SyncScreen(
                     onBackPressed = { navController.popBackStack() }
                 )
             }
@@ -403,6 +424,11 @@ fun NextThingNavigation(
                 UserInfoScreen(
                     onBackPressed = {
                         navController.popBackStack()
+                    },
+                    onLogout = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
                     }
                 )
             }
@@ -532,4 +558,6 @@ sealed class Screen(val route: String, val title: String, val icon: String) {
     object CategoryEdit : Screen("category_edit/{categoryId}", "编辑分类", "edit")
     object ViewPreferences : Screen("view_preferences", "视图偏好", "view")
     object ThemeSettings : Screen("theme_settings", "主题设置", "theme")
+    object Calendar : Screen("calendar", "日历", "calendar")
+    object Sync : Screen("sync", "数据同步", "sync")
 } 

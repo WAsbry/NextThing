@@ -62,7 +62,7 @@ class AmapLocationServiceImpl @Inject constructor(
     companion object {
         private const val LOCATION_CACHE_DURATION = 3 * 60 * 1000L // 3分钟缓存，更频繁更新
         private const val AMAP_LOCATION_TIMEOUT = 8000L // 高德定位8秒超时，更快响应
-        private const val FALLBACK_TIMEOUT = 5000L // Google服务回退超时5秒
+        private const val FALLBACK_TIMEOUT = 20000L // Google服务回退超时20秒，给内部多级串联足够时间
     }
 
     init {
@@ -464,13 +464,14 @@ class AmapLocationServiceImpl @Inject constructor(
     }
 
     override suspend fun hasLocationPermission(): Boolean {
+        // 粗略位置权限足以支持WiFi+基站定位，不需要同时拥有精确位置权限
         return ContextCompat.checkSelfPermission(
             context,
-            android.Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED &&
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
         ContextCompat.checkSelfPermission(
             context,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION
+            android.Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
     }
 

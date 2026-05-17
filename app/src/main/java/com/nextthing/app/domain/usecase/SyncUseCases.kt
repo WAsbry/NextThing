@@ -1,9 +1,8 @@
 package com.nextthing.app.domain.usecase
 
-/**
- * 同步相关UseCase集合
- */
-data class SyncUseCases(
+import javax.inject.Inject
+
+data class SyncUseCases @Inject constructor(
     val syncTasks: SyncTasksUseCase,
     val fullSync: FullSyncUseCase,
     val getSyncState: GetSyncStateUseCase,

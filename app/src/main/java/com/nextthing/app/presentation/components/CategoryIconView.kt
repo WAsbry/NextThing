@@ -34,7 +34,6 @@ val PRESET_ICONS = listOf(
     PresetIcon("travel", "出行"),
     PresetIcon("family", "家庭"),
     PresetIcon("miscellaneous", "杂项"),
-    PresetIcon("bytedance", "字节"),
     PresetIcon("stock", "股票")
 )
 

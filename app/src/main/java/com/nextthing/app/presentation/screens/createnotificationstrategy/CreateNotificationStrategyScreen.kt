@@ -45,19 +45,16 @@ fun CreateNotificationStrategyScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // 从设置返回时刷新权限状态
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.checkPermissionStatus()
     }
 
-    // 编辑模式：加载现有策略
     LaunchedEffect(strategyId) {
         strategyId?.let {
             viewModel.loadStrategy(it)
         }
     }
 
-    // 如果保存成功，自动返回
     LaunchedEffect(uiState.isSaved) {
         if (uiState.isSaved) {
             onBackPressed()
@@ -69,13 +66,11 @@ fun CreateNotificationStrategyScreen(
             .fillMaxSize()
             .background(BgPrimary)
     ) {
-        // 顶部导航区
         TopNavigationSection(
             onBackPressed = onBackPressed,
             isEditMode = uiState.isEditMode
         )
 
-        // 主要内容区域（可滚动）
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -84,7 +79,6 @@ fun CreateNotificationStrategyScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 权限警告卡片
             if (!uiState.hasNotificationPermission || !uiState.hasExactAlarmPermission) {
                 PermissionWarningCard(
                     hasNotificationPermission = uiState.hasNotificationPermission,
@@ -113,7 +107,7 @@ fun CreateNotificationStrategyScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // 策略名称输入
+            // 策略名称
             StrategyNameSection(
                 name = uiState.name,
                 onNameChange = { viewModel.updateName(it) }
@@ -121,40 +115,92 @@ fun CreateNotificationStrategyScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 震动设置
-            VibrationSection(
-                selectedVibration = uiState.vibrationSetting,
-                onVibrationSelected = { viewModel.updateVibrationSetting(it) }
+            // 震动 - 紧凑横排
+            CompactSelectionSection(
+                title = "震动",
+                options = VibrationSetting.values().map { it.displayName.replace("震动", "") },
+                selectedIndex = VibrationSetting.values().indexOf(uiState.vibrationSetting),
+                onSelect = { viewModel.updateVibrationSetting(VibrationSetting.values()[it]) }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 声音设置
-            SoundSection(
-                selectedSound = uiState.soundSetting,
-                volume = uiState.volume,
-                customAudioFileInfo = uiState.customAudioFileInfo,
-                customAudioName = uiState.customAudioName,
-                onSoundSelected = { viewModel.updateSoundSetting(it) },
-                onVolumeChanged = { viewModel.updateVolume(it) },
-                onPlayPreview = { viewModel.playSoundPreview() },
-                onCustomAudioSelected = { audioFileInfo, customName ->
-                    viewModel.updateCustomAudioFile(audioFileInfo, customName)
-                },
-                onClearCustomAudio = { viewModel.clearCustomAudio() }
+            // 声音 - 紧凑横排
+            val soundOptions = SoundSetting.values()
+                .filter { it != SoundSetting.PRESET_AUDIO && it != SoundSetting.RECORDING_AUDIO }
+            CompactSelectionSection(
+                title = "声音",
+                options = soundOptions.map { it.displayName },
+                selectedIndex = soundOptions.indexOf(uiState.soundSetting).takeIf { it >= 0 } ?: 0,
+                onSelect = { viewModel.updateSoundSetting(soundOptions[it]) }
+            )
+
+            // 自定义音频（选了自定义才显示）
+            if (uiState.soundSetting == SoundSetting.CUSTOM_AUDIO) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = BgSecondary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        CustomAudioSelector(
+                            customAudioFileInfo = uiState.customAudioFileInfo,
+                            customAudioName = uiState.customAudioName,
+                            onCustomAudioSelected = { audioFileInfo, customName ->
+                                viewModel.updateCustomAudioFile(audioFileInfo, customName)
+                            },
+                            onClearCustomAudio = { viewModel.clearCustomAudio() }
+                        )
+                    }
+                }
+            }
+
+            // 音量条（非静音时显示）
+            if (uiState.soundSetting != SoundSetting.NONE) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = BgSecondary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("音量", fontSize = 13.sp, color = TextSecondary, modifier = Modifier.width(32.dp))
+                        Slider(
+                            value = uiState.volume.toFloat(),
+                            onValueChange = { viewModel.updateVolume(it.toInt()) },
+                            valueRange = 0f..100f,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text("${uiState.volume}%", fontSize = 12.sp, color = TextMuted, modifier = Modifier.width(36.dp))
+                        IconButton(
+                            onClick = { viewModel.playSoundPreview() },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, null, tint = Primary, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 通知方式 - 紧凑横排
+            CompactSelectionSection(
+                title = "通知方式",
+                options = SystemNotificationMode.entries.map { it.displayName },
+                selectedIndex = SystemNotificationMode.entries.indexOf(uiState.systemNotificationMode),
+                onSelect = { viewModel.updateSystemNotificationMode(SystemNotificationMode.entries[it]) }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 通知模式设置
-            NotificationModeSection(
-                selectedMode = uiState.systemNotificationMode,
-                onModeSelected = { viewModel.updateSystemNotificationMode(it) }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 提前提醒设置
+            // 提前提醒
             AdvanceReminderSection(
                 selectedMinutes = uiState.advanceReminderMinutes,
                 onToggleMinutes = { viewModel.toggleAdvanceReminder(it) }
@@ -163,7 +209,6 @@ fun CreateNotificationStrategyScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // 底部操作按钮（固定在底部）
         BottomActionSection(
             isValid = uiState.isValid,
             onCancel = onBackPressed,
@@ -223,40 +268,28 @@ private fun StrategyNameSection(
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             Text(
                 text = "策略名称",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
                 color = TextPrimary,
-                modifier = Modifier.padding(bottom = 8.dp)
+                modifier = Modifier.padding(bottom = 6.dp)
             )
 
             BasicTextField(
                 value = name,
                 onValueChange = onNameChange,
-                textStyle = TextStyle(
-                    fontSize = 14.sp,
-                    color = TextPrimary
-                ),
+                textStyle = TextStyle(fontSize = 14.sp, color = TextPrimary),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        BgCard,
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(12.dp),
+                    .background(BgCard, RoundedCornerShape(8.dp))
+                    .padding(10.dp),
                 decorationBox = { innerTextField ->
-                    Box(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
                         if (name.isEmpty()) {
-                            Text(
-                                text = "请输入策略名称",
-                                color = TextMuted,
-                                fontSize = 14.sp
-                            )
+                            Text("请输入策略名称", color = TextMuted, fontSize = 14.sp)
                         }
                         innerTextField()
                     }
@@ -266,10 +299,15 @@ private fun StrategyNameSection(
     }
 }
 
+/**
+ * 紧凑横排选择组件 - 选项排成一行，chip 风格
+ */
 @Composable
-private fun VibrationSection(
-    selectedVibration: VibrationSetting,
-    onVibrationSelected: (VibrationSetting) -> Unit
+private fun CompactSelectionSection(
+    title: String,
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -277,240 +315,43 @@ private fun VibrationSection(
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             Text(
-                text = "震动设置",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = TextPrimary,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            VibrationSetting.values().forEach { vibration ->
-                val isSelected = vibration == selectedVibration
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) Primary.copy(alpha = 0.12f) else Color.Transparent)
-                        .clickable { onVibrationSelected(vibration) }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = vibration.icon,
-                        fontSize = 20.sp
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = vibration.displayName,
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) PrimaryDark else TextPrimary
-                        )
-                        Text(
-                            text = vibration.description,
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
-                    }
-                    if (isSelected) {
-                        Text(text = "\u2713", fontSize = 18.sp, color = PrimaryDark)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SoundSection(
-    selectedSound: SoundSetting,
-    volume: Int,
-    customAudioFileInfo: AudioFileInfo?,
-    customAudioName: String,
-    onSoundSelected: (SoundSetting) -> Unit,
-    onVolumeChanged: (Int) -> Unit,
-    onPlayPreview: () -> Unit,
-    onCustomAudioSelected: (AudioFileInfo, String) -> Unit,
-    onClearCustomAudio: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = BgSecondary),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp)
-        ) {
-            Text(
-                text = "声音设置",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 声音选项（过滤掉预置音效和录音文件）
-            SoundSetting.values()
-                .filter { it != SoundSetting.PRESET_AUDIO && it != SoundSetting.RECORDING_AUDIO }
-                .forEach { sound ->
-                    val isSelected = sound == selectedSound
-                    Row(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                options.forEachIndexed { index, label ->
+                    val isSelected = index == selectedIndex
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) Primary.copy(alpha = 0.12f) else Color.Transparent)
-                            .clickable { onSoundSelected(sound) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .weight(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isSelected) Primary else BgCard)
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) Primary else Border,
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .clickable { onSelect(index) }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = sound.icon,
-                            fontSize = 20.sp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = sound.displayName,
-                                fontSize = 14.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) PrimaryDark else TextPrimary
-                            )
-                            Text(
-                                text = sound.description,
-                                fontSize = 12.sp,
-                                color = TextSecondary
-                            )
-                        }
-                        if (isSelected) {
-                            Text(text = "\u2713", fontSize = 18.sp, color = PrimaryDark)
-                        }
-                    }
-                }
-        }
-    }
-
-    // 自定义音频选择（独立子卡片）
-    if (selectedSound == SoundSetting.CUSTOM_AUDIO) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = BgSecondary),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                CustomAudioSelector(
-                    customAudioFileInfo = customAudioFileInfo,
-                    customAudioName = customAudioName,
-                    onCustomAudioSelected = onCustomAudioSelected,
-                    onClearCustomAudio = onClearCustomAudio
-                )
-            }
-        }
-    }
-
-    // 音量与试听（独立子卡片，非静音时显示）
-    if (selectedSound != SoundSetting.NONE) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = BgSecondary),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(
-                    text = "音量: ${volume}%",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = TextPrimary
-                )
-
-                Slider(
-                    value = volume.toFloat(),
-                    onValueChange = { onVolumeChanged(it.toInt()) },
-                    valueRange = 0f..100f,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Button(
-                    onClick = onPlayPreview,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("试听")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NotificationModeSection(
-    selectedMode: SystemNotificationMode,
-    onModeSelected: (SystemNotificationMode) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = BgSecondary),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp)
-        ) {
-            Text(
-                text = "通知方式",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SystemNotificationMode.entries.forEach { mode ->
-                val isSelected = selectedMode == mode
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) Primary.copy(alpha = 0.12f) else Color.Transparent)
-                        .clickable { onModeSelected(mode) }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = mode.icon,
-                        fontSize = 20.sp
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = mode.displayName,
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) PrimaryDark else TextPrimary
-                        )
-                        Text(
-                            text = mode.description,
+                            text = label,
                             fontSize = 12.sp,
-                            color = TextSecondary
+                            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                            color = if (isSelected) Color.White else TextSecondary,
+                            maxLines = 1
                         )
-                    }
-                    if (isSelected) {
-                        Text(text = "\u2713", fontSize = 18.sp, color = PrimaryDark)
                     }
                 }
             }
@@ -540,58 +381,57 @@ private fun AdvanceReminderSection(
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             Text(
                 text = "提前提醒",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
                 color = TextPrimary
             )
             Text(
-                text = "在截止时间之前发送预提醒（可多选）",
-                fontSize = 12.sp,
-                color = TextSecondary
+                text = "截止时间前预提醒（可多选）",
+                fontSize = 11.sp,
+                color = TextMuted
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             val chunked = options.chunked(3)
             chunked.forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     row.forEach { option ->
                         val isSelected = selectedMinutes.contains(option.minutes)
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(6.dp))
                                 .background(if (isSelected) Primary else BgCard)
                                 .border(
                                     width = 1.dp,
                                     color = if (isSelected) Primary else Border,
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(6.dp)
                                 )
                                 .clickable { onToggleMinutes(option.minutes) }
-                                .padding(vertical = 10.dp),
+                                .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = option.label,
-                                fontSize = 13.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
                                 color = if (isSelected) Color.White else TextSecondary
                             )
                         }
                     }
-                    // 填充剩余空间
                     repeat(3 - row.size) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }
@@ -614,11 +454,7 @@ private fun BottomActionSection(
             border = BorderStroke(1.dp, Primary),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text(
-                text = "取消",
-                color = Primary,
-                fontSize = 16.sp
-            )
+            Text("取消", color = Primary, fontSize = 16.sp)
         }
 
         Button(
@@ -631,11 +467,7 @@ private fun BottomActionSection(
             ),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text(
-                text = "保存",
-                color = Color.White,
-                fontSize = 16.sp
-            )
+            Text("保存", color = Color.White, fontSize = 16.sp)
         }
     }
 }
@@ -656,22 +488,12 @@ private fun PermissionWarningCard(
         Column(
             modifier = Modifier.padding(14.dp)
         ) {
-            Text(
-                text = "权限提示",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = Warning
-            )
+            Text("权限提示", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Warning)
 
             Spacer(modifier = Modifier.height(8.dp))
 
             if (!hasNotificationPermission) {
-                Text(
-                    text = "未开启通知权限，通知将无法正常推送",
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Text("未开启通知权限，通知将无法正常推送", fontSize = 13.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
                 OutlinedButton(
                     onClick = onOpenNotificationSettings,
                     modifier = Modifier.fillMaxWidth(),
@@ -686,12 +508,7 @@ private fun PermissionWarningCard(
                 if (!hasNotificationPermission) {
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                Text(
-                    text = "未开启精确闹钟权限，定时提醒可能不准确",
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Text("未开启精确闹钟权限，定时提醒可能不准确", fontSize = 13.sp, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
                 OutlinedButton(
                     onClick = onOpenAlarmSettings,
                     modifier = Modifier.fillMaxWidth(),

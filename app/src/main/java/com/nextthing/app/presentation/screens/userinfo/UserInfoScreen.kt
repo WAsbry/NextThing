@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.nextthing.app.presentation.theme.*
+import com.nextthing.app.R
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 
@@ -38,9 +40,17 @@ import androidx.compose.foundation.layout.Arrangement
 @Composable
 fun UserInfoScreen(
     onBackPressed: () -> Unit = {},
+    onLogout: () -> Unit = {},
     viewModel: UserInfoViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val logoutEvent by viewModel.logoutEvent.collectAsState()
+
+    LaunchedEffect(logoutEvent) {
+        if (logoutEvent) {
+            onLogout()
+        }
+    }
 
     // 昵称编辑对话框状态
     var showNicknameDialog by remember { mutableStateOf(false) }
@@ -464,29 +474,18 @@ private fun UserInfoItem(
             ) {
                 // 头像
                 if (showAvatar) {
-                    if (avatarUri != null) {
-                        AsyncImage(
-                            model = avatarUri,
-                            contentDescription = "头像",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Primary.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "👤",
-                                fontSize = 20.sp
-                            )
-                        }
-                    }
+                    val presetPainter = painterResource(R.drawable.preset_avatar)
+                    AsyncImage(
+                        model = avatarUri,
+                        contentDescription = "头像",
+                        placeholder = presetPainter,
+                        error = presetPainter,
+                        fallback = presetPainter,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
                 }
 
                 // 值

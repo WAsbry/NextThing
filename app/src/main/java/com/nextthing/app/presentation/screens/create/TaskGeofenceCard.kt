@@ -46,6 +46,7 @@ fun TaskGeofenceCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .height(80.dp)
             .clickable(enabled = isEditMode) { showDialog = true },
         colors = CardDefaults.cardColors(containerColor = BgCard),
         border = BorderStroke(0.5.dp, Color(0xFFE0E0E0)),

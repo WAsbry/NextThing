@@ -229,29 +229,16 @@ fun CreateTaskScreen(
             onRepeatFrequencyTypeChange = { viewModel.updateRepeatFrequencyType(it) },
             onRepeatWeekdaysChange = { viewModel.updateRepeatWeekdays(it) },
             onRepeatMonthDaysChange = { viewModel.updateRepeatMonthDays(it) },
-            onNavigateToRepeatCustom = onNavigateToRepeatCustom
+            onNavigateToRepeatCustom = onNavigateToRepeatCustom,
+            geofenceEnabled = uiState.geofenceEnabled,
+            onGeofenceEnabledChange = { viewModel.updateGeofenceEnabled(it) },
+            availableGeofenceLocations = availableGeofenceLocations,
+            selectedGeofenceLocationId = uiState.selectedGeofenceLocationId,
+            onGeofenceLocationSelected = { viewModel.updateSelectedGeofenceLocation(it) },
+            onNavigateToAddGeofenceLocation = onNavigateToGeofenceAdd,
+            onNavigateToGeofenceSettings = onNavigateToGeofenceSettings,
+            defaultGeofenceRadius = uiState.defaultRadius
         )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 地理围栏配置区
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-        ) {
-            TaskGeofenceCard(
-                geofenceEnabled = uiState.geofenceEnabled,
-                onGeofenceEnabledChange = { viewModel.updateGeofenceEnabled(it) },
-                availableLocations = availableGeofenceLocations,
-                selectedLocationId = uiState.selectedGeofenceLocationId,
-                onLocationSelected = { viewModel.updateSelectedGeofenceLocation(it) },
-                onNavigateToAddLocation = onNavigateToGeofenceAdd,
-                onNavigateToGeofenceSettings = onNavigateToGeofenceSettings,
-                isEditMode = true,
-                defaultRadius = uiState.defaultRadius
-            )
-        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -443,7 +430,15 @@ private fun CollapsibleConfigSection(
     onRepeatFrequencyTypeChange: (com.nextthing.app.domain.model.RepeatFrequencyType) -> Unit,
     onRepeatWeekdaysChange: (Set<Int>) -> Unit,
     onRepeatMonthDaysChange: (Set<Int>) -> Unit,
-    onNavigateToRepeatCustom: () -> Unit = {}
+    onNavigateToRepeatCustom: () -> Unit = {},
+    geofenceEnabled: Boolean = false,
+    onGeofenceEnabledChange: (Boolean) -> Unit = {},
+    availableGeofenceLocations: List<com.nextthing.app.domain.model.GeofenceLocation> = emptyList(),
+    selectedGeofenceLocationId: String? = null,
+    onGeofenceLocationSelected: (String?) -> Unit = {},
+    onNavigateToAddGeofenceLocation: () -> Unit = {},
+    onNavigateToGeofenceSettings: () -> Unit = {},
+    defaultGeofenceRadius: Int = 200
 ) {
     Column(
         modifier = Modifier
@@ -543,6 +538,7 @@ private fun CollapsibleConfigSection(
         }
 
         // 第四行：通知策略（独占一行）
+        // 第四行：通知策略 + 地理围栏并排
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -559,7 +555,21 @@ private fun CollapsibleConfigSection(
                 onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
                 onEditStrategy = onEditNotificationStrategy,
                 onDeleteStrategy = onDeleteNotificationStrategy,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.weight(1f)
+            )
+
+            // 地理围栏配置卡
+            TaskGeofenceCard(
+                geofenceEnabled = geofenceEnabled,
+                onGeofenceEnabledChange = onGeofenceEnabledChange,
+                availableLocations = availableGeofenceLocations,
+                selectedLocationId = selectedGeofenceLocationId,
+                onLocationSelected = onGeofenceLocationSelected,
+                onNavigateToAddLocation = onNavigateToAddGeofenceLocation,
+                onNavigateToGeofenceSettings = onNavigateToGeofenceSettings,
+                isEditMode = true,
+                defaultRadius = defaultGeofenceRadius,
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -1697,7 +1707,7 @@ internal fun NotificationStrategyConfigCard(
                 }
             }
         ) {
-            Box(modifier = Modifier.fillMaxHeight(0.6f).wrapContentHeight(Alignment.Top)) {
+            Box(modifier = Modifier.wrapContentHeight(Alignment.Top).fillMaxWidth().heightIn(max = 500.dp)) {
                 NotificationStrategyBottomSheet(
                     availableStrategies = availableStrategies,
                     selectedStrategyId = selectedStrategyId,

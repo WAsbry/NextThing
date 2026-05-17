@@ -52,4 +52,9 @@ interface TaskRepository {
     suspend fun getInstancesByTemplateId(templateId: String): List<Task>
     suspend fun deleteInstancesByTemplateId(templateId: String)
     suspend fun deleteTemplateAndAllInstances(templateId: String)
+
+    // 日历视图
+    fun getTasksByDueDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<Task>>
+    fun getTasksByDueDate(date: LocalDateTime): Flow<List<Task>>
+    suspend fun getDatesWithTasksInMonth(year: Int, month: Int): List<LocalDate>
 } 

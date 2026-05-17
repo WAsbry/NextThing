@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 import javax.inject.Inject
 
-data class UserUseCases(
+data class UserUseCases @Inject constructor(
     val getCurrentUser: GetCurrentUserUseCase,
     val createUser: CreateUserUseCase,
     val updateUser: UpdateUserUseCase,

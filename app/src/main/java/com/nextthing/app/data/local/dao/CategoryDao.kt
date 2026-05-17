@@ -9,16 +9,16 @@ import com.nextthing.app.data.local.entity.SyncStatus
 @Dao
 interface CategoryDao {
 
-    @Query("SELECT * FROM categories WHERE isEnabled = 1 ORDER BY sortOrder ASC, createdAt ASC")
+    @Query("SELECT * FROM categories WHERE isEnabled = 1 AND deleted = 0 ORDER BY sortOrder ASC, createdAt ASC")
     fun getAllCategories(): Flow<List<CategoryEntity>>
 
-    @Query("SELECT * FROM categories WHERE isEnabled = 1 ORDER BY sortOrder ASC, createdAt ASC")
+    @Query("SELECT * FROM categories WHERE isEnabled = 1 AND deleted = 0 ORDER BY sortOrder ASC, createdAt ASC")
     suspend fun getAllCategoriesList(): List<CategoryEntity>
 
-    @Query("SELECT * FROM categories WHERE id = :categoryId")
+    @Query("SELECT * FROM categories WHERE id = :categoryId AND deleted = 0")
     suspend fun getCategoryById(categoryId: String): CategoryEntity?
 
-    @Query("SELECT * FROM categories WHERE type = :type AND isEnabled = 1 ORDER BY sortOrder ASC")
+    @Query("SELECT * FROM categories WHERE type = :type AND isEnabled = 1 AND deleted = 0 ORDER BY sortOrder ASC")
     fun getCategoriesByType(type: Int): Flow<List<CategoryEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

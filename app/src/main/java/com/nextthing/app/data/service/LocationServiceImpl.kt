@@ -45,38 +45,28 @@ class LocationServiceImpl @Inject constructor(
     
     companion object {
         private const val LOCATION_UPDATE_INTERVAL = 5 * 60 * 1000L // 5分钟
-        private const val FASTEST_UPDATE_INTERVAL = 1000L // 改为1秒，加快响应
+        private const val FASTEST_UPDATE_INTERVAL = 1000L // 1秒，加快响应
         private const val LOCATION_CACHE_DURATION = 5 * 60 * 1000L // 5分钟缓存
-        private const val NETWORK_LOCATION_TIMEOUT = 15000L // 网络定位15秒超时（延长）
-        private const val GPS_LOCATION_TIMEOUT = 20000L // GPS定位20秒超时（缩短）
+        private const val NETWORK_LOCATION_TIMEOUT = 15000L // 高精度定位15秒超时
     }
 
-    // 网络定位配置（优先级：高精度确保网络定位生效）
+    // 高精度定位配置（第二步使用，可能触发GPS）
     private val networkLocationRequest: LocationRequest by lazy {
         LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FASTEST_UPDATE_INTERVAL)
             .setWaitForAccurateLocation(false) // 不等待高精度，接受网络位置
             .setMinUpdateIntervalMillis(FASTEST_UPDATE_INTERVAL)
             .setMaxUpdateDelayMillis(NETWORK_LOCATION_TIMEOUT)
-            .setMaxUpdates(1) // 只要一次成功的更新
-            .build()
-    }
-    
-    // 粗略网络定位配置（备用方案，只使用网络）
-    private val coarseNetworkRequest: LocationRequest by lazy {
-        LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, FASTEST_UPDATE_INTERVAL)
-            .setWaitForAccurateLocation(false)
-            .setMinUpdateIntervalMillis(FASTEST_UPDATE_INTERVAL)
-            .setMaxUpdateDelayMillis(8000L) // 8秒快速超时
             .setMaxUpdates(1)
             .build()
     }
 
-    // GPS高精度定位配置
-    private val gpsLocationRequest: LocationRequest by lazy {
-        LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FASTEST_UPDATE_INTERVAL)
-            .setWaitForAccurateLocation(true)
+    // 粗略网络定位配置（第一步使用，WiFi+基站，室内友好）
+    private val coarseNetworkRequest: LocationRequest by lazy {
+        LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, FASTEST_UPDATE_INTERVAL)
+            .setWaitForAccurateLocation(false)
             .setMinUpdateIntervalMillis(FASTEST_UPDATE_INTERVAL)
-            .setMaxUpdateDelayMillis(GPS_LOCATION_TIMEOUT)
+            .setMaxUpdateDelayMillis(12000L)
+            .setMaxUpdates(1)
             .build()
     }
 
@@ -105,76 +95,42 @@ class LocationServiceImpl @Inject constructor(
                     return it
                 }
             }
-            
+
             Timber.d("🔄 [LocationService] 开始获取实时位置...")
 
-            // 第0步：尝试粗略网络定位（最快，室内友好）
-            Timber.d("📶 [LocationService] 第0步：尝试粗略网络定位（8秒超时）")
+            // 第一步：尝试粗略网络定位（WiFi+基站，室内友好，速度快）
+            Timber.d("📶 [LocationService] 第一步：尝试粗略网络定位（12秒超时）")
             val coarseLocation = getLocationByType(
                 locationRequest = coarseNetworkRequest,
-                timeout = 8000L,
+                timeout = 12000L,
                 locationType = "粗略网络定位"
             )
-            
+
             if (coarseLocation != null) {
                 Timber.d("✅ [LocationService] 粗略网络定位成功，精度: ${coarseLocation.accuracy}m")
                 val locationInfo = convertToLocationInfo(coarseLocation)
                 updateLocationCache(locationInfo)
                 return locationInfo
-            } else {
-                Timber.w("⚠️ [LocationService] 粗略网络定位失败，尝试高精度网络定位")
             }
 
-            // 第一步：尝试网络定位（快速但可能精度较低）
-            Timber.d("📡 [LocationService] 第一步：尝试网络定位（${NETWORK_LOCATION_TIMEOUT/1000}秒超时）")
-            val networkLocation = getLocationByType(
+            // 第二步：尝试高精度定位（可能触发GPS，室内可能失败）
+            Timber.d("📡 [LocationService] 第二步：尝试高精度定位（15秒超时）")
+            val highAccuracyLocation = getLocationByType(
                 locationRequest = networkLocationRequest,
                 timeout = NETWORK_LOCATION_TIMEOUT,
-                locationType = "网络定位"
-            )
-            
-            if (networkLocation != null && networkLocation.accuracy <= 100f) {
-                Timber.d("✅ [LocationService] 网络定位成功，精度: ${networkLocation.accuracy}m")
-                val locationInfo = convertToLocationInfo(networkLocation)
-                updateLocationCache(locationInfo)
-                return locationInfo
-            } else {
-                Timber.w("⚠️ [LocationService] 网络定位失败或精度不够")
-                // 先快速尝试最后已知位置作为备选
-                Timber.d("📍 [LocationService] 快速尝试最后已知位置...")
-                try {
-                    val locationInfo = getLastKnownLocationDirect()
-                    if (locationInfo != null) {
-                        Timber.d("✅ [LocationService] 最后已知位置可用，跳过GPS直接使用")
-                        updateLocationCache(locationInfo)
-                        return locationInfo
-                    }
-                } catch (e: Exception) {
-                    Timber.w(e, "最后已知位置获取失败，继续GPS定位")
-                }
-                Timber.d("继续尝试GPS定位...")
-            }
-
-            // 第二步：网络定位失败或精度不够，使用GPS高精度定位
-            Timber.d("🛰️ [LocationService] 第二步：尝试GPS高精度定位（${GPS_LOCATION_TIMEOUT/1000}秒超时）")
-            val gpsLocation = getLocationByType(
-                locationRequest = gpsLocationRequest,
-                timeout = GPS_LOCATION_TIMEOUT,
-                locationType = "GPS定位"
+                locationType = "高精度定位"
             )
 
-            if (gpsLocation != null) {
-                Timber.d("✅ [LocationService] GPS定位成功，精度: ${gpsLocation.accuracy}m")
-                val locationInfo = convertToLocationInfo(gpsLocation)
+            if (highAccuracyLocation != null) {
+                Timber.d("✅ [LocationService] 高精度定位成功，精度: ${highAccuracyLocation.accuracy}m")
+                val locationInfo = convertToLocationInfo(highAccuracyLocation)
                 updateLocationCache(locationInfo)
                 return locationInfo
-            } else {
-                Timber.e("❌ [LocationService] GPS定位也失败了")
-
-                // 第三步：如果都失败了，尝试获取最后已知位置
-                Timber.d("📍 [LocationService] 第三步：尝试获取最后已知位置")
-                return getLastKnownLocationDirect()
             }
+
+            // 第三步：兜底使用最后已知位置
+            Timber.d("📍 [LocationService] 第三步：尝试最后已知位置")
+            return getLastKnownLocationDirect()
 
         } catch (e: Exception) {
             Timber.e(e, "💥 [LocationService] 获取位置异常")
@@ -254,6 +210,10 @@ class LocationServiceImpl @Inject constructor(
 
             if (ActivityCompat.checkSelfPermission(
                     context,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(
+                    context,
                     Manifest.permission.ACCESS_FINE_LOCATION
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
@@ -289,13 +249,14 @@ class LocationServiceImpl @Inject constructor(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        
+
         val coarseLocationGranted = ActivityCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        
-        val result = fineLocationGranted && coarseLocationGranted
+
+        // 只要有粗略或精确位置权限之一即可，粗略权限足以支持WiFi+基站定位
+        val result = coarseLocationGranted || fineLocationGranted
         Timber.d("🔐 [LocationService] 权限检查: 精确位置=$fineLocationGranted, 粗略位置=$coarseLocationGranted, 结果=$result")
         return result
     }

@@ -68,7 +68,8 @@ import com.nextthing.app.presentation.components.ParticleExplosionEffect
 fun TodayScreen(
     viewModel: TodayViewModel = hiltViewModel(),
     onNavigateToFocus: () -> Unit,
-    onNavigateToTaskDetail: (String) -> Unit
+    onNavigateToTaskDetail: (String) -> Unit,
+    onNavigateToCalendar: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -144,7 +145,8 @@ fun TodayScreen(
         // 头部导航
         TopHeader(
             uiState = uiState,
-            viewModel = viewModel
+            viewModel = viewModel,
+            onNavigateToCalendar = onNavigateToCalendar
         )
 
         // 内容区域
@@ -511,7 +513,8 @@ private fun LocationIcon(
 @Composable
 private fun TopHeader(
     uiState: TodayUiState,
-    viewModel: TodayViewModel
+    viewModel: TodayViewModel,
+    onNavigateToCalendar: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -528,28 +531,45 @@ private fun TopHeader(
             color = TextPrimary
         )
 
-        // 定位图标 - 右侧
-        LocationIcon(
-            currentLocation = uiState.currentLocationName,
-            isLoading = uiState.isLocationLoading,
-            hasPermission = uiState.hasLocationPermission,
-            isLocationEnabled = uiState.isLocationEnabled,
-            onClick = {
-                if (!uiState.hasLocationPermission) {
-                    viewModel.requestLocationPermission()
-                } else if (uiState.currentLocation != null && !uiState.isLocationLoading) {
-                    viewModel.showLocationDetail()
-                } else if (!uiState.isLocationLoading) {
-                    viewModel.requestCurrentLocation()
-                }
-            },
-            onLongClick = {
-                if (uiState.hasLocationPermission && !uiState.isLocationLoading) {
-                    viewModel.requestCurrentLocation()
-                }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // 日历图标
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { onNavigateToCalendar() }
+                    .padding(4.dp)
+            ) {
+                androidx.compose.foundation.text.BasicText(
+                    text = "📅",
+                    style = androidx.compose.ui.text.TextStyle(fontSize = 18.sp)
+                )
             }
-        )
-    }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // 定位图标
+            LocationIcon(
+                currentLocation = uiState.currentLocationName,
+                isLoading = uiState.isLocationLoading,
+                hasPermission = uiState.hasLocationPermission,
+                isLocationEnabled = uiState.isLocationEnabled,
+                onClick = {
+                    if (!uiState.hasLocationPermission) {
+                        viewModel.requestLocationPermission()
+                    } else if (uiState.currentLocation != null && !uiState.isLocationLoading) {
+                        viewModel.showLocationDetail()
+                    } else if (!uiState.isLocationLoading) {
+                        viewModel.requestCurrentLocation()
+                    }
+                },
+                onLongClick = {
+                    if (uiState.hasLocationPermission && !uiState.isLocationLoading) {
+                        viewModel.requestCurrentLocation()
+                    }
+                }
+            )
+        } // inner Row end
+    } // outer Row end
 }
 
 private fun weatherBgRes(condition: WeatherCondition?): Int = when (condition) {

@@ -7,6 +7,7 @@ import com.nextthing.app.data.mapper.CategoryMapper.toEntity
 import com.nextthing.app.domain.model.Category
 import com.nextthing.app.domain.model.CategoryType
 import com.nextthing.app.domain.model.PresetCategories
+import com.nextthing.app.data.local.entity.SyncStatus
 import com.nextthing.app.domain.repository.CategoryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -59,7 +60,7 @@ class CategoryRepositoryImpl @Inject constructor(
                 sortOrder = maxSortOrder + 1
             )
 
-            categoryDao.insertCategory(newCategory.toEntity())
+            categoryDao.insertCategory(newCategory.toEntity().copy(syncStatus = SyncStatus.PENDING))
             Timber.d("创建分类成功: $name")
             Result.success(newCategory)
         } catch (e: Exception) {
@@ -70,7 +71,7 @@ class CategoryRepositoryImpl @Inject constructor(
 
     override suspend fun updateCategory(category: Category): Result<Unit> {
         return try {
-            categoryDao.updateCategory(category.toEntity())
+            categoryDao.updateCategory(category.toEntity().copy(syncStatus = SyncStatus.PENDING))
             Timber.d("更新分类成功: ${category.name}")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -86,11 +87,11 @@ class CategoryRepositoryImpl @Inject constructor(
                 return Result.failure(IllegalArgumentException("分类不存在"))
             }
 
-            // 防止删除预置分类
             if (category.type == CategoryType.PRESET.value) {
                 return Result.failure(IllegalStateException("不能删除预置分类"))
             }
 
+            categoryDao.updateSyncStatus(categoryId, SyncStatus.PENDING, null)
             categoryDao.deleteCategory(category)
             Timber.d("删除分类成功: $categoryId")
             Result.success(Unit)
@@ -103,6 +104,7 @@ class CategoryRepositoryImpl @Inject constructor(
     override suspend fun toggleCategoryEnabled(categoryId: String, isEnabled: Boolean): Result<Unit> {
         return try {
             categoryDao.toggleCategoryEnabled(categoryId, isEnabled)
+            categoryDao.updateSyncStatus(categoryId, SyncStatus.PENDING, null)
             Timber.d("切换分类状态成功: $categoryId -> $isEnabled")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -119,7 +121,7 @@ class CategoryRepositoryImpl @Inject constructor(
             }
 
             val updatedCategory = category.copy(sortOrder = newSortOrder)
-            categoryDao.updateCategory(updatedCategory.toEntity())
+            categoryDao.updateCategory(updatedCategory.toEntity().copy(syncStatus = SyncStatus.PENDING))
             Timber.d("更新分类排序成功: $categoryId -> $newSortOrder")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -186,7 +188,6 @@ class CategoryRepositoryImpl @Inject constructor(
      */
     private fun guessIconByName(name: String): String? {
         return when {
-            name.contains("字节") -> "drawable:bytedance"
             name.contains("股票") || name.contains("股市") -> "drawable:stock"
             name.contains("工作") || name.contains("办公") -> "drawable:work"
             name.contains("生活") -> "drawable:life"

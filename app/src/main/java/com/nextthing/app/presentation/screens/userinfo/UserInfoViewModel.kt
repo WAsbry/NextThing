@@ -6,6 +6,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nextthing.app.data.preferences.TokenManager
 import com.nextthing.app.domain.usecase.UserUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,11 +39,15 @@ enum class BindType {
 @HiltViewModel
 class UserInfoViewModel @Inject constructor(
     private val userUseCases: UserUseCases,
+    private val tokenManager: TokenManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(UserInfoUiState())
     val uiState: StateFlow<UserInfoUiState> = _uiState.asStateFlow()
+
+    private val _logoutEvent = MutableStateFlow(false)
+    val logoutEvent: StateFlow<Boolean> = _logoutEvent.asStateFlow()
 
     init {
         loadUserInfo()
@@ -157,15 +162,17 @@ class UserInfoViewModel @Inject constructor(
 
     fun logout() {
         viewModelScope.launch {
+            tokenManager.clear()
             userUseCases.logout()
+            _logoutEvent.value = true
         }
     }
 
     fun deleteAccount() {
         viewModelScope.launch {
-            // 退出登录确认对话框为低优先级UX改进,当前直接退出
-            // 可扩展:添加确认对话框,防止误操作
+            tokenManager.clear()
             userUseCases.logout()
+            _logoutEvent.value = true
         }
     }
 }

@@ -48,7 +48,8 @@ fun SettingsScreen(
     onNavigateToGeofence: () -> Unit = {},
     onNavigateToAchievement: () -> Unit = {},
     onNavigateToViewPreferences: () -> Unit = {},
-    onNavigateToThemeSettings: () -> Unit = {}
+    onNavigateToThemeSettings: () -> Unit = {},
+    onNavigateToSync: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -233,6 +234,14 @@ fun SettingsScreen(
                         title = "视图偏好",
                         subtitle = "折叠视图、显示模式",
                         onClick = onNavigateToViewPreferences
+                    )
+                    RowDivider()
+                    SettingsRow(
+                        icon = "☁️",
+                        iconBgColor = Color(0xFF1565C0),
+                        title = "数据同步",
+                        subtitle = "云端同步、冲突解决",
+                        onClick = onNavigateToSync
                     )
                     RowDivider()
                     SettingsRow(

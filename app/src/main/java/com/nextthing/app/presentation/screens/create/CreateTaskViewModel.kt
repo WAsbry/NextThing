@@ -222,6 +222,7 @@ class CreateTaskViewModel @Inject constructor(
     private fun loadNotificationStrategies() {
         viewModelScope.launch {
             try {
+                notificationStrategyRepository.ensurePresetStrategies()
                 notificationStrategyRepository.getAllStrategies().collect { strategies ->
                     _uiState.value = _uiState.value.copy(availableNotificationStrategies = strategies)
                 }

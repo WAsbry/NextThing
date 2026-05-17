@@ -6,6 +6,7 @@ import com.nextthing.app.data.local.dao.CategoryTaskCount
 import com.nextthing.app.data.mapper.toDomain
 import com.nextthing.app.data.mapper.toDomainList
 import com.nextthing.app.data.mapper.toEntity
+import com.nextthing.app.data.local.entity.SyncStatus
 import com.nextthing.app.data.mapper.CategoryMapper.toDomain
 import com.nextthing.app.domain.model.Task
 import com.nextthing.app.domain.model.Category
@@ -33,7 +34,7 @@ class TaskRepositoryImpl @Inject constructor(
     override suspend fun insertTask(task: Task): String {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.insertTask ━━━━━━")
         timber.log.Timber.tag(TAG).d("插入任务: ${task.title}, ID: ${task.id}")
-        taskDao.insertTask(task.toEntity())
+        taskDao.insertTask(task.toEntity().copy(syncStatus = SyncStatus.PENDING))
         timber.log.Timber.tag(TAG).d("✅ 任务已插入数据库")
         return task.id
     }
@@ -49,7 +50,7 @@ class TaskRepositoryImpl @Inject constructor(
         timber.log.Timber.tag(TAG).d("  位置: ${task.locationInfo?.locationName ?: "null"}")
         timber.log.Timber.tag(TAG).d("  状态: ${task.status}")
 
-        val entity = task.toEntity()
+        val entity = task.toEntity().copy(syncStatus = SyncStatus.PENDING)
         timber.log.Timber.tag(TAG).d("转换为Entity后:")
         timber.log.Timber.tag(TAG).d("  importanceUrgencyJson: ${entity.importanceUrgencyJson}")
         timber.log.Timber.tag(TAG).d("  entity.status: ${entity.status}")
@@ -61,7 +62,8 @@ class TaskRepositoryImpl @Inject constructor(
 
     override suspend fun deleteTask(taskId: String) {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.deleteTask ━━━━━━")
-        timber.log.Timber.tag(TAG).d("删除任务: $taskId")
+        timber.log.Timber.tag(TAG).d("软删除任务: $taskId")
+        taskDao.updateSyncStatus(taskId, SyncStatus.PENDING, null)
         taskDao.deleteTaskById(taskId)
         timber.log.Timber.tag(TAG).d("✅ 任务已删除")
     }
@@ -298,5 +300,23 @@ class TaskRepositoryImpl @Inject constructor(
     override suspend fun deleteTemplateAndAllInstances(templateId: String) {
         timber.log.Timber.tag(TAG).d("删除模板任务 $templateId 及其所有实例")
         taskDao.deleteTemplateAndAllInstances(templateId)
+    }
+
+    // ========== 日历视图 ==========
+
+    override fun getTasksByDueDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<Task>> {
+        return taskDao.getTasksByDueDateRange(startDate, endDate).map { it.toDomainList() }
+    }
+
+    override fun getTasksByDueDate(date: LocalDateTime): Flow<List<Task>> {
+        return taskDao.getTasksByDueDate(date).map { it.toDomainList() }
+    }
+
+    override suspend fun getDatesWithTasksInMonth(year: Int, month: Int): List<LocalDate> {
+        val monthStart = LocalDateTime.of(year, month, 1, 0, 0)
+        val monthEnd = monthStart.plusMonths(1).minusNanos(1)
+        return taskDao.getDatesWithTasksInMonth(monthStart, monthEnd).mapNotNull {
+            try { LocalDate.parse(it) } catch (_: Exception) { null }
+        }
     }
 } 

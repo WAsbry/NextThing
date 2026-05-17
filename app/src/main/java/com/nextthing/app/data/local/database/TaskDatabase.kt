@@ -47,7 +47,7 @@ import java.time.LocalDateTime
         GeofenceLocationStatisticsHistoryEntity::class,
         AchievementEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -69,6 +69,22 @@ abstract class TaskDatabase : RoomDatabase() {
 
         @Volatile
         private var INSTANCE: TaskDatabase? = null
+
+        // 数据库迁移：Version 10 -> Version 11
+        // 添加软删除字段（deleted）用于同步
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                timber.log.Timber.tag("Migration").d("开始数据库迁移：Version 10 -> 11")
+                try {
+                    database.execSQL("ALTER TABLE tasks ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+                    database.execSQL("ALTER TABLE categories ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+                    timber.log.Timber.tag("Migration").d("数据库迁移完成：Version 10 -> 11")
+                } catch (e: Exception) {
+                    timber.log.Timber.tag("Migration").e(e, "数据库迁移失败")
+                    throw e
+                }
+            }
+        }
 
         // 数据库迁移：Version 9 -> Version 10
         // 添加数据同步相关字段到 tasks 和 categories 表
@@ -491,7 +507,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)

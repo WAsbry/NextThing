@@ -6,6 +6,7 @@ import com.nextthing.app.data.local.entity.SyncStatus
 import com.nextthing.app.data.local.entity.TaskEntity
 import com.nextthing.app.data.local.entity.CategoryEntity
 import com.nextthing.app.data.remote.api.SyncApi
+import com.nextthing.app.data.preferences.SyncPreferences
 import com.nextthing.app.data.remote.dto.*
 import com.nextthing.app.data.mapper.toDomain
 import com.nextthing.app.data.mapper.toEntity
@@ -18,6 +19,7 @@ import com.nextthing.app.domain.model.SyncConflict
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.time.Instant
 import java.time.LocalDateTime
@@ -32,18 +34,17 @@ import javax.inject.Singleton
 class SyncRepositoryImpl @Inject constructor(
     private val taskDao: TaskDao,
     private val categoryDao: CategoryDao,
-    private val syncApi: SyncApi
+    private val syncApi: SyncApi,
+    private val syncPreferences: SyncPreferences
 ) : SyncRepository {
 
     companion object {
         private const val TAG = "数据同步"
     }
 
-    // 同步状态
     private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
     override val syncState: Flow<SyncState> = _syncState.asStateFlow()
 
-    // 最后同步时间戳
     private var lastSyncTimestamp: Long? = null
 
     /**
@@ -52,6 +53,9 @@ class SyncRepositoryImpl @Inject constructor(
     override suspend fun sync(): Result<SyncResult> {
         return try {
             _syncState.value = SyncState.Syncing
+            if (lastSyncTimestamp == null) {
+                lastSyncTimestamp = syncPreferences.lastSyncTimestamp.first()
+            }
             Timber.tag(TAG).d("🔄 开始数据同步...")
 
             // 1. 获取本地待同步的任务
@@ -66,6 +70,7 @@ class SyncRepositoryImpl @Inject constructor(
 
             // 4. 更新最后同步时间
             lastSyncTimestamp = System.currentTimeMillis()
+            syncPreferences.saveLastSyncTimestamp(lastSyncTimestamp!!)
 
             _syncState.value = SyncState.Success(lastSyncTimestamp!!)
 
@@ -92,6 +97,9 @@ class SyncRepositoryImpl @Inject constructor(
     override suspend fun fullSync(): Result<SyncResult> {
         return try {
             _syncState.value = SyncState.Syncing
+            if (lastSyncTimestamp == null) {
+                lastSyncTimestamp = syncPreferences.lastSyncTimestamp.first()
+            }
             Timber.tag(TAG).d("🔄 开始全量同步...")
 
             val response = syncApi.fullSync()
@@ -115,6 +123,7 @@ class SyncRepositoryImpl @Inject constructor(
             }
 
             lastSyncTimestamp = body.serverTimestamp
+            syncPreferences.saveLastSyncTimestamp(lastSyncTimestamp!!)
             _syncState.value = SyncState.Success(lastSyncTimestamp!!)
 
             val result = SyncResult(
@@ -138,9 +147,8 @@ class SyncRepositoryImpl @Inject constructor(
      * 标记任务需要同步
      */
     override suspend fun markTaskForSync(taskId: String) {
-        Timber.tag(TAG).d("📝 标记任务待同步: $taskId")
-        // 通过DAO更新同步状态为PENDING
-        // 注意：需要在TaskDao中添加相应的方法
+        Timber.tag(TAG).d("标记任务待同步: $taskId")
+        taskDao.updateSyncStatus(taskId, SyncStatus.PENDING, null)
     }
 
     /**

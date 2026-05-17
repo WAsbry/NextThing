@@ -1,16 +1,21 @@
 package com.nextthing.app.data.remote.interceptor
 
+import com.nextthing.app.data.preferences.TokenManager
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
+import javax.inject.Inject
 
-class AuthInterceptor : Interceptor {
+class AuthInterceptor @Inject constructor(
+    private val tokenManager: TokenManager
+) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
+        val token = runBlocking { tokenManager.accessToken.firstOrNull() }
         val request = original.newBuilder()
             .header("Accept", "application/json")
             .apply {
-                // 在此添加认证Token等
-                val token: String? = null
                 if (!token.isNullOrBlank()) {
                     header("Authorization", "Bearer $token")
                 }
@@ -18,4 +23,4 @@ class AuthInterceptor : Interceptor {
             .build()
         return chain.proceed(request)
     }
-} 
+}
