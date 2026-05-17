@@ -1,28 +1,24 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+/.idea/
 .DS_Store
 /build
 /captures
 .externalNativeBuild
 .cxx
-local.properties
 
-# Release APK files
+# APK
 *.apk
 NextThing-release.apk
 
-# Private keys (never commit)
+# Keystore & keys
 *.pem
+*.jks
 release.keystore
 
-# Documentation files (optional)
-# 更新日志.md
-# doc/更新日志.md
+# Claude Code
 .claude/
+
+# Documentation (local only)
+doc/
