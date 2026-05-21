@@ -1,15 +1,15 @@
 pluginManagement {
     repositories {
-        // 国内镜像优先，避免连接官方源超时
+        // 官方源优先（代理已配置）
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+        // 国内镜像兜底
         maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
         maven { url = uri("https://mirrors.cloud.tencent.com/gradle") }
-        // 官方源兜底（有 VPN 时可使用）
-        gradlePluginPortal()
-        google()
-        mavenCentral()
     }
 }
 

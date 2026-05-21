@@ -1,0 +1,136 @@
+package com.nextthing.app.presentation.theme
+
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.Color
+import com.nextthing.app.domain.model.ThemeMode
+import com.nextthing.app.domain.model.WeatherCondition
+import com.nextthing.app.presentation.theme.weatherAppColorsWithCustom
+
+private val DarkColorScheme = darkColorScheme(
+    primary = Color(0xFF4FC3F7),
+    secondary = Color(0xFF29B6F6),
+    tertiary = Color(0xFF66BB6A),
+    background = Color(0xFF121212),
+    surface = Color(0xFF1E1E1E),
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onTertiary = Color.White,
+    onBackground = Color(0xFFE0E0E0),
+    onSurface = Color(0xFFE0E0E0),
+)
+
+private val LightColorScheme = lightColorScheme(
+    primary = Color(0xFF4FC3F7),
+    secondary = Color(0xFF29B6F6),
+    tertiary = Color(0xFF4CAF50),
+    background = Color(0xFFF5F7FA),
+    surface = Color(0xFFFFFFFF),
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onTertiary = Color.White,
+    onBackground = Color(0xFF2C3E50),
+    onSurface = Color(0xFF2C3E50),
+    error = Color(0xFFF44336),
+    onError = Color.White
+)
+
+// ── 向后兼容的 Composable getter（所有现有屏幕无需修改）──
+
+val Primary: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.primary
+
+val PrimaryDark: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.primaryDark
+
+val Success: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.success
+
+val Warning: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.warning
+
+val Danger: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.danger
+
+val AccentPurple: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.accentPurple
+
+val BgPrimary: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.bgPrimary
+
+val BgCard: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.bgCard
+
+val BgSecondary: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.bgSecondary
+
+val TextPrimary: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.textPrimary
+
+val TextSecondary: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.textSecondary
+
+val TextMuted: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.textMuted
+
+val Border: Color
+    @Composable @ReadOnlyComposable get() = LocalAppColors.current.border
+
+fun weatherAppColors(condition: WeatherCondition): AppColors = when (condition) {
+    WeatherCondition.SUNNY         -> WeatherSunnyColors
+    WeatherCondition.CLOUDY        -> WeatherCloudyColors
+    WeatherCondition.PARTLY_CLOUDY -> WeatherPartlyCloudyColors
+    WeatherCondition.RAINY         -> WeatherRainyColors
+    WeatherCondition.THUNDERSTORM  -> WeatherThunderstormColors
+    WeatherCondition.SNOWY         -> WeatherSnowyColors
+    WeatherCondition.FOGGY         -> WeatherFoggyColors
+    WeatherCondition.WINDY         -> WeatherWindyColors
+    WeatherCondition.UNKNOWN       -> WeatherUnknownColors
+}
+
+@Composable
+fun NextThingB1Theme(
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    weatherCondition: WeatherCondition = WeatherCondition.UNKNOWN,
+    weatherCustomPrimaries: Map<WeatherCondition, Long> = emptyMap(),
+    content: @Composable () -> Unit
+) {
+    val isDark = when (themeMode) {
+        ThemeMode.SYSTEM  -> isSystemInDarkTheme()
+        ThemeMode.LIGHT   -> false
+        ThemeMode.DARK    -> true
+        ThemeMode.WEATHER -> false
+    }
+
+    val appColors = when (themeMode) {
+        ThemeMode.WEATHER -> weatherAppColorsWithCustom(
+            weatherAppColors(weatherCondition),
+            weatherCustomPrimaries[weatherCondition]
+        )
+        ThemeMode.DARK    -> DarkAppColors
+        ThemeMode.LIGHT   -> LightAppColors
+        ThemeMode.SYSTEM  -> if (isDark) DarkAppColors else LightAppColors
+    }
+
+    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme.copy(
+        primary = appColors.primary,
+        secondary = appColors.primaryDark,
+        background = appColors.bgPrimary,
+        surface = appColors.bgCard,
+        onBackground = appColors.textPrimary,
+        onSurface = appColors.textPrimary
+    )
+
+    CompositionLocalProvider(LocalAppColors provides appColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
+}
