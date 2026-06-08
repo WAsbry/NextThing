@@ -1,6 +1,6 @@
-# NextThing - 智能任务管理应用
+# NextThing - 你的 AI 伙伴
 
-**基于 Clean Architecture 的现代化 Android 任务管理应用**
+**基于 Clean Architecture 的智能任务管理应用**
 
 [![Android](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android)](https://www.android.com/)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-7F52FF?logo=kotlin)](https://kotlinlang.org/)
@@ -10,7 +10,13 @@
 
 ## 应用概述
 
-NextThing 是一款面向个人用户的智能任务管理应用，融合了 AI 解析、语音识别、地理围栏、天气主题、成就系统等前沿功能。采用 Clean Architecture + MVVM 架构，100% Jetpack Compose 构建 UI，使用 KSP 替代 kapt 进行注解处理。
+NextThing 是一款面向个人用户的智能任务管理应用，融合了 AI 解析、语音识别、地理围栏、天气主题、成就系统等前沿功能。采用 Clean Architecture + MVVM 架构，100% Jetpack Compose 构建 UI。
+
+## 品牌标识
+
+**NT 图标** — 紫蓝方块内的白色 NT 字母，可独立用作 App Icon。
+
+**配色方案**：以 `#6C5CE7` 紫蓝为核心，滑动操作采用经典三阶紫色（浅紫 → 品牌紫 → 深紫）。
 
 ## 核心功能
 
@@ -24,7 +30,8 @@ NextThing 是一款面向个人用户的智能任务管理应用，融合了 AI 
 ### AI 智能解析
 - 自然语言创建任务（接入 DeepSeek / 通义千问 LLM）
 - AI 统计分析摘要
-- 语音识别创建任务（科大讯飞 ASR）
+- 语音识别创建任务（科大讯飞 ASR / Sherpa-ONNX 端侧 ASR）
+- 端侧 AI 推理（SER 情绪识别 + Voice Pipeline）
 
 ### 地理围栏
 - 高德地图选点 + Google Play Services 双引擎定位
@@ -34,6 +41,7 @@ NextThing 是一款面向个人用户的智能任务管理应用，融合了 AI 
 ### 天气主题
 - 和风天气 API（Ed25519 JWT 认证）
 - 天气驱动的动态主题：晴天/阴天/雨天自动切换 App 配色
+- 天气进度卡片展示实时天气 + 任务完成率
 
 ### 成就系统
 - 20 种成就，5 大类（任务大师/坚持达人/效率专家/全能型/里程碑）
@@ -41,7 +49,7 @@ NextThing 是一款面向个人用户的智能任务管理应用，融合了 AI 
 
 ### 专注模式
 - 内置番茄钟计时器
-- 专注期间任务状态锁定
+- SER 情绪守护，专注期间状态锁定
 
 ### 数据统计
 - 多维度趋势图表（7/30/90天/全部）
@@ -66,6 +74,7 @@ NextThing 是一款面向个人用户的智能任务管理应用，融合了 AI 
 | 存储 | DataStore Preferences | 1.0.0 |
 | 定位 | Google Play Services + 高德 SDK | 21.0.1 / 6.4.3 |
 | 地图 | 高德 2D Map + Search | 6.0.0 / 9.7.0 |
+| 端侧 AI | Sherpa-ONNX + ONNX Runtime | - |
 | 加密 | BouncyCastle (EdDSA) | 1.70 |
 | 日志 | Timber | 5.0.1 |
 | 注解处理 | KSP | 1.9.25-1.0.20 |
@@ -91,21 +100,30 @@ com.nextthing.app/
 │   │   ├── entity/            #     10 个 Entity
 │   │   └── converter/         #     TypeConverter
 │   ├── remote/                #   远程数据源
-│   │   ├── api/               #     Retrofit API (TaskApi, SyncApi)
-│   │   ├── dto/               #     同步 DTO
+│   │   ├── api/               #     Retrofit API (TaskApi, SyncApi, AIChatApi)
+│   │   ├── dto/               #     同步 DTO + AI Chat DTO
 │   │   └── interceptor/       #     Auth 拦截器
 │   ├── repository/            #   Repository 实现（@Inject constructor + @Singleton）
 │   ├── mapper/                #   Entity ↔ Domain 转换
 │   ├── service/               #   服务实现（AI, ASR, Weather, Location, Achievement...）
-│   ├── asr/                   #   科大讯飞语音识别
+│   ├── ai/                    #   端侧 AI（AudioPreprocessor, SER, OnDeviceEngine）
+│   ├── asr/                   #   语音识别（科大讯飞 + Sherpa-ONNX）
 │   ├── export/                #   数据导出（CSV/XLSX/Markdown）
 │   └── preferences/           #   DataStore（AI 配置、主题、视图偏好）
 │
 ├── presentation/              # 表现层
 │   ├── screens/               #   18+ 功能页面（各含 Screen + ViewModel）
+│   │   ├── splash/            #     启动页（NT Logo + 脉冲光晕）
+│   │   ├── login/             #     登录/注册（NT 图标 + 紫蓝主题）
+│   │   ├── today/             #     今日页（天气卡片 + 任务列表 + 紫色滑动）
+│   │   ├── create/            #     创建任务（语音 + AI 解析）
+│   │   ├── tasks/             #     全局任务视图
+│   │   ├── stats/             #     统计图表
+│   │   ├── settings/          #     全局设置
+│   │   └── ...                #     更多页面
 │   ├── components/            #   可复用 Composable
 │   ├── navigation/            #   NavHost + 路由定义
-│   └── theme/                 #   Material 3 主题（支持天气动态配色）
+│   └── theme/                 #   Material 3 主题（紫蓝主色 + 天气动态配色）
 │
 ├── di/                        # 依赖注入
 │   ├── DatabaseModule         #   Room DB + DAO 提供 + @Binds 绑定 Repository
@@ -113,6 +131,7 @@ com.nextthing.app/
 │   ├── AIModule               #   AI HTTP Client + 解析服务
 │   ├── ASRModule              #   语音识别服务
 │   ├── LocationModule         #   定位 + 地理围栏
+│   ├── UseCaseModule          #   UseCase 注入
 │   └── WeatherModule          #   天气服务
 │
 ├── work/                      # 后台任务
@@ -121,24 +140,18 @@ com.nextthing.app/
 │   ├── ConvertDelayedTasksWorker    # 每日 0:00 延期转待办
 │   ├── GenerateRecurringTasksWorker # 每日 0:00 重复任务生成
 │   ├── TaskNotificationWorker       # 每 15 分钟通知检查
-│   └── CountdownNotificationWorker  # 每 15 分钟倒计时刷新
+│   ├── CountdownNotificationWorker  # 每 15 分钟倒计时刷新
+│   └── DailyBriefingWorker          # 每日简报
 │
 ├── util/                      # 工具类
 │   ├── TaskAlarmManager       #   AlarmManager 任务提醒
 │   ├── NotificationHelper     #   通知渠道管理
 │   ├── PermissionManager      #   权限状态管理
-│   ├── ChineseDateHelper      #   农历/节气
-│   └── LegalHolidayHelper     #   法定节假日
+│   └── ...
 │
 └── receiver/
     └── GeofenceBroadcastReceiver    # 地理围栏进出事件
 ```
-
-### DI 设计
-
-- **Repository**：实现类使用 `@Inject constructor` + `@Singleton`，通过 `@Binds` 绑定到接口
-- **UseCase**：每个用例独立 `@Inject constructor`，ViewModel 按需注入
-- **Service**：接口通过 Module `@Binds` 绑定到实现
 
 ### 数据库设计
 
@@ -165,15 +178,23 @@ com.nextthing.app/
 
 | 测试类 | 覆盖内容 | 测试数 |
 |--------|----------|--------|
-| TaskMapperTest | Task↔Entity 转换、JSON 序列化/反序列化、容错处理、round-trip | 15 |
+| TodayViewModelTest | UiState 初始值、Tab 过滤、完成率计算、状态切换 | 12 |
+| TaskMapperTest | Task↔Entity 转换、JSON 序列化/反序列化、容错处理 | 15 |
 | CategoryMapperTest | Entity↔Domain 转换、批量转换、round-trip | 12 |
 | RepeatFrequencyTest | 验证逻辑、显示文本、WeekdayItem/MonthDayItem | 20 |
 | TaskModelTest | 领域模型行为（状态、四象限、Subtask） | 10 |
 | TaskRepositoryImplTest | CRUD、统计、模板任务（Mockito mock DAO） | 15 |
 
+### UI 测试
+
+| 测试类 | 覆盖内容 | 测试数 |
+|--------|----------|--------|
+| TodayScreenUiTest | TopHeader、Tab 显示、任务列表渲染、统计数字 | 6 |
+
 运行：
 ```bash
-./gradlew testDebugUnitTest
+./gradlew testDebugUnitTest                          # 单元测试
+./gradlew connectedDebugAndroidTest                  # UI 测试（需设备）
 ```
 
 ---
@@ -213,14 +234,25 @@ AMAP_API_KEY=your_amap_key
 
 ## 项目特色
 
+- **品牌化设计**：NT 图标 + 紫蓝主色贯穿全局，权限弹窗、滑动操作统一视觉语言
 - **KSP 替代 kapt**：Hilt / Room 注解处理使用 KSP，构建速度提升 30-50%
 - **@Binds 绑定模式**：Repository 接口通过 `@Binds` 绑定实现类，消除手动 `@Provides` 样板代码
 - **安全实践**：签名密码和 API Key 从 `local.properties` 注入，私钥文件排除在版本控制外
 - **R8 Full Mode**：开启完整代码优化和混淆
 - **增量数据库迁移**：9 次迁移无破坏性降级，保障用户数据安全
-- **无 Apache POI 的 XLSX 导出**：手写 OOXML 生成，零额外依赖
+- **无 Apache PoI 的 XLSX 导出**：手写 OOXML 生成，零额外依赖
 - **天气驱动动态主题**：整个 App 配色随天气实时变化
+- **端侧 AI**：Sherpa-ONNX 端侧语音识别 + SER 情绪识别，隐私优先
 - **农历/节气/法定节假日**：支持中国节假日判断的重复任务
+
+---
+
+## 版本历史
+
+| 版本 | 主要功能 |
+|------|---------|
+| v0.5.0 | AI 智能秘书 10 大功能 + 后端同步部署 |
+| v0.6.0 | UI 品牌升级 — NT Logo + 紫蓝主题 + 端侧 AI + 权限弹窗重构 |
 
 ---
 
