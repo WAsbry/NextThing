@@ -112,6 +112,13 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    aaptOptions {
+        noCompress("tflite", "onnx")
     }
 }
 
@@ -175,6 +182,14 @@ dependencies {
 
     // Kotlinx Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+
+    // LiteRT（端侧 AI 推理引擎）
+    implementation(libs.litert)
+    implementation(libs.litert.support)
+    implementation(libs.litert.gpu)
+
+    // TarsosDSP（端侧音频处理，MFCC 提取）
+    implementation("be.tarsos.dsp:core:2.5")
 
     // App Startup
     implementation("androidx.startup:startup-runtime:1.1.1")

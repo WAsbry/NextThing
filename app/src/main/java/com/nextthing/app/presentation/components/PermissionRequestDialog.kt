@@ -2,6 +2,7 @@ package com.nextthing.app.presentation.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -10,12 +11,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.nextthing.app.presentation.theme.*
 import com.nextthing.app.util.MissingPermission
 
 /**
@@ -35,11 +38,11 @@ fun PermissionRequestDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            shape = MaterialTheme.shapes.large,
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color.White
+                containerColor = BgCard
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -52,7 +55,7 @@ fun PermissionRequestDialog(
                     imageVector = Icons.Default.Warning,
                     contentDescription = null,
                     modifier = Modifier.size(48.dp),
-                    tint = Color(0xFFFF9800)
+                    tint = Primary
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -62,7 +65,7 @@ fun PermissionRequestDialog(
                     text = "需要授予权限",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF212121)
+                    color = TextPrimary
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -71,7 +74,7 @@ fun PermissionRequestDialog(
                 Text(
                     text = "为了正常使用任务提醒功能，需要您授予以下权限：",
                     fontSize = 14.sp,
-                    color = Color(0xFF757575),
+                    color = TextSecondary,
                     textAlign = TextAlign.Center
                 )
 
@@ -125,7 +128,7 @@ fun PermissionRequestDialog(
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF2196F3)
+                                containerColor = Primary
                             )
                         ) {
                             Text(
@@ -151,9 +154,9 @@ private fun PermissionItem(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF5F5F5)
+            containerColor = BgSecondary
         ),
-        shape = MaterialTheme.shapes.medium
+        shape = RoundedCornerShape(14.dp)
     ) {
         Row(
             modifier = Modifier
@@ -166,7 +169,7 @@ private fun PermissionItem(
                 imageVector = Icons.Default.Info,
                 contentDescription = null,
                 modifier = Modifier.size(32.dp),
-                tint = Color(0xFF2196F3)
+                tint = Primary
             )
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -179,7 +182,7 @@ private fun PermissionItem(
                     text = permission.name,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF212121)
+                    color = TextPrimary
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -187,7 +190,7 @@ private fun PermissionItem(
                 Text(
                     text = permission.description,
                     fontSize = 13.sp,
-                    color = Color(0xFF757575),
+                    color = TextSecondary,
                     lineHeight = 18.sp
                 )
 
@@ -196,7 +199,7 @@ private fun PermissionItem(
                     Text(
                         text = "必需",
                         fontSize = 11.sp,
-                        color = Color(0xFFFF5252),
+                        color = Danger,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -223,21 +226,22 @@ fun SimplePermissionDialog(
             Icon(
                 imageVector = Icons.Default.Warning,
                 contentDescription = null,
-                tint = Color(0xFFFF9800)
+                tint = Primary
             )
         },
         title = {
             Text(
                 text = title,
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
             )
         },
         text = {
             Text(
                 text = message,
                 fontSize = 14.sp,
-                color = Color(0xFF757575)
+                color = TextSecondary
             )
         },
         confirmButton = {
@@ -247,7 +251,7 @@ fun SimplePermissionDialog(
                     onDismiss()
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF2196F3)
+                    containerColor = Primary
                 )
             ) {
                 Text(confirmText, color = Color.White)
@@ -255,9 +259,9 @@ fun SimplePermissionDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("稍后再说")
+                Text("稍后再说", color = TextSecondary)
             }
         },
-        containerColor = Color.White
+        containerColor = BgCard
     )
 }

@@ -25,6 +25,10 @@ dependencyResolutionManagement {
         // 官方源兜底
         google()
         mavenCentral()
+        // JitPack（TarsosDSP 等开源库）
+        maven { url = uri("https://jitpack.io") }
+        // TarsosDSP 官方仓库
+        maven { url = uri("https://mvn.0110.be/releases") }
     }
 }
 

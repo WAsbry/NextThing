@@ -84,9 +84,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             StartupTracker.record("setContent")
-            val themeMode by themePreferences.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
-            val weatherCondition by themePreferences.currentWeatherCondition.collectAsState(initial = WeatherCondition.UNKNOWN)
-            val weatherCustomPrimaries by themePreferences.weatherCustomPrimaries.collectAsState(initial = emptyMap())
+            // 首帧用默认值快速渲染，异步收集 DataStore Flow 避免阻塞
+            var themeMode by remember { mutableStateOf(ThemeMode.SYSTEM) }
+            var weatherCondition by remember { mutableStateOf(WeatherCondition.UNKNOWN) }
+            var weatherCustomPrimaries by remember { mutableStateOf<Map<WeatherCondition, Long>>(emptyMap()) }
+
+            LaunchedEffect(Unit) { themePreferences.themeMode.collect { themeMode = it } }
+            LaunchedEffect(Unit) { themePreferences.currentWeatherCondition.collect { weatherCondition = it } }
+            LaunchedEffect(Unit) { themePreferences.weatherCustomPrimaries.collect { weatherCustomPrimaries = it } }
 
             NextThingB1Theme(
                 themeMode = themeMode,

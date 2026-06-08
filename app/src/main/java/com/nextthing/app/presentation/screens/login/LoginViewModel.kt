@@ -21,6 +21,7 @@ data class LoginUiState(
     val username: String = "",
     val email: String = "",
     val password: String = "",
+    val confirmPassword: String? = null,
     val isRegisterMode: Boolean = true,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
@@ -49,6 +50,10 @@ class LoginViewModel @Inject constructor(
 
     fun onPasswordChange(password: String) {
         _uiState.value = _uiState.value.copy(password = password, errorMessage = null)
+    }
+
+    fun onConfirmPasswordChange(confirmPassword: String) {
+        _uiState.value = _uiState.value.copy(confirmPassword = confirmPassword, errorMessage = null)
     }
 
     fun toggleMode() {

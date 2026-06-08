@@ -102,11 +102,13 @@ fun NextThingNavigation(
                     onNavigateToLogin = {
                         navController.navigate(Screen.Login.route) {
                             popUpTo(Screen.Splash.route) { inclusive = true }
+                            launchSingleTop = true
                         }
                     },
                     onNavigateToHome = {
                         navController.navigate(Screen.Today.route) {
                             popUpTo(Screen.Splash.route) { inclusive = true }
+                            launchSingleTop = true
                         }
                     }
                 )

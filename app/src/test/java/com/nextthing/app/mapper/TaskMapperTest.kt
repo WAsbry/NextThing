@@ -234,8 +234,7 @@ class TaskMapperTest {
     fun `round-trip conversion preserves basic fields`() {
         val original = createTask(
             tags = listOf("工作", "重要"),
-            status = TaskStatus.COMPLETED,
-            isUrgent = true
+            status = TaskStatus.COMPLETED
         )
         val entity = original.toEntity()
         val withCategory = TaskWithCategory(task = entity, category = testCategoryEntity)

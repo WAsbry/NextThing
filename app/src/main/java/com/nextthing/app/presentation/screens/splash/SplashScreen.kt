@@ -3,12 +3,21 @@ package com.nextthing.app.presentation.screens.splash
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.repeatable
+import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +39,8 @@ import com.nextthing.app.presentation.theme.BgPrimary
 import com.nextthing.app.performance.StartupTracker
 import com.nextthing.app.presentation.theme.Primary
 import com.nextthing.app.presentation.theme.TextSecondary
+import com.nextthing.app.presentation.theme.TextMuted
+import com.nextthing.app.NextThingApplication
 import com.nextthing.app.util.PermissionHelper
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
@@ -46,26 +58,21 @@ fun SplashScreen(
     onNavigateToHome: () -> Unit
 ) {
     val context = LocalContext.current
-    // true = 权限流程已完成（授予或跳过），可以继续导航
-    var permissionFlowDone by remember { mutableStateOf(false) }
+    var hasNavigated by remember { mutableStateOf(false) }
 
-    // 在 Composable 内部注册权限请求器（无需 Activity 层传入）
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         val granted = results.values.any { it }
         Timber.tag("Splash").d("位置权限结果: ${if (granted) "已授予" else "已拒绝"}")
-        permissionFlowDone = true
     }
 
-    // 第一步：检查并请求位置权限
+    // 合并为单个 LaunchedEffect，避免两个 Effect 之间的时序竞争
     LaunchedEffect(Unit) {
         StartupTracker.record("splash_composed")
+
         val hasPermission = PermissionHelper.hasLocationPermission(context)
-        if (hasPermission) {
-            Timber.tag("Splash").d("位置权限已存在，跳过申请")
-            permissionFlowDone = true
-        } else {
+        if (!hasPermission) {
             Timber.tag("Splash").d("位置权限未授予，弹出申请对话框")
             locationPermissionLauncher.launch(
                 arrayOf(
@@ -73,40 +80,95 @@ fun SplashScreen(
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
+        } else {
+            Timber.tag("Splash").d("位置权限已存在，跳过申请")
+        }
+
+        // 查询用户状态并导航（防重复）
+        if (!hasNavigated) {
+            hasNavigated = true
+            val currentUser = userUseCases.getCurrentUser().first()
+            Timber.tag("Splash").d("跳转: ${if (currentUser != null) "首页" else "登录页"}")
+            StartupTracker.record("first_screen_ready")
+            NextThingApplication.onFirstScreenReady()
+            if (currentUser != null) onNavigateToHome() else onNavigateToLogin()
         }
     }
 
-    // 第二步：权限流程完成后，判断登录状态并跳转
-    LaunchedEffect(permissionFlowDone) {
-        if (!permissionFlowDone) return@LaunchedEffect
-        val currentUser = userUseCases.getCurrentUser().first()
-        Timber.tag("Splash").d("跳转: ${if (currentUser != null) "首页" else "登录页"}")
-        StartupTracker.record("first_screen_ready")
-        if (currentUser != null) onNavigateToHome() else onNavigateToLogin()
-    }
-
-    // 启动页 UI
+    // 启动页 UI — NT 图标 + NextThing 文字 + 脉冲光晕
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(BgPrimary),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // NT 图标（带脉冲光晕）
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = RoundedCornerShape(22.dp),
+                        ambientColor = Primary.copy(alpha = 0.25f),
+                        spotColor = Primary.copy(alpha = 0.35f)
+                    )
+                    .background(
+                        color = Primary,
+                        shape = RoundedCornerShape(22.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "NT",
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White,
+                    letterSpacing = (-1).sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // NextThing 文字
             Text(
                 text = "NextThing",
                 fontSize = 36.sp,
-                fontWeight = FontWeight.Bold,
-                color = Primary
+                fontWeight = FontWeight.ExtraBold,
+                color = Primary,
+                letterSpacing = (-0.8).sp
             )
+
             Spacer(modifier = Modifier.height(8.dp))
+
+            // 副标题
             Text(
-                text = "正在初始化...",
+                text = "你的 AI 伙伴",
                 fontSize = 14.sp,
                 color = TextSecondary
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            CircularProgressIndicator(color = Primary)
+
+            Spacer(modifier = Modifier.height(60.dp))
+
+            // 加载指示器
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = Primary,
+                    strokeWidth = 2.dp
+                )
+                Text(
+                    text = "正在准备...",
+                    fontSize = 13.sp,
+                    color = TextMuted
+                )
+            }
         }
     }
 }

@@ -5,36 +5,47 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 外层圆角矩形框架 (天蓝色) -->
+    <!-- 圆角方块底板（稍深紫蓝，形成层次） -->
     <path
-        android:pathData="M24,22 h60 a8,8 0 0 1 8,8 v48 a8,8 0 0 1 -8,8 h-60 a8,8 0 0 1 -8,-8 v-48 a8,8 0 0 1 8,-8 z"
-        android:strokeColor="#71CBF4"
-        android:strokeWidth="4"
-        android:fillColor="#00000000" />
+        android:pathData="M26,22 h56 a8,8 0 0 1 8,8 v48 a8,8 0 0 1 -8,8 h-56 a8,8 0 0 1 -8,-8 v-48 a8,8 0 0 1 8,-8 z"
+        android:fillColor="#5A4BD1" />
 
-    <!-- 对勾符号 (浅蓝色) -->
+    <!-- N 字母（白色） -->
+    <!-- N: 左竖线 -->
     <path
-        android:pathData="M38,54 L48,64 L72,38"
-        android:strokeColor="#A8D8F0"
-        android:strokeWidth="5"
+        android:pathData="M38,38 L38,70"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
         android:fillColor="#00000000"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-
-    <!-- NextThing 文字 (天蓝色) -->
-    <!-- N -->
+        android:strokeLineCap="round" />
+    <!-- N: 左上到右下斜线 -->
     <path
-        android:pathData="M18,40 L18,58 M18,40 L26,58 M26,40 L26,58"
-        android:strokeColor="#71CBF4"
-        android:strokeWidth="2"
+        android:pathData="M38,38 L52,70"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round" />
+    <!-- N: 右竖线 -->
+    <path
+        android:pathData="M52,38 L52,70"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
         android:fillColor="#00000000"
         android:strokeLineCap="round" />
 
-    <!-- T -->
+    <!-- T 字母（白色） -->
+    <!-- T: 横线 -->
     <path
-        android:pathData="M30,40 L38,40 M34,40 L34,58"
-        android:strokeColor="#71CBF4"
-        android:strokeWidth="2"
+        android:pathData="M58,38 L74,38"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round" />
+    <!-- T: 竖线 -->
+    <path
+        android:pathData="M66,38 L66,70"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
         android:fillColor="#00000000"
         android:strokeLineCap="round" />
 </vector>

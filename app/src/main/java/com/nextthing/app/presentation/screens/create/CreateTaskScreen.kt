@@ -2,6 +2,7 @@ package com.nextthing.app.presentation.screens.create
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -118,6 +119,7 @@ fun CreateTaskScreen(
     val categories by viewModel.categories.collectAsState()
     val availableGeofenceLocations by viewModel.availableGeofenceLocations.collectAsState()
     val isASRRecording by viewModel.isASRRecording.collectAsState()
+    val isModelReady by viewModel.isModelReady.collectAsState()
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
@@ -128,23 +130,34 @@ fun CreateTaskScreen(
     // 日期选择状态
     var showDatePicker by remember { mutableStateOf(false) }
 
-    // 麦克风权限请求
+    // 麦克风权限状态
+    var hasMicPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    // 麦克风权限请求（授权后不自动录音，等用户再次长按）
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) viewModel.startASR()
+        hasMicPermission = granted
     }
 
-    fun onVoiceStart() {
+    // 检查权限并请求（无权限时弹窗，返回 false）
+    fun checkAndRequestPermission(): Boolean {
         val hasPerm = ContextCompat.checkSelfPermission(
             context, Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
-        if (hasPerm) viewModel.startASR()
-        else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-    }
-
-    fun onVoiceEnd() {
-        viewModel.stopASR()
+        if (!hasPerm) {
+            hasMicPermission = false
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return false
+        }
+        hasMicPermission = true
+        return true
     }
 
     Column(
@@ -159,17 +172,14 @@ fun CreateTaskScreen(
             onBackPressed = onBackPressed
         )
 
-        // AI 智能输入区域
-        AIInputSection(
-            aiInputText = uiState.aiInputText,
+        // AI 解析结果卡片（独立区域，显示时隐藏标题输入框）
+        AIResultSection(
             isAIParsing = uiState.isAIParsing,
             aiParseResult = uiState.aiParseResult,
             aiParseResults = uiState.aiParseResults,
             aiSelectedIndexes = uiState.aiSelectedIndexes,
             showAIResult = uiState.showAIResult,
             aiError = uiState.aiError,
-            onInputChange = { viewModel.updateAIInputText(it) },
-            onParse = { viewModel.parseWithAI() },
             onApplyAndEdit = { viewModel.applyAIResult() },
             onApplyAndCreate = { viewModel.applyAIResultAndCreate(); onBackPressed() },
             onDismissResult = { viewModel.dismissAIResult() },
@@ -178,13 +188,15 @@ fun CreateTaskScreen(
             onCreateSelected = { viewModel.createSelectedTasks(); onBackPressed() }
         )
 
-        // 核心输入区 (28%高度)
-        CoreInputSection(
-            screenHeight = screenHeight,
-            screenWidth = screenWidth,
-            title = uiState.title,
-            onTitleChange = { viewModel.updateTitle(it) }
-        )
+        // 核心输入区 — AI 解析结果展示时隐藏
+        if (!uiState.showAIResult) {
+            CoreInputSection(
+                screenHeight = screenHeight,
+                screenWidth = screenWidth,
+                title = uiState.title,
+                onTitleChange = { viewModel.updateTitle(it) }
+            )
+        }
 
         // 折叠配置区 (28%高度)
         CollapsibleConfigSection(
@@ -249,8 +261,17 @@ fun CreateTaskScreen(
             onCancel = onBackPressed,
             isEnabled = uiState.title.isNotBlank(),
             isListening = isASRRecording,
-            onVoiceStart = { onVoiceStart() },
-            onVoiceEnd = { onVoiceEnd() }
+            isModelReady = isModelReady,
+            onVoiceStart = {
+                val granted = checkAndRequestPermission()
+                Timber.tag("VoiceButton").d("onVoiceStart: permission=$granted")
+                if (granted) viewModel.startASR()
+                granted
+            },
+            onVoiceEnd = {
+                Timber.tag("VoiceButton").d("onVoiceEnd: 调用 stopASR")
+                viewModel.stopASR()
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -330,7 +351,7 @@ private fun CoreInputSection(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(70.dp),
+                .heightIn(min = 100.dp),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
                 containerColor = BgCard
@@ -341,8 +362,8 @@ private fun CoreInputSection(
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 BasicTextField(
                     value = title,
@@ -353,7 +374,7 @@ private fun CoreInputSection(
                         lineHeight = 20.sp
                     ),
                     modifier = Modifier.fillMaxWidth(),
-                    maxLines = 2,
+                    maxLines = 4,
                     decorationBox = { innerTextField ->
                         if (title.isEmpty()) {
                             Text(
@@ -1954,49 +1975,97 @@ private fun BottomActionSection(
     onCancel: () -> Unit,
     isEnabled: Boolean,
     isListening: Boolean,
-    onVoiceStart: () -> Unit,
+    isModelReady: Boolean,
+    onVoiceStart: () -> Boolean,
     onVoiceEnd: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 取消按钮
-        Text(
-            text = "取消",
-            color = TextPrimary,
-            fontSize = 16.sp,
-            modifier = Modifier.clickable { onCancel() }
-        )
+        // 取消按钮 — 拟态效果
+        Box(
+            modifier = Modifier
+                .width(64.dp)
+                .height(44.dp)
+                .shadow(4.dp, RoundedCornerShape(22.dp), ambientColor = Color.Black.copy(alpha = 0.1f), spotColor = Color.Black.copy(alpha = 0.15f))
+                .background(
+                    color = BgCard,
+                    shape = RoundedCornerShape(22.dp)
+                )
+                .clickable { onCancel() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "取消",
+                color = TextSecondary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
 
         // 麦克风按钮 — 长按录音，松开停止
         Box(
             modifier = Modifier
                 .weight(1f)
                 .height(44.dp)
+                .shadow(
+                    elevation = if (isListening) 8.dp else 4.dp,
+                    shape = RoundedCornerShape(22.dp),
+                    ambientColor = if (isListening) Primary.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.1f),
+                    spotColor = if (isListening) Primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.15f)
+                )
                 .background(
-                    color = if (isListening) Primary.copy(alpha = 0.15f) else Primary.copy(alpha = 0.08f),
+                    color = when {
+                        isListening -> Primary.copy(alpha = 0.15f)
+                        !isModelReady -> TextMuted.copy(alpha = 0.08f)
+                        else -> Primary.copy(alpha = 0.08f)
+                    },
                     shape = RoundedCornerShape(22.dp)
                 )
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onPress = {
-                            onVoiceStart()
-                            tryAwaitRelease()
-                            onVoiceEnd()
+                .then(
+                    if (isModelReady) {
+                        Modifier.pointerInput(Unit) {
+                            detectTapGestures(
+                                onPress = {
+                                    Timber.tag("VoiceButton").d("onPress: 手指按下")
+                                    val started = onVoiceStart()
+                                    Timber.tag("VoiceButton").d("onPress: started=$started")
+                                    if (started) {
+                                        Timber.tag("VoiceButton").d("onPress: 等待手指松开...")
+                                        tryAwaitRelease()
+                                        Timber.tag("VoiceButton").d("onPress: 手指已松开，调用 onVoiceEnd")
+                                        onVoiceEnd()
+                                    }
+                                }
+                            )
                         }
-                    )
-                },
+                    } else {
+                        Modifier
+                    }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                if (isListening) {
+                if (!isModelReady) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = TextMuted,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "端侧模型加载中...",
+                        fontSize = 14.sp,
+                        color = TextMuted
+                    )
+                } else if (isListening) {
                     Text("⏺", fontSize = 16.sp, color = Primary)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -2022,22 +2091,31 @@ private fun BottomActionSection(
             }
         }
 
-        // 保存任务按钮
-        Button(
-            onClick = onSave,
-            enabled = isEnabled,
+        // 保存任务按钮 — 拟态效果
+        Box(
             modifier = Modifier
-                .width(80.dp)
-                .height(40.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isEnabled) Primary else Primary.copy(alpha = 0.5f),
-                contentColor = if (isEnabled) Color.White else Color.White.copy(alpha = 0.8f)
-            )
+                .width(72.dp)
+                .height(44.dp)
+                .shadow(
+                    elevation = if (isEnabled) 6.dp else 2.dp,
+                    shape = RoundedCornerShape(22.dp),
+                    ambientColor = if (isEnabled) Primary.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.05f),
+                    spotColor = if (isEnabled) Primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.08f)
+                )
+                .background(
+                    color = if (isEnabled) Primary else Primary.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(22.dp)
+                )
+                .then(
+                    if (isEnabled) Modifier.clickable { onSave() } else Modifier
+                ),
+            contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "保存",
-                fontSize = 16.sp
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isEnabled) Color.White else Color.White.copy(alpha = 0.6f)
             )
         }
     }
@@ -2397,20 +2475,17 @@ private fun MonthDaySelector(
 }
 
 // ══════════════════════════════════════════════════════════════
-// AI 智能输入组件
+// AI 解析结果组件（独立区域，无输入框）
 // ══════════════════════════════════════════════════════════════
 
 @Composable
-private fun AIInputSection(
-    aiInputText: String,
+private fun AIResultSection(
     isAIParsing: Boolean,
     aiParseResult: AITaskParseResult?,
     aiParseResults: List<AITaskParseResult>,
     aiSelectedIndexes: Set<Int>,
     showAIResult: Boolean,
     aiError: String?,
-    onInputChange: (String) -> Unit,
-    onParse: () -> Unit,
     onApplyAndEdit: () -> Unit,
     onApplyAndCreate: () -> Unit,
     onDismissResult: () -> Unit,
@@ -2418,111 +2493,61 @@ private fun AIInputSection(
     onToggleSelection: (Int) -> Unit,
     onCreateSelected: () -> Unit
 ) {
-    val primaryColor = Primary
-    val borderColor = Border
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-    ) {
-        // 标题
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("✨", fontSize = 16.sp)
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "AI 智能输入",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = primaryColor
-            )
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // 输入框 + 按钮
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+    // AI 解析中
+    if (isAIParsing) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            OutlinedTextField(
-                value = aiInputText,
-                onValueChange = onInputChange,
-                placeholder = {
-                    Text(
-                        "试试：明天下午3点开项目周会",
-                        fontSize = 13.sp,
-                        color = TextMuted
-                    )
-                },
-                modifier = Modifier.weight(1f),
-                maxLines = 3,
-                enabled = !isAIParsing,
-                shape = RoundedCornerShape(10.dp),
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = primaryColor,
-                    unfocusedBorderColor = borderColor
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { onParse() })
-            )
-
-            // 解析按钮
-            val btnEnabled = aiInputText.isNotBlank() && !isAIParsing
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        color = if (btnEnabled) primaryColor else primaryColor.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    .clickable(enabled = btnEnabled, onClick = onParse),
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (isAIParsing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("🔮", fontSize = 20.sp)
-                }
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = Primary,
+                    strokeWidth = 2.dp
+                )
+                Text("AI 正在解析...", fontSize = 14.sp, color = Primary)
             }
         }
+    }
 
-        // 错误提示
-        if (aiError != null) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Danger.copy(alpha = 0.06f)),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, Danger.copy(alpha = 0.3f))
+    // 错误提示
+    if (aiError != null) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            colors = CardDefaults.cardColors(containerColor = Danger.copy(alpha = 0.06f)),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, Danger.copy(alpha = 0.3f))
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = aiError,
+                    fontSize = 12.sp,
+                    color = Danger,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    onClick = onDismissError,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text(
-                        text = aiError,
-                        fontSize = 12.sp,
-                        color = Danger,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(
-                        onClick = onDismissError,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text("关闭", fontSize = 12.sp, color = Danger)
-                    }
+                    Text("关闭", fontSize = 12.sp, color = Danger)
                 }
             }
         }
+    }
 
-        // AI 解析结果 — 单任务 / 多任务自适应
-        if (showAIResult && aiParseResults.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
+    // AI 解析结果卡片
+    if (showAIResult && aiParseResults.isNotEmpty()) {
+        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
             if (aiParseResults.size == 1) {
                 AIResultCard(
                     result = aiParseResult ?: aiParseResults.first(),

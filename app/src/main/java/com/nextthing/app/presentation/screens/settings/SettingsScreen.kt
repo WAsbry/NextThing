@@ -38,7 +38,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.nextthing.app.data.preferences.AIPreferences
 import com.nextthing.app.data.preferences.AIProvider
-import com.nextthing.app.data.preferences.ASRProvider
 import com.nextthing.app.presentation.theme.*
 import kotlinx.coroutines.launch
 
@@ -64,7 +63,6 @@ fun SettingsScreen(
 
     // 帮助弹窗状态
     var showAIHelpDialog by remember { mutableStateOf(false) }
-    var showIFlyHelpDialog by remember { mutableStateOf(false) }
     var showASRHelpDialog by remember { mutableStateOf(false) }
 
     // 监听操作消息，弹 Snackbar
@@ -111,24 +109,6 @@ fun SettingsScreen(
         )
     }
 
-    // 语音识别配置弹窗
-    if (uiState.showASRConfigDialog) {
-        ASRConfigDialog(
-            currentProvider = uiState.asrProvider,
-            currentZhipuApiKey = uiState.zhipuApiKey,
-            currentIFlyAppId = uiState.iflyAppId,
-            currentIFlyApiKey = uiState.iflyApiKey,
-            currentIFlyApiSecret = uiState.iflyApiSecret,
-            currentIFlyAccent = uiState.iflyAccent,
-            onProviderChange = { viewModel.saveASRProvider(it) },
-            onSaveZhiPu = { viewModel.saveZhiPuApiKey(it) },
-            onSaveIFly = { appId, key, secret, accent ->
-                viewModel.saveIFlyConfig(appId, key, secret, accent)
-            },
-            onDismiss = { viewModel.hideASRConfigDialog() }
-        )
-    }
-
     // 早晚报配置弹窗
     if (uiState.showBriefingDialog) {
         BriefingConfigDialog(
@@ -152,7 +132,6 @@ fun SettingsScreen(
     // 语音识别帮助弹窗
     if (showASRHelpDialog) {
         ASRHelpDialog(
-            currentProvider = uiState.asrProvider,
             onDismiss = { showASRHelpDialog = false }
         )
     }
@@ -283,15 +262,9 @@ fun SettingsScreen(
                         icon = "🎙",
                         iconBgColor = Color(0xFF0277BD),
                         title = "语音识别",
-                        subtitle = when (uiState.asrProvider) {
-                            ASRProvider.IFLY -> if (uiState.iflyAppId.isNotBlank())
-                                "讯飞 · 已配置 · ${accentDisplayName(uiState.iflyAccent)}"
-                            else "讯飞 · 未配置"
-                            ASRProvider.ZHIPU -> if (uiState.zhipuApiKey.isNotBlank())
-                                "智谱 · 已配置"
-                            else "智谱 · 未配置"
-                        },
-                        onClick = { viewModel.showASRConfigDialog() },
+                        subtitle = "端侧 · 离线可用",
+                        showArrow = false,
+                        onClick = {},
                         onHelpClick = { showASRHelpDialog = true }
                     )
                     RowDivider()
@@ -801,181 +774,6 @@ private fun AIConfigDialog(
     )
 }
 
-// ── 方言显示名 ────────────────────────────────────────────────────
-
-private fun accentDisplayName(accent: String) = when (accent) {
-    "mandarin"  -> "普通话"
-    "lmz"       -> "四川话"
-    "cantonese" -> "粤语"
-    "jnu"       -> "江淮话"
-    "wuu"       -> "吴语"
-    else        -> accent
-}
-
-// ── 语音识别配置弹窗 ─────────────────────────────────────────────
-
-@Composable
-private fun ASRConfigDialog(
-    currentProvider: ASRProvider,
-    currentZhipuApiKey: String,
-    currentIFlyAppId: String,
-    currentIFlyApiKey: String,
-    currentIFlyApiSecret: String,
-    currentIFlyAccent: String,
-    onProviderChange: (ASRProvider) -> Unit,
-    onSaveZhiPu: (String) -> Unit,
-    onSaveIFly: (String, String, String, String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var selectedProvider by remember { mutableStateOf(currentProvider) }
-    var zhipuApiKey by remember { mutableStateOf(currentZhipuApiKey) }
-    var appId     by remember { mutableStateOf(currentIFlyAppId) }
-    var apiKey    by remember { mutableStateOf(currentIFlyApiKey) }
-    var apiSecret by remember { mutableStateOf(currentIFlyApiSecret) }
-    var accent    by remember { mutableStateOf(currentIFlyAccent) }
-
-    val accentOptions = listOf(
-        "lmz"       to "四川话",
-        "mandarin"  to "普通话",
-        "cantonese" to "粤语",
-        "jnu"       to "江淮话",
-        "wuu"       to "吴语"
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text("语音识别配置", fontWeight = FontWeight.Bold, color = TextPrimary)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Provider 选择
-                Text("识别引擎", fontSize = 13.sp, color = TextSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ASRProvider.entries.forEach { provider ->
-                        FilterChip(
-                            selected = selectedProvider == provider,
-                            onClick = {
-                                selectedProvider = provider
-                                onProviderChange(provider)
-                            },
-                            label = { Text(provider.displayName, fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF0277BD).copy(alpha = 0.15f),
-                                selectedLabelColor = Color(0xFF0277BD)
-                            )
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = Color(0xFFF0F0F0), modifier = Modifier.padding(vertical = 4.dp))
-
-                // 根据 provider 显示对应配置
-                if (selectedProvider == ASRProvider.ZHIPU) {
-                    OutlinedTextField(
-                        value = zhipuApiKey,
-                        onValueChange = { zhipuApiKey = it },
-                        label = { Text("智谱 API Key") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF0277BD),
-                            unfocusedBorderColor = Border
-                        )
-                    )
-                    Text(
-                        "API Key 在 open.bigmodel.cn → API Keys 中获取",
-                        fontSize = 11.sp,
-                        color = TextMuted
-                    )
-                } else {
-                    // 讯飞配置
-                    Text("识别语言 / 方言", fontSize = 13.sp, color = TextSecondary)
-                    androidx.compose.foundation.lazy.LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(accentOptions.size) { i ->
-                            val (code, label) = accentOptions[i]
-                            FilterChip(
-                                selected = accent == code,
-                                onClick = { accent = code },
-                                label = { Text(label, fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF0277BD).copy(alpha = 0.15f),
-                                    selectedLabelColor = Color(0xFF0277BD)
-                                )
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = appId,
-                        onValueChange = { appId = it },
-                        label = { Text("AppID") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF0277BD),
-                            unfocusedBorderColor = Border
-                        )
-                    )
-                    OutlinedTextField(
-                        value = apiKey,
-                        onValueChange = { apiKey = it },
-                        label = { Text("APIKey") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF0277BD),
-                            unfocusedBorderColor = Border
-                        )
-                    )
-                    OutlinedTextField(
-                        value = apiSecret,
-                        onValueChange = { apiSecret = it },
-                        label = { Text("APISecret") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF0277BD),
-                            unfocusedBorderColor = Border
-                        )
-                    )
-                    Text(
-                        "凭证在讯飞开放平台 → 我的应用 → 语音听写 中获取",
-                        fontSize = 11.sp,
-                        color = TextMuted
-                    )
-                }
-
-                Text(
-                    "所有凭证仅保存在本地设备，不会上传",
-                    fontSize = 11.sp,
-                    color = TextMuted
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (selectedProvider == ASRProvider.ZHIPU) {
-                        onSaveZhiPu(zhipuApiKey.trim())
-                    } else {
-                        onSaveIFly(appId.trim(), apiKey.trim(), apiSecret.trim(), accent)
-                    }
-                }
-            ) {
-                Text("保存", color = Color(0xFF0277BD), fontWeight = FontWeight.SemiBold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消", color = TextSecondary)
-            }
-        }
-    )
-}
-
 // ══════════════════════════════════════════════════════════════
 // AI 智能助手 帮助弹窗（全屏）
 // ══════════════════════════════════════════════════════════════
@@ -1078,7 +876,6 @@ private fun AIHelpDialog(onDismiss: () -> Unit) {
 
 @Composable
 private fun ASRHelpDialog(
-    currentProvider: ASRProvider,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -1100,103 +897,40 @@ private fun ASRHelpDialog(
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     HelpSection(
-                        title = "这是什么功能？",
-                        content = "语音识别让你可以用说话代替打字。\n\n" +
-                                "点击创建任务页面顶部的 🎙 麦克风按钮，\n" +
-                                "说出任务描述，语音会自动转为文字，\n" +
-                                "然后 AI 智能助手会自动解析并创建任务。"
+                        title = "端侧离线语音识别",
+                        content = "语音识别完全在本地设备运行，无需网络：\n\n" +
+                                "· 基于 Sherpa-ONNX + SenseVoice 模型\n" +
+                                "· 支持中英日韩粤 5 种语言\n" +
+                                "· 首次使用需加载模型（约 2~3 秒）\n" +
+                                "· 后续使用即时响应\n" +
+                                "· 所有数据不上传，完全隐私安全"
                     )
-
-                    HorizontalDivider(color = Color(0xFFF0F0F0))
-
-                    if (currentProvider == ASRProvider.ZHIPU) {
-                        HelpSection(
-                            title = "智谱 GLM-ASR",
-                            content = "智谱语音识别（GLM-ASR-2512）：\n" +
-                                    "· 行业领先准确率，字符错误率仅 0.0717\n" +
-                                    "· 支持普通话、粤语、英语等\n" +
-                                    "· 按音频时长计费：¥0.06/分钟\n" +
-                                    "· 新用户注册送 2000 万 tokens\n\n" +
-                                    "API Key 获取步骤：\n\n" +
-                                    "1. 打开智谱开放平台：\n" +
-                                    "   https://open.bigmodel.cn\n\n" +
-                                    "2. 注册并登录账号\n\n" +
-                                    "3. 进入「API Keys」页面\n\n" +
-                                    "4. 点击「添加 API Key」\n\n" +
-                                    "5. 复制生成的 Key\n\n" +
-                                    "6. 回到本 App → 设置 → 语音识别\n" +
-                                    "   选择「智谱」→ 粘贴 API Key → 保存"
-                        )
-
-                        HorizontalDivider(color = Color(0xFFF0F0F0))
-
-                        HelpSection(
-                            title = "使用方式",
-                            content = "智谱 ASR 采用录音后上传方式：\n\n" +
-                                    "1. 按下麦克风按钮，开始录音\n" +
-                                    "2. 说出任务描述\n" +
-                                    "3. 再次点击按钮停止录音\n" +
-                                    "4. 音频上传后自动识别为文字\n" +
-                                    "5. AI 自动解析并创建任务"
-                        )
-                    } else {
-                        HelpSection(
-                            title = "讯飞语音识别",
-                            content = "讯飞语音识别（WebSocket 实时流式）：\n" +
-                                    "· 实时边说边识别\n" +
-                                    "· 支持普通话、四川话、粤语等方言\n" +
-                                    "· 每天免费 500 次\n\n" +
-                                    "凭证获取步骤：\n\n" +
-                                    "1. 打开讯飞开放平台：\n" +
-                                    "   https://www.xfyun.cn\n\n" +
-                                    "2. 注册并登录账号\n\n" +
-                                    "3. 进入「控制台」→「创建新应用」\n\n" +
-                                    "4. 进入应用 → 左侧「语音听写（流式版）」\n" +
-                                    "   点击「立即开通」\n\n" +
-                                    "5. 获取 AppID / APIKey / APISecret\n\n" +
-                                    "6. 回到本 App → 设置 → 语音识别\n" +
-                                    "   选择「讯飞」→ 填入三个值 → 保存"
-                        )
-
-                        HorizontalDivider(color = Color(0xFFF0F0F0))
-
-                        HelpSection(
-                            title = "方言支持",
-                            content = "普通话和英语：注册即可免费使用\n\n" +
-                                    "四川话 / 粤语 / 其他方言：\n" +
-                                    "需要在讯飞平台额外开通，方言为付费功能。\n\n" +
-                                    "如果只用普通话，选择「普通话」即可。"
-                        )
-                    }
 
                     HorizontalDivider(color = Color(0xFFF0F0F0))
 
                     HelpSection(
                         title = "如何使用？",
-                        content = "配置完成后，进入「创建任务」页面：\n\n" +
-                                "1. 点击右上角 🎙 麦克风按钮\n" +
-                                "   （首次使用会请求麦克风权限，请允许）\n\n" +
-                                "2. 对着手机说出任务描述\n" +
-                                "   例如：「明天下午三点开会」\n\n" +
-                                "3. 再次点击按钮停止录音\n\n" +
-                                "4. 识别出的文字会自动填入输入框\n\n" +
-                                "5. AI 会自动解析并弹出结果卡片\n\n" +
-                                "6. 选择「继续编辑」或「直接创建」"
+                        content = "进入「创建任务」页面：\n\n" +
+                                "1. 等待麦克风按钮显示「长按说话」\n" +
+                                "   （首次加载模型时显示「端侧模型加载中...」）\n\n" +
+                                "2. 长按麦克风按钮，开始录音\n\n" +
+                                "3. 说出任务描述，例如：「明天下午三点开会」\n\n" +
+                                "4. 松开按钮停止录音\n\n" +
+                                "5. 识别出的文字自动填入输入框\n\n" +
+                                "6. AI 自动解析并创建任务"
                     )
 
                     HorizontalDivider(color = Color(0xFFF0F0F0))
 
                     HelpSection(
                         title = "常见问题",
-                        content = "Q: 语音识别无反应？\n" +
-                                "A: 请检查是否授予麦克风权限，\n" +
-                                "   以及语音识别配置是否正确。\n\n" +
+                        content = "Q: 按钮显示「端侧模型加载中...」？\n" +
+                                "A: 首次使用需加载约 230MB 模型到内存，\n" +
+                                "   请等待 2~3 秒。\n\n" +
                                 "Q: 识别不准确？\n" +
                                 "A: 请在安静环境说话，语速适中，靠近麦克风。\n\n" +
-                                "Q: 智谱提示 401？\n" +
-                                "A: API Key 无效，请到 open.bigmodel.cn 重新获取。\n\n" +
-                                "Q: 讯飞提示鉴权失败？\n" +
-                                "A: 请检查 AppID、APIKey、APISecret 是否正确。"
+                                "Q: 识别无反应？\n" +
+                                "A: 请检查是否授予麦克风权限。"
                     )
 
                     Spacer(modifier = Modifier.height(32.dp))

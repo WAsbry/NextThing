@@ -8,15 +8,14 @@ import com.nextthing.app.data.preferences.ThemePreferences
 import com.nextthing.app.data.preferences.AIPreferences
 import com.nextthing.app.data.preferences.AIProvider
 import com.nextthing.app.data.preferences.ASRPreferences
-import com.nextthing.app.data.preferences.ASRProvider
 import com.nextthing.app.data.preferences.BriefingPreferences
-import com.nextthing.app.data.preferences.IFlyPreferences
 import com.nextthing.app.domain.model.ThemeMode
 import com.nextthing.app.domain.usecase.AchievementUseCases
 import com.nextthing.app.domain.model.AchievementProgress
 import com.nextthing.app.domain.model.AchievementType
 import com.nextthing.app.domain.usecase.TaskUseCases
 import com.nextthing.app.domain.usecase.UserUseCases
+import com.nextthing.app.domain.service.ASRService
 import com.nextthing.app.data.local.dao.TaskDao
 import com.nextthing.app.data.local.dao.GeofenceLocationDao
 import com.nextthing.app.data.export.ExportFormat
@@ -59,13 +58,7 @@ data class SettingsUiState(
     val aiApiKey: String = "",
     val aiModel: String = "",
     val showAIConfigDialog: Boolean = false,
-    // 语音识别配置
-    val asrProvider: ASRProvider = ASRProvider.IFLY,
-    val zhipuApiKey: String = "",
-    val iflyAppId: String = "",
-    val iflyApiKey: String = "",
-    val iflyApiSecret: String = "",
-    val iflyAccent: String = "lmz",
+    // 语音识别配置（端侧，无需额外配置）
     val showASRConfigDialog: Boolean = false,
     // 导出
     val showExportSheet: Boolean = false,
@@ -92,7 +85,7 @@ class SettingsViewModel @Inject constructor(
     private val geofenceLocationDao: GeofenceLocationDao,
     private val aiPreferences: AIPreferences,
     private val asrPreferences: ASRPreferences,
-    private val iflyPreferences: IFlyPreferences,
+    private val asrService: ASRService,
     private val briefingPreferences: BriefingPreferences,
     private val taskExporter: TaskExporter
 ) : ViewModel() {
@@ -109,7 +102,6 @@ class SettingsViewModel @Inject constructor(
         observeThemeMode()
         observeAISettings()
         observeASRSettings()
-        observeIFlySettings()
         observeBriefingSettings()
     }
 
@@ -292,64 +284,11 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // ── 语音识别配置 ──────────────────────────────────────────
+    // ── 语音识别配置（端侧，初始化时预热） ─────────────────────────
 
     private fun observeASRSettings() {
-        viewModelScope.launch {
-            asrPreferences.provider.collect { _uiState.value = _uiState.value.copy(asrProvider = it) }
-        }
-        viewModelScope.launch {
-            asrPreferences.zhipuApiKey.collect { _uiState.value = _uiState.value.copy(zhipuApiKey = it) }
-        }
-    }
-
-    private fun observeIFlySettings() {
-        viewModelScope.launch {
-            iflyPreferences.appId.collect { _uiState.value = _uiState.value.copy(iflyAppId = it) }
-        }
-        viewModelScope.launch {
-            iflyPreferences.apiKey.collect { _uiState.value = _uiState.value.copy(iflyApiKey = it) }
-        }
-        viewModelScope.launch {
-            iflyPreferences.apiSecret.collect { _uiState.value = _uiState.value.copy(iflyApiSecret = it) }
-        }
-        viewModelScope.launch {
-            iflyPreferences.accent.collect { _uiState.value = _uiState.value.copy(iflyAccent = it) }
-        }
-    }
-
-    fun showASRConfigDialog() {
-        _uiState.value = _uiState.value.copy(showASRConfigDialog = true)
-    }
-
-    fun hideASRConfigDialog() {
-        _uiState.value = _uiState.value.copy(showASRConfigDialog = false)
-    }
-
-    fun saveASRProvider(provider: ASRProvider) {
-        viewModelScope.launch { asrPreferences.setProvider(provider) }
-    }
-
-    fun saveZhiPuApiKey(key: String) {
-        viewModelScope.launch {
-            asrPreferences.setZhipuApiKey(key)
-            _uiState.value = _uiState.value.copy(
-                actionMessage = if (key.isNotBlank()) "智谱配置已保存" else "智谱配置已清除"
-            )
-        }
-    }
-
-    fun saveIFlyConfig(appId: String, apiKey: String, apiSecret: String, accent: String) {
-        viewModelScope.launch {
-            iflyPreferences.setAppId(appId)
-            iflyPreferences.setApiKey(apiKey)
-            iflyPreferences.setApiSecret(apiSecret)
-            iflyPreferences.setAccent(accent)
-            _uiState.value = _uiState.value.copy(
-                showASRConfigDialog = false,
-                actionMessage = if (appId.isNotBlank()) "讯飞配置已保存" else "讯飞配置已清除"
-            )
-        }
+        // 端侧 ASR 无需额外配置，启动时预热
+        asrService.warmUp()
     }
 
     // ── 导出数据 ───────────────────────────────────────────

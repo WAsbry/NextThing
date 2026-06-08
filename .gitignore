@@ -22,3 +22,11 @@ release.keystore
 
 # Documentation (local only)
 doc/
+
+# AI models (>100MB, GitHub limit)
+*.onnx
+*.pth
+*.bin
+
+# Native libs (>50MB)
+*.so

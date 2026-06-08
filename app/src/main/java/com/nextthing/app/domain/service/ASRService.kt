@@ -1,7 +1,21 @@
 package com.nextthing.app.domain.service
 
+import kotlinx.coroutines.flow.StateFlow
+
 interface ASRService {
     suspend fun isConfigured(): Boolean
+
+    /**
+     * 模型是否已加载就绪
+     * 云端 ASR 始终返回 true，端侧 ASR 模型加载完成后才返回 true
+     */
+    val isReady: StateFlow<Boolean>
+
+    /**
+     * 预热模型（后台加载，不阻塞 UI）
+     * 云端 ASR 无需操作，端侧 ASR 在后台初始化模型
+     */
+    fun warmUp() {}
 
     /**
      * 开始语音识别。

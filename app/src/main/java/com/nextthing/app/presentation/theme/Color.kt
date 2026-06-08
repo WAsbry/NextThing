@@ -18,28 +18,31 @@ data class AppColors(
     val textPrimary: Color,
     val textSecondary: Color,
     val textMuted: Color,
-    val border: Color
+    val border: Color,
+    val swipeComplete: Color = Color(0xFF8B7FF7),
+    val swipePostpone: Color = Color(0xFF6C5CE7),
+    val swipeCancel: Color = Color(0xFF4A3BC1)
 )
 
 val LightAppColors = AppColors(
-    primary = Color(0xFF4FC3F7),
-    primaryDark = Color(0xFF29B6F6),
+    primary = Color(0xFF6C5CE7),
+    primaryDark = Color(0xFF5A4BD1),
     success = Color(0xFF4CAF50),
     warning = Color(0xFFFF9800),
     danger = Color(0xFFF44336),
     accentPurple = Color(0xFFAB47BC),
-    bgPrimary = Color(0xFFF5F7FA),
+    bgPrimary = Color(0xFFF8F9FC),
     bgCard = Color(0xFFFFFFFF),
-    bgSecondary = Color(0xFFECF0F1),
-    textPrimary = Color(0xFF2C3E50),
-    textSecondary = Color(0xFF7F8C8D),
-    textMuted = Color(0xFFBDC3C7),
-    border = Color(0xFFE8EDF3)
+    bgSecondary = Color(0xFFF1F3F8),
+    textPrimary = Color(0xFF2D3436),
+    textSecondary = Color(0xFF636E72),
+    textMuted = Color(0xFFB2BEC3),
+    border = Color(0xFFE8ECF1)
 )
 
 val DarkAppColors = AppColors(
-    primary = Color(0xFF4FC3F7),
-    primaryDark = Color(0xFF29B6F6),
+    primary = Color(0xFFA29BFE),
+    primaryDark = Color(0xFF6C5CE7),
     success = Color(0xFF66BB6A),
     warning = Color(0xFFFFB74D),
     danger = Color(0xFFEF5350),

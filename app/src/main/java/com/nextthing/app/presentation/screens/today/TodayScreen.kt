@@ -121,9 +121,9 @@ fun TodayScreen(
     // 粒子爆炸动画全局状态
     var explodingTaskId by remember { mutableStateOf<String?>(null) }
     var explodingColor by remember { mutableStateOf(Color.Transparent) }
-    val successColor = Success
-    val warningColor = Warning
-    val dangerColor = Danger
+    val successColor = Color(0xFF8B7FF7)
+    val warningColor = Color(0xFF6C5CE7)
+    val dangerColor = Color(0xFF4A3BC1)
     var pendingCompleteTaskId by remember { mutableStateOf<String?>(null) }
     var pendingPostponeTaskId by remember { mutableStateOf<String?>(null) }
     var pendingPostponeReason by remember { mutableStateOf<String?>(null) }
@@ -524,12 +524,34 @@ private fun TopHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "NextThing",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextPrimary
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            // NT Logo
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "NT",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-0.5).sp
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "NextThing",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary
+            )
+        }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             // 日历图标
@@ -915,7 +937,7 @@ private fun TaskItem(
                     .fillMaxHeight()
                     .background(
                         brush = Brush.verticalGradient(
-                            colors = listOf(Success.copy(alpha = 0.9f), Success)
+                            colors = listOf(Color(0xFFA29BFE), Color(0xFF8B7FF7))
                         )
                     )
                     .clickable {
@@ -942,7 +964,7 @@ private fun TaskItem(
                     .fillMaxHeight()
                     .background(
                         brush = Brush.verticalGradient(
-                            colors = listOf(Warning.copy(alpha = 0.9f), Warning)
+                            colors = listOf(Color(0xFF7C6FF7), Color(0xFF6C5CE7))
                         )
                     )
                     .clickable {
@@ -969,7 +991,7 @@ private fun TaskItem(
                     .fillMaxHeight()
                     .background(
                         brush = Brush.verticalGradient(
-                            colors = listOf(Danger.copy(alpha = 0.9f), Danger)
+                            colors = listOf(Color(0xFF5A4BD1), Color(0xFF4A3BC1))
                         )
                     )
                     .clickable {

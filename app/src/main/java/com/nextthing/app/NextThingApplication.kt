@@ -8,6 +8,7 @@ import com.nextthing.app.data.preferences.BriefingPreferences
 import com.nextthing.app.data.local.dao.StartupTraceDao
 import com.nextthing.app.domain.repository.TaskRepository
 import com.nextthing.app.domain.usecase.GeofenceUseCases
+import com.nextthing.app.domain.service.ASRService
 import com.nextthing.app.domain.service.GeofenceManager
 import com.nextthing.app.domain.service.GeofenceData
 import com.nextthing.app.performance.StartupTraceCollector
@@ -32,9 +33,19 @@ class NextThingApplication : Application(), Configuration.Provider {
     @Inject lateinit var geofenceUseCases: GeofenceUseCases
     @Inject lateinit var geofenceManager: GeofenceManager
     @Inject lateinit var briefingPreferences: BriefingPreferences
+    @Inject lateinit var asrService: ASRService
 
     // 应用级协程作用域
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    companion object {
+        private var deferredInitRunnable: (() -> Unit)? = null
+
+        fun onFirstScreenReady() {
+            deferredInitRunnable?.invoke()
+            deferredInitRunnable = null
+        }
+    }
 
     override fun attachBaseContext(base: Context) {
         StartupTracker.init()
@@ -52,114 +63,105 @@ class NextThingApplication : Application(), Configuration.Provider {
         StartupTracker.record("timber_init")
         Timber.d("✅ [Application] NextThingApplication 开始初始化...")
 
-        try {
-            Timber.d("🔍 [Application] 检查Hilt依赖注入状态...")
-
-            // 检查基本依赖
-            Timber.d("📋 [Application] TaskRepository: ${taskRepository.javaClass.simpleName}")
-            Timber.d("🏭 [Application] WorkerFactory: ${workerFactory.javaClass.simpleName}")
-
-            Timber.d("✅ [Application] 基本依赖注入成功")
-
-        } catch (e: Exception) {
-            Timber.e(e, "❌ [Application] 基本依赖注入失败")
-        }
-
-        // 定时同步调度
-        try {
-            SyncScheduler.schedulePeriodicSync(this)
-            StartupTracker.record("sync_scheduler")
-            Timber.d("✅ [Application] SyncScheduler 初始化成功")
-        } catch (e: Exception) {
-            Timber.e(e, "❌ [Application] SyncScheduler 初始化失败")
-        }
-
-        // 定时逾期检测调度
-        try {
-            TaskWorkScheduler.scheduleOverdueCheck(this)
-            TaskWorkScheduler.triggerImmediateOverdueCheck(this)
-            StartupTracker.record("overdue_scheduler")
-            Timber.d("✅ [Application] 逾期检测 TaskWorkScheduler 初始化成功")
-        } catch (e: Exception) {
-            Timber.e(e, "❌ [Application] 逾期检测 TaskWorkScheduler 初始化失败")
-        }
-
-        // 定时延期转待办调度
-        try {
-            TaskWorkScheduler.scheduleDelayedConversion(this)
-            TaskWorkScheduler.triggerImmediateDelayedConversion(this)
-            StartupTracker.record("delayed_convert")
-            Timber.d("✅ [Application] 延期转待办 TaskWorkScheduler 初始化成功")
-        } catch (e: Exception) {
-            Timber.e(e, "❌ [Application] 延期转待办 TaskWorkScheduler 初始化失败")
-        }
-
-        // 任务通知调度
-        try {
-            TaskWorkScheduler.scheduleTaskNotifications(this)
-            StartupTracker.record("notification_sched")
-            Timber.d("✅ [Application] 任务通知 TaskWorkScheduler 初始化成功")
-        } catch (e: Exception) {
-            Timber.e(e, "❌ [Application] 任务通知 TaskWorkScheduler 初始化失败")
-        }
-
-        // 倒计时通知更新调度
-        try {
-            TaskWorkScheduler.scheduleCountdownUpdates(this)
-            StartupTracker.record("countdown_sched")
-            Timber.d("✅ [Application] 倒计时更新 TaskWorkScheduler 初始化成功")
-        } catch (e: Exception) {
-            Timber.e(e, "❌ [Application] 倒计时更新 TaskWorkScheduler 初始化失败")
-        }
-
-        // 重复任务生成调度
-        try {
-            TaskWorkScheduler.scheduleRecurringTaskGeneration(this)
-            TaskWorkScheduler.triggerImmediateRecurringTaskGeneration(this)
-            StartupTracker.record("recurring_sched")
-            Timber.d("✅ [Application] 重复任务生成 TaskWorkScheduler 初始化成功")
-        } catch (e: Exception) {
-            Timber.e(e, "❌ [Application] 重复任务生成 TaskWorkScheduler 初始化失败")
-        }
-
-        // 智能早晚报调度
-        applicationScope.launch {
-            try {
-                if (briefingPreferences.isEnabledOnce()) {
-                    val mHour = briefingPreferences.getMorningHourOnce()
-                    val mMin = briefingPreferences.getMorningMinuteOnce()
-                    val eHour = briefingPreferences.getEveningHourOnce()
-                    val eMin = briefingPreferences.getEveningMinuteOnce()
-                    TaskWorkScheduler.scheduleMorningBriefing(this@NextThingApplication, mHour, mMin)
-                    TaskWorkScheduler.scheduleEveningBriefing(this@NextThingApplication, eHour, eMin)
-                    Timber.d("✅ [Application] 早晚报调度成功: 早报 %02d:%02d, 晚报 %02d:%02d", mHour, mMin, eHour, eMin)
-                } else {
-                    Timber.d("ℹ️ [Application] 早晚报未启用")
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "❌ [Application] 早晚报调度失败")
-            }
-        }
-
-        // 地理围栏初始化
-        try {
-            initializeGeofences()
-            StartupTracker.record("geofence_init")
-            Timber.d("✅ [Application] 地理围栏初始化开始")
-        } catch (e: Exception) {
-            Timber.e(e, "❌ [Application] 地理围栏初始化失败")
-        }
-
         StartupTracker.record("app_onCreate_end")
         Timber.d("🎉 [Application] NextThingApplication 初始化完成")
 
-        // 异步刷启动打点到 Room
-        applicationScope.launch {
+        // 非关键初始化延迟到首屏渲染后执行
+        deferredInitRunnable = {
+            StartupTracker.record("deferred_init_start")
+
+            // 端侧 ASR 模型预热（后台加载，不阻塞 UI）
             try {
-                StartupTraceCollector.flushNewToDatabase(startupTraceDao)
-                Timber.d("✅ [Application] 启动打点已刷入数据库")
+                asrService.warmUp()
+                StartupTracker.record("asr_warmup")
             } catch (e: Exception) {
-                Timber.e(e, "❌ [Application] 启动打点刷入失败")
+                Timber.e(e, "❌ ASR 预热失败")
+            }
+
+            // 定时同步调度
+            try {
+                SyncScheduler.schedulePeriodicSync(this)
+                StartupTracker.record("sync_scheduler")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ SyncScheduler 初始化失败")
+            }
+
+            // 定时逾期检测调度
+            try {
+                TaskWorkScheduler.scheduleOverdueCheck(this)
+                TaskWorkScheduler.triggerImmediateOverdueCheck(this)
+                StartupTracker.record("overdue_scheduler")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ 逾期检测初始化失败")
+            }
+
+            // 定时延期转待办调度
+            try {
+                TaskWorkScheduler.scheduleDelayedConversion(this)
+                TaskWorkScheduler.triggerImmediateDelayedConversion(this)
+                StartupTracker.record("delayed_convert")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ 延期转待办初始化失败")
+            }
+
+            // 任务通知调度
+            try {
+                TaskWorkScheduler.scheduleTaskNotifications(this)
+                StartupTracker.record("notification_sched")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ 任务通知初始化失败")
+            }
+
+            // 倒计时通知更新调度
+            try {
+                TaskWorkScheduler.scheduleCountdownUpdates(this)
+                StartupTracker.record("countdown_sched")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ 倒计时更新初始化失败")
+            }
+
+            // 重复任务生成调度
+            try {
+                TaskWorkScheduler.scheduleRecurringTaskGeneration(this)
+                TaskWorkScheduler.triggerImmediateRecurringTaskGeneration(this)
+                StartupTracker.record("recurring_sched")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ 重复任务生成初始化失败")
+            }
+
+            // 智能早晚报调度
+            applicationScope.launch {
+                try {
+                    if (briefingPreferences.isEnabledOnce()) {
+                        val mHour = briefingPreferences.getMorningHourOnce()
+                        val mMin = briefingPreferences.getMorningMinuteOnce()
+                        val eHour = briefingPreferences.getEveningHourOnce()
+                        val eMin = briefingPreferences.getEveningMinuteOnce()
+                        TaskWorkScheduler.scheduleMorningBriefing(this@NextThingApplication, mHour, mMin)
+                        TaskWorkScheduler.scheduleEveningBriefing(this@NextThingApplication, eHour, eMin)
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "❌ 早晚报调度失败")
+                }
+            }
+
+            // 地理围栏初始化
+            try {
+                initializeGeofences()
+                StartupTracker.record("geofence_init")
+            } catch (e: Exception) {
+                Timber.e(e, "❌ 地理围栏初始化失败")
+            }
+
+            StartupTracker.record("deferred_init_end")
+
+            // 异步刷启动打点到 Room
+            applicationScope.launch {
+                try {
+                    StartupTraceCollector.flushNewToDatabase(startupTraceDao)
+                } catch (e: Exception) {
+                    Timber.e(e, "❌ 启动打点刷入失败")
+                }
             }
         }
     }

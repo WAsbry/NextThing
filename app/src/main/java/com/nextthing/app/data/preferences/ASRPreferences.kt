@@ -11,11 +11,6 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class ASRProvider(val displayName: String) {
-    IFLY("讯飞"),
-    ZHIPU("智谱")
-}
-
 @Singleton
 class ASRPreferences @Inject constructor(
     @ApplicationContext private val context: Context
@@ -23,26 +18,16 @@ class ASRPreferences @Inject constructor(
     companion object {
         private val Context.asrDataStore by preferencesDataStore(name = "asr_prefs")
         private val KEY_PROVIDER = stringPreferencesKey("asr_provider")
-        private val KEY_ZHIPU_API_KEY = stringPreferencesKey("zhipu_api_key")
     }
 
-    val provider: Flow<ASRProvider> = context.asrDataStore.data.map { prefs ->
-        val name = prefs[KEY_PROVIDER] ?: ASRProvider.IFLY.name
-        try { ASRProvider.valueOf(name) } catch (_: Exception) { ASRProvider.IFLY }
+    // 端侧 ASR 始终可用
+    val provider: Flow<String> = context.asrDataStore.data.map { prefs ->
+        prefs[KEY_PROVIDER] ?: "SHERPA"
     }
 
-    val zhipuApiKey: Flow<String> = context.asrDataStore.data.map { it[KEY_ZHIPU_API_KEY] ?: "" }
+    suspend fun getProviderOnce(): String = provider.first()
 
-    suspend fun getProviderOnce(): ASRProvider = provider.first()
-    suspend fun getZhipuApiKeyOnce(): String = zhipuApiKey.first()
-
-    suspend fun setProvider(provider: ASRProvider) {
-        context.asrDataStore.edit { it[KEY_PROVIDER] = provider.name }
+    suspend fun setProvider(provider: String) {
+        context.asrDataStore.edit { it[KEY_PROVIDER] = provider }
     }
-
-    suspend fun setZhipuApiKey(key: String) {
-        context.asrDataStore.edit { it[KEY_ZHIPU_API_KEY] = key }
-    }
-
-    suspend fun isZhiPuConfigured(): Boolean = getZhipuApiKeyOnce().isNotBlank()
 }

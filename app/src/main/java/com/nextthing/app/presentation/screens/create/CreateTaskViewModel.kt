@@ -54,6 +54,9 @@ class CreateTaskViewModel @Inject constructor(
     private val _isASRRecording = MutableStateFlow(false)
     val isASRRecording: StateFlow<Boolean> = _isASRRecording.asStateFlow()
 
+    // 端侧模型是否就绪（透传 ASRService 的状态）
+    val isModelReady: StateFlow<Boolean> = asrService.isReady
+
     private val _categories = MutableStateFlow<List<CategoryItem>>(emptyList())
     val categories: StateFlow<List<CategoryItem>> = _categories.asStateFlow()
 
@@ -72,6 +75,8 @@ class CreateTaskViewModel @Inject constructor(
         loadDefaultRadius()
         loadLastSelectedNotificationStrategy()
         loadLastSelectedGeofenceLocation()
+        // 预热端侧 ASR 模型
+        asrService.warmUp()
     }
 
     private fun initializeDefaultDateTime() {
@@ -402,7 +407,7 @@ class CreateTaskViewModel @Inject constructor(
     }
 
     fun parseWithAI() {
-        val text = _uiState.value.aiInputText.trim()
+        val text = _uiState.value.title.trim()
         Timber.tag("AI-Flow").d("parseWithAI() 被调用, text=$text")
         if (text.isBlank()) {
             Timber.tag("AI-Flow").w("parseWithAI: text 为空，跳过")
@@ -564,12 +569,12 @@ class CreateTaskViewModel @Inject constructor(
         asrService.start(
             onPartial = { text ->
                 Timber.tag("ASR-Flow").d("onPartial: $text")
-                _uiState.value = _uiState.value.copy(aiInputText = text)
+                _uiState.value = _uiState.value.copy(title = text)
             },
             onFinal = { text ->
                 Timber.tag("ASR-Flow").d("onFinal: $text")
                 _isASRRecording.value = false
-                _uiState.value = _uiState.value.copy(aiInputText = text)
+                _uiState.value = _uiState.value.copy(title = text)
                 if (text.isNotBlank()) {
                     Timber.tag("ASR-Flow").d("触发 parseWithAI()")
                     parseWithAI()

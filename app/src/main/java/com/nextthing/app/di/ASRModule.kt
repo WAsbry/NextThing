@@ -1,6 +1,6 @@
 package com.nextthing.app.di
 
-import com.nextthing.app.data.asr.DelegatingASRService
+import com.nextthing.app.data.asr.SherpaASRService
 import com.nextthing.app.domain.service.ASRService
 import dagger.Module
 import dagger.Provides
@@ -14,5 +14,5 @@ object ASRModule {
 
     @Provides
     @Singleton
-    fun provideASRService(delegating: DelegatingASRService): ASRService = delegating
+    fun provideASRService(sherpa: SherpaASRService): ASRService = sherpa
 }

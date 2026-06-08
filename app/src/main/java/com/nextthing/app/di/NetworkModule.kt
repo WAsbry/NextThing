@@ -3,6 +3,7 @@ package com.nextthing.app.di
 import com.nextthing.app.data.remote.api.AuthApi
 import com.nextthing.app.data.remote.api.TaskApi
 import com.nextthing.app.data.remote.api.SyncApi
+import com.nextthing.app.data.remote.api.AIChatApi
 import com.nextthing.app.data.remote.interceptor.AuthInterceptor
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -15,6 +16,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -65,4 +67,42 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideSyncApi(retrofit: Retrofit): SyncApi = retrofit.create(SyncApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("ai")
+    fun provideAIOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    @Named("ai-backend")
+    fun provideAIBackendOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+        return OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(authInterceptor)
+            .addInterceptor(logging)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAIChatApi(gson: Gson, @Named("ai-backend") client: OkHttpClient): AIChatApi {
+        return Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .client(client)
+            .build()
+            .create(AIChatApi::class.java)
+    }
 }
