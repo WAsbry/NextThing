@@ -13,6 +13,7 @@ import com.nextthing.app.domain.service.AITaskParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import timber.log.Timber
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -48,7 +49,15 @@ class AITaskParserService @Inject constructor(
             Result.success(parseJsonToResults(response.reply))
         } catch (e: Exception) {
             Timber.tag("AI").e(e, "任务解析失败")
-            Result.failure(Exception("AI 任务解析失败: ${e.message}"))
+            val message = when {
+                e is HttpException && e.code() == 401 ->
+                    "登录状态已过期，请重新登录后再试"
+                e is HttpException ->
+                    "AI 服务请求失败（HTTP ${e.code()}）"
+                else ->
+                    "AI 任务解析失败: ${e.message}"
+            }
+            Result.failure(Exception(message))
         }
     }
 

@@ -73,6 +73,7 @@ fun NextThingNavigation(
             val hideBottomBar = currentRoute == Screen.Focus.route
                 || currentRoute == Screen.Login.route
                 || currentRoute == Screen.Splash.route
+                || currentRoute == Screen.CreateTask.route
                 || currentRoute == Screen.CategoryManagement.route
                 || currentRoute == Screen.ThemeSettings.route
                 || currentRoute?.startsWith("repeat_custom") == true

@@ -55,6 +55,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -77,6 +79,7 @@ import com.nextthing.app.domain.model.LocationInfo
 import com.nextthing.app.domain.model.TaskImportanceUrgency
 import com.nextthing.app.domain.model.NotificationStrategy
 import com.nextthing.app.presentation.theme.*
+import com.nextthing.app.presentation.components.SimplePermissionDialog
 import com.nextthing.app.domain.model.AITaskParseResult
 import com.nextthing.app.domain.model.RepeatFrequencyType
 import androidx.compose.foundation.text.KeyboardActions
@@ -139,11 +142,16 @@ fun CreateTaskScreen(
         )
     }
 
+    // 权限拒绝引导弹窗状态
+    var showMicPermissionDialog by remember { mutableStateOf(false) }
+    var showCameraPermissionDialog by remember { mutableStateOf(false) }
+
     // 麦克风权限请求（授权后不自动录音，等用户再次长按）
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasMicPermission = granted
+        if (!granted) showMicPermissionDialog = true
     }
 
     // 检查权限并请求（无权限时弹窗，返回 false）
@@ -160,122 +168,93 @@ fun CreateTaskScreen(
         return true
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BgPrimary)
-    ) {
-        // 顶部导航区 (8%高度)
-        TopNavigationSection(
-            screenHeight = screenHeight,
-            screenWidth = screenWidth,
-            onBackPressed = onBackPressed
-        )
-
-        // AI 解析结果卡片（独立区域，显示时隐藏标题输入框）
-        AIResultSection(
-            isAIParsing = uiState.isAIParsing,
-            aiParseResult = uiState.aiParseResult,
-            aiParseResults = uiState.aiParseResults,
-            aiSelectedIndexes = uiState.aiSelectedIndexes,
-            showAIResult = uiState.showAIResult,
-            aiError = uiState.aiError,
-            onApplyAndEdit = { viewModel.applyAIResult() },
-            onApplyAndCreate = { viewModel.applyAIResultAndCreate(); onBackPressed() },
-            onDismissResult = { viewModel.dismissAIResult() },
-            onDismissError = { viewModel.clearAIError() },
-            onToggleSelection = { viewModel.toggleAISelection(it) },
-            onCreateSelected = { viewModel.createSelectedTasks(); onBackPressed() }
-        )
-
-        // 核心输入区 — AI 解析结果展示时隐藏
-        if (!uiState.showAIResult) {
-            CoreInputSection(
+    ModernCreateTaskContent(
+        uiState = uiState,
+        isRecording = isASRRecording,
+        isModelReady = isModelReady,
+        onBack = onBackPressed,
+        onTitleChange = viewModel::updateTitle,
+        onStartRecording = {
+            val granted = checkAndRequestPermission()
+            Timber.tag("VoiceButton").d("onVoiceStart: permission=$granted")
+            if (granted) viewModel.startASR()
+            granted
+        },
+        onStopRecording = {
+            Timber.tag("VoiceButton").d("onVoiceEnd: 调用 stopASR")
+            viewModel.stopASR()
+        },
+        onSaveManualTask = {
+            viewModel.createTask()
+            onBackPressed()
+        },
+        onApplyAIResult = viewModel::applyAIResult,
+        onSaveAIResult = {
+            viewModel.applyAIResultAndCreate()
+            onBackPressed()
+        },
+        onDismissAIResult = viewModel::dismissAIResult,
+        onToggleAISelection = viewModel::toggleAISelection,
+        onSaveSelectedTasks = {
+            viewModel.createSelectedTasks()
+            onBackPressed()
+        },
+        onDismissError = viewModel::clearAIError,
+        advancedContent = {
+            CollapsibleConfigSection(
                 screenHeight = screenHeight,
                 screenWidth = screenWidth,
-                title = uiState.title,
-                onTitleChange = { viewModel.updateTitle(it) }
+                isTimeExpanded = expandedCard == "time",
+                isPreciseTimeExpanded = expandedCard == "precise_time",
+                isCategoryExpanded = expandedCard == "category",
+                isImageExpanded = expandedCard == "image",
+                isImportanceExpanded = expandedCard == "importance",
+                isReminderExpanded = expandedCard == "reminder",
+                isRepeatExpanded = expandedCard == "repeat",
+                onTimeExpandToggle = { expandedCard = if (expandedCard == "time") null else "time" },
+                onPreciseTimeExpandToggle = { expandedCard = if (expandedCard == "precise_time") null else "precise_time" },
+                onCategoryExpandToggle = { expandedCard = if (expandedCard == "category") null else "category" },
+                onImageExpandToggle = { expandedCard = if (expandedCard == "image") null else "image" },
+                onImportanceExpandToggle = { expandedCard = if (expandedCard == "importance") null else "importance" },
+                onReminderExpandToggle = { expandedCard = if (expandedCard == "reminder") null else "reminder" },
+                onRepeatExpandToggle = { expandedCard = if (expandedCard == "repeat") null else "repeat" },
+                selectedCategoryItem = uiState.selectedCategoryItem,
+                categories = categories,
+                onCategorySelected = viewModel::updateSelectedCategory,
+                onManageCategoriesClicked = onNavigateToManageCategories,
+                selectedDate = uiState.selectedDate,
+                onDateSelected = viewModel::updateSelectedDate,
+                onShowDatePicker = { showDatePicker = true },
+                preciseTime = uiState.preciseTime,
+                onPreciseTimeSelected = viewModel::updatePreciseTime,
+                selectedImageUri = uiState.selectedImageUri,
+                onImageSelected = viewModel::updateSelectedImage,
+                onImageCleared = viewModel::clearSelectedImage,
+                onCameraPermissionDenied = { showCameraPermissionDialog = true },
+                selectedImportanceUrgency = uiState.importanceUrgency,
+                onImportanceUrgencySelected = viewModel::updateImportanceUrgency,
+                availableNotificationStrategies = uiState.availableNotificationStrategies,
+                selectedNotificationStrategyId = uiState.notificationStrategyId,
+                onNotificationStrategySelected = viewModel::updateNotificationStrategy,
+                onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
+                onEditNotificationStrategy = onEditNotificationStrategy,
+                onDeleteNotificationStrategy = viewModel::deleteNotificationStrategy,
+                repeatFrequency = uiState.repeatFrequency,
+                onRepeatFrequencyTypeChange = viewModel::updateRepeatFrequencyType,
+                onRepeatWeekdaysChange = viewModel::updateRepeatWeekdays,
+                onRepeatMonthDaysChange = viewModel::updateRepeatMonthDays,
+                onNavigateToRepeatCustom = onNavigateToRepeatCustom,
+                geofenceEnabled = uiState.geofenceEnabled,
+                onGeofenceEnabledChange = viewModel::updateGeofenceEnabled,
+                availableGeofenceLocations = availableGeofenceLocations,
+                selectedGeofenceLocationId = uiState.selectedGeofenceLocationId,
+                onGeofenceLocationSelected = viewModel::updateSelectedGeofenceLocation,
+                onNavigateToAddGeofenceLocation = onNavigateToGeofenceAdd,
+                onNavigateToGeofenceSettings = onNavigateToGeofenceSettings,
+                defaultGeofenceRadius = uiState.defaultRadius
             )
         }
-
-        // 折叠配置区 (28%高度)
-        CollapsibleConfigSection(
-            screenHeight = screenHeight,
-            screenWidth = screenWidth,
-            isTimeExpanded = expandedCard == "time",
-            isPreciseTimeExpanded = expandedCard == "precise_time",
-            isCategoryExpanded = expandedCard == "category",
-            isImageExpanded = expandedCard == "image",
-            isImportanceExpanded = expandedCard == "importance",
-            isReminderExpanded = expandedCard == "reminder",
-            isRepeatExpanded = expandedCard == "repeat",
-            onTimeExpandToggle = { expandedCard = if (expandedCard == "time") null else "time" },
-            onPreciseTimeExpandToggle = { expandedCard = if (expandedCard == "precise_time") null else "precise_time" },
-            onCategoryExpandToggle = { expandedCard = if (expandedCard == "category") null else "category" },
-            onImageExpandToggle = { expandedCard = if (expandedCard == "image") null else "image" },
-            onImportanceExpandToggle = { expandedCard = if (expandedCard == "importance") null else "importance" },
-            onReminderExpandToggle = { expandedCard = if (expandedCard == "reminder") null else "reminder" },
-            onRepeatExpandToggle = { expandedCard = if (expandedCard == "repeat") null else "repeat" },
-            selectedCategoryItem = uiState.selectedCategoryItem,
-            categories = categories,
-            onCategorySelected = { viewModel.updateSelectedCategory(it) },
-            onManageCategoriesClicked = onNavigateToManageCategories,
-            selectedDate = uiState.selectedDate,
-            onDateSelected = { viewModel.updateSelectedDate(it) },
-            onShowDatePicker = { showDatePicker = true },
-            preciseTime = uiState.preciseTime,
-            onPreciseTimeSelected = { viewModel.updatePreciseTime(it) },
-            selectedImageUri = uiState.selectedImageUri,
-            onImageSelected = { viewModel.updateSelectedImage(it) },
-            onImageCleared = { viewModel.clearSelectedImage() },
-            selectedImportanceUrgency = uiState.importanceUrgency,
-            onImportanceUrgencySelected = { viewModel.updateImportanceUrgency(it) },
-            availableNotificationStrategies = uiState.availableNotificationStrategies,
-            selectedNotificationStrategyId = uiState.notificationStrategyId,
-            onNotificationStrategySelected = { viewModel.updateNotificationStrategy(it) },
-            onNavigateToCreateNotificationStrategy = onNavigateToCreateNotificationStrategy,
-            onEditNotificationStrategy = onEditNotificationStrategy,
-            onDeleteNotificationStrategy = { viewModel.deleteNotificationStrategy(it) },
-            repeatFrequency = uiState.repeatFrequency,
-            onRepeatFrequencyTypeChange = { viewModel.updateRepeatFrequencyType(it) },
-            onRepeatWeekdaysChange = { viewModel.updateRepeatWeekdays(it) },
-            onRepeatMonthDaysChange = { viewModel.updateRepeatMonthDays(it) },
-            onNavigateToRepeatCustom = onNavigateToRepeatCustom,
-            geofenceEnabled = uiState.geofenceEnabled,
-            onGeofenceEnabledChange = { viewModel.updateGeofenceEnabled(it) },
-            availableGeofenceLocations = availableGeofenceLocations,
-            selectedGeofenceLocationId = uiState.selectedGeofenceLocationId,
-            onGeofenceLocationSelected = { viewModel.updateSelectedGeofenceLocation(it) },
-            onNavigateToAddGeofenceLocation = onNavigateToGeofenceAdd,
-            onNavigateToGeofenceSettings = onNavigateToGeofenceSettings,
-            defaultGeofenceRadius = uiState.defaultRadius
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 底部操作区
-        BottomActionSection(
-            screenHeight = screenHeight,
-            screenWidth = screenWidth,
-            onSave = { viewModel.createTask(); onBackPressed() },
-            onCancel = onBackPressed,
-            isEnabled = uiState.title.isNotBlank(),
-            isListening = isASRRecording,
-            isModelReady = isModelReady,
-            onVoiceStart = {
-                val granted = checkAndRequestPermission()
-                Timber.tag("VoiceButton").d("onVoiceStart: permission=$granted")
-                if (granted) viewModel.startASR()
-                granted
-            },
-            onVoiceEnd = {
-                Timber.tag("VoiceButton").d("onVoiceEnd: 调用 stopASR")
-                viewModel.stopASR()
-            }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-    }
+    )
 
     // Material 3 日期选择器对话框
     if (showDatePicker) {
@@ -285,6 +264,38 @@ fun CreateTaskScreen(
                 showDatePicker = false
             },
             onDismiss = { showDatePicker = false }
+        )
+    }
+
+    // 麦克风权限拒绝引导弹窗
+    if (showMicPermissionDialog) {
+        SimplePermissionDialog(
+            title = "需要麦克风权限",
+            message = "语音创建任务需要使用麦克风来录制您的语音指令。\n\n如何开启：\n1. 打开手机「设置」\n2. 找到「NextThing」应用\n3. 开启「麦克风」权限",
+            confirmText = "去设置",
+            onConfirm = {
+                val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.fromParts("package", context.packageName, null)
+                }
+                context.startActivity(intent)
+            },
+            onDismiss = { showMicPermissionDialog = false }
+        )
+    }
+
+    // 相机权限拒绝引导弹窗
+    if (showCameraPermissionDialog) {
+        SimplePermissionDialog(
+            title = "需要相机权限",
+            message = "拍照添加附件需要使用相机来拍摄任务相关图片。\n\n如何开启：\n1. 打开手机「设置」\n2. 找到「NextThing」应用\n3. 开启「相机」权限",
+            confirmText = "去设置",
+            onConfirm = {
+                val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.fromParts("package", context.packageName, null)
+                }
+                context.startActivity(intent)
+            },
+            onDismiss = { showCameraPermissionDialog = false }
         )
     }
 }
@@ -421,6 +432,7 @@ private fun CollapsibleConfigSection(
     selectedImageUri: String?,
     onImageSelected: (String?) -> Unit,
     onImageCleared: () -> Unit,
+    onCameraPermissionDenied: () -> Unit = {},
     selectedImportanceUrgency: TaskImportanceUrgency?,
     onImportanceUrgencySelected: (TaskImportanceUrgency?) -> Unit,
     availableNotificationStrategies: List<NotificationStrategy>,
@@ -522,6 +534,7 @@ private fun CollapsibleConfigSection(
                 selectedImageUri = selectedImageUri,
                 onImageSelected = onImageSelected,
                 onImageCleared = onImageCleared,
+                onCameraPermissionDenied = onCameraPermissionDenied,
                 modifier = Modifier.weight(1f)
             )
 
@@ -814,14 +827,15 @@ internal fun PreciseTimeConfigCard(
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(8.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
                 ) {
-                    // 时间选择器 - 降低高度，只显示3个数字
+                    // iOS 风格时间选择器
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp), // 3个数字 * 40dp = 120dp
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .height(180.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         // 小时选择器
                         TimePickerColumn(
@@ -835,15 +849,15 @@ internal fun PreciseTimeConfigCard(
                         // 冒号分隔
                         Box(
                             modifier = Modifier
-                                .width(16.dp)
+                                .width(20.dp)
                                 .fillMaxHeight(),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = ":",
-                                fontSize = 20.sp,
+                                fontSize = 28.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                                color = Primary
                             )
                         }
 
@@ -859,31 +873,29 @@ internal fun PreciseTimeConfigCard(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // 操作按钮行 - 降低按钮高度
+                    // 操作按钮行
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // 清除按钮（如果已设置时间）
-                        if (preciseTime != null) {
-                            OutlinedButton(
-                                onClick = {
-                                    wasCleared = true
-                                    onPreciseTimeSelected(null)
-                                    onExpandToggle()
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(36.dp), // 降低按钮高度
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = Danger
-                                ),
-                                border = BorderStroke(1.dp, Danger),
-                                shape = RoundedCornerShape(6.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-                            ) {
-                                Text("清除", fontSize = 13.sp)
-                            }
+                        // 清除按钮
+                        OutlinedButton(
+                            onClick = {
+                                wasCleared = true
+                                onPreciseTimeSelected(null)
+                                onExpandToggle()
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = TextSecondary
+                            ),
+                            border = BorderStroke(1.dp, Border),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        ) {
+                            Text("清除", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
 
                         // 确定按钮
@@ -898,15 +910,20 @@ internal fun PreciseTimeConfigCard(
                                 onExpandToggle()
                             },
                             modifier = Modifier
-                                .weight(1f)
-                                .height(36.dp), // 降低按钮高度
+                                .weight(2f)
+                                .height(40.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Primary
                             ),
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                         ) {
-                            Text("确定", color = Color.White, fontSize = 13.sp)
+                            Text(
+                                "确定 ${String.format("%02d:%02d", tempHour, tempMinute)}",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
@@ -926,7 +943,7 @@ private fun TimePickerColumn(
     formatItem: (Int) -> String = { it.toString() }
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val itemHeight = 40.dp
+    val itemHeight = 44.dp
 
     // 初始化滚动位置
     val listState = rememberLazyListState(
@@ -1057,15 +1074,14 @@ private fun TimePickerColumn(
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .background(BgSecondary, RoundedCornerShape(8.dp))
+            .background(Color.White, RoundedCornerShape(12.dp))
     ) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             userScrollEnabled = true,
-            // 上下各留1个itemHeight的空间，这样正好显示3个数字
-            contentPadding = PaddingValues(vertical = 40.dp)
+            contentPadding = PaddingValues(vertical = 44.dp)
         ) {
             items(items.size) { index ->
                 val item = items[index]
@@ -1079,25 +1095,52 @@ private fun TimePickerColumn(
                 ) {
                     Text(
                         text = formatItem(item),
-                        fontSize = if (isSelected) 18.sp else 15.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) Primary else TextSecondary,
+                        fontSize = if (isSelected) 26.sp else 22.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) Primary else TextSecondary.copy(alpha = 0.25f),
                         textAlign = TextAlign.Center
                     )
                 }
             }
         }
 
-        // 中间选中区域的背景指示器
+        // iOS 风格中间选中区域高亮框
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
+                .height(44.dp)
                 .align(Alignment.Center)
                 .background(
-                    Primary.copy(alpha = 0.1f),
-                    RoundedCornerShape(4.dp)
+                    Primary.copy(alpha = 0.08f),
+                    RoundedCornerShape(12.dp)
                 )
+                .border(1.5.dp, Primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+        )
+
+        // iOS 风格上下渐隐遮罩
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(68.dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.White, Color.Transparent)
+                    )
+                )
+                .pointerInput(Unit) { detectTapGestures { } }
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(68.dp)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.White)
+                    )
+                )
+                .pointerInput(Unit) { detectTapGestures { } }
         )
     }
 }
@@ -1235,6 +1278,7 @@ internal fun ImageConfigCard(
     selectedImageUri: String?,
     onImageSelected: (String?) -> Unit,
     onImageCleared: () -> Unit,
+    onCameraPermissionDenied: () -> Unit = {},
     modifier: Modifier = Modifier,
     isEditMode: Boolean = true
 ) {
@@ -1275,6 +1319,8 @@ internal fun ImageConfigCard(
     ) { isGranted ->
         if (isGranted) {
             takePictureLauncher.launch(tempImageUri)
+        } else {
+            onCameraPermissionDenied()
         }
     }
 
@@ -1979,144 +2025,140 @@ private fun BottomActionSection(
     onVoiceStart: () -> Boolean,
     onVoiceEnd: () -> Unit
 ) {
-    Row(
+    // 方案 B — 一体化胶囊条
+    val pillColor = when {
+        isListening -> Danger
+        else -> Primary
+    }
+    val pillShadowColor = when {
+        isListening -> Danger.copy(alpha = 0.35f)
+        isEnabled -> Primary.copy(alpha = 0.35f)
+        else -> Primary.copy(alpha = 0.15f)
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 取消按钮 — 拟态效果
-        Box(
-            modifier = Modifier
-                .width(64.dp)
-                .height(44.dp)
-                .shadow(4.dp, RoundedCornerShape(22.dp), ambientColor = Color.Black.copy(alpha = 0.1f), spotColor = Color.Black.copy(alpha = 0.15f))
-                .background(
-                    color = BgCard,
-                    shape = RoundedCornerShape(22.dp)
-                )
-                .clickable { onCancel() },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "取消",
-                color = TextSecondary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .height(52.dp)
+            .shadow(
+                elevation = if (isListening) 8.dp else 6.dp,
+                shape = RoundedCornerShape(26.dp),
+                ambientColor = pillShadowColor,
+                spotColor = pillShadowColor
             )
-        }
-
-        // 麦克风按钮 — 长按录音，松开停止
-        Box(
+            .background(
+                color = pillColor,
+                shape = RoundedCornerShape(26.dp)
+            )
+            .then(
+                if (!isEnabled && !isListening) Modifier.alpha(0.5f) else Modifier
+            )
+    ) {
+        Row(
             modifier = Modifier
-                .weight(1f)
-                .height(44.dp)
-                .shadow(
-                    elevation = if (isListening) 8.dp else 4.dp,
-                    shape = RoundedCornerShape(22.dp),
-                    ambientColor = if (isListening) Primary.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.1f),
-                    spotColor = if (isListening) Primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.15f)
-                )
-                .background(
-                    color = when {
-                        isListening -> Primary.copy(alpha = 0.15f)
-                        !isModelReady -> TextMuted.copy(alpha = 0.08f)
-                        else -> Primary.copy(alpha = 0.08f)
-                    },
-                    shape = RoundedCornerShape(22.dp)
-                )
-                .then(
-                    if (isModelReady) {
-                        Modifier.pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    Timber.tag("VoiceButton").d("onPress: 手指按下")
-                                    val started = onVoiceStart()
-                                    Timber.tag("VoiceButton").d("onPress: started=$started")
-                                    if (started) {
-                                        Timber.tag("VoiceButton").d("onPress: 等待手指松开...")
-                                        tryAwaitRelease()
-                                        Timber.tag("VoiceButton").d("onPress: 手指已松开，调用 onVoiceEnd")
-                                        onVoiceEnd()
-                                    }
-                                }
-                            )
-                        }
-                    } else {
-                        Modifier
-                    }
-                ),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+            // 麦克风按钮 — 长按录音
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = CircleShape
+                    )
+                    .then(
+                        if (isModelReady && !isListening) {
+                            Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        Timber.tag("VoiceButton").d("onPress: 手指按下")
+                                        val started = onVoiceStart()
+                                        Timber.tag("VoiceButton").d("onPress: started=$started")
+                                        if (started) {
+                                            Timber.tag("VoiceButton").d("onPress: 等待手指松开...")
+                                            tryAwaitRelease()
+                                            Timber.tag("VoiceButton").d("onPress: 手指已松开，调用 onVoiceEnd")
+                                            onVoiceEnd()
+                                        }
+                                    }
+                                )
+                            }
+                        } else {
+                            Modifier
+                        }
+                    ),
+                contentAlignment = Alignment.Center
             ) {
                 if (!isModelReady) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
-                        color = TextMuted,
+                        color = Color.White,
                         strokeWidth = 2.dp
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "端侧模型加载中...",
-                        fontSize = 14.sp,
-                        color = TextMuted
-                    )
                 } else if (isListening) {
-                    Text("⏺", fontSize = 16.sp, color = Primary)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "松开结束",
-                        fontSize = 14.sp,
-                        color = Primary,
-                        fontWeight = FontWeight.Medium
-                    )
+                    // 录音波形动画
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.height(20.dp)
+                    ) {
+                        repeat(5) { index ->
+                            Box(
+                                modifier = Modifier
+                                    .width(3.dp)
+                                    .padding(end = 2.dp)
+                                    .background(Color.White, RoundedCornerShape(1.dp))
+                            )
+                        }
+                    }
                 } else {
                     Icon(
                         painter = painterResource(id = R.drawable.mic_on),
                         contentDescription = "长按说话",
-                        tint = Primary,
+                        tint = Color.White,
                         modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "长按说话",
-                        fontSize = 14.sp,
-                        color = Primary.copy(alpha = 0.7f)
                     )
                 }
             }
-        }
 
-        // 保存任务按钮 — 拟态效果
-        Box(
-            modifier = Modifier
-                .width(72.dp)
-                .height(44.dp)
-                .shadow(
-                    elevation = if (isEnabled) 6.dp else 2.dp,
-                    shape = RoundedCornerShape(22.dp),
-                    ambientColor = if (isEnabled) Primary.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.05f),
-                    spotColor = if (isEnabled) Primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.08f)
-                )
-                .background(
-                    color = if (isEnabled) Primary else Primary.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(22.dp)
-                )
-                .then(
-                    if (isEnabled) Modifier.clickable { onSave() } else Modifier
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "保存",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = if (isEnabled) Color.White else Color.White.copy(alpha = 0.6f)
+            // 分割线
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(28.dp)
+                    .background(Color.White.copy(alpha = 0.25f))
+                    .padding(horizontal = 6.dp)
             )
+
+            // 创建任务按钮
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(end = 4.dp)
+                    .background(
+                        color = Color.White.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(22.dp)
+                    )
+                    .then(
+                        if (isEnabled) Modifier.clickable { onSave() } else Modifier
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = when {
+                        isListening -> "录音中..."
+                        !isEnabled -> "创建任务"
+                        else -> "创建任务"
+                    },
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+            }
         }
     }
 }
