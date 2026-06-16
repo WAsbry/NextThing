@@ -26,6 +26,7 @@ import com.nextthing.app.presentation.screens.today.TodayScreen
 import com.nextthing.app.presentation.screens.today.TodayViewModel
 import com.nextthing.app.presentation.screens.tasks.TasksScreen
 import com.nextthing.app.presentation.screens.tasks.TasksViewModel
+import com.nextthing.app.presentation.screens.tasks.TaskView
 import com.nextthing.app.presentation.screens.stats.StatsScreen
 import com.nextthing.app.presentation.screens.stats.StatsViewModel
 import com.nextthing.app.presentation.screens.settings.SettingsScreen
@@ -136,7 +137,7 @@ fun NextThingNavigation(
                         navController.navigate("task_detail/$taskId")
                     },
                     onNavigateToCalendar = {
-                        navController.navigate(Screen.Calendar.route)
+                        navController.navigate(Screen.TasksCalendar.route)
                     }
                 )
             }
@@ -148,6 +149,17 @@ fun NextThingNavigation(
                     onNavigateToTaskDetail = { taskId ->
                         navController.navigate("task_detail/$taskId")
                     }
+                )
+            }
+
+            composable(Screen.TasksCalendar.route) {
+                val viewModel: TasksViewModel = hiltViewModel()
+                TasksScreen(
+                    viewModel = viewModel,
+                    onNavigateToTaskDetail = { taskId ->
+                        navController.navigate("task_detail/$taskId")
+                    },
+                    initialView = TaskView.CALENDAR
                 )
             }
             
@@ -540,6 +552,7 @@ sealed class Screen(val route: String, val title: String, val icon: String) {
     object Login : Screen("login", "登录", "login")
     object Today : Screen("today", "首页", "home")
     object Tasks : Screen("tasks", "任务", "list")
+    object TasksCalendar : Screen("tasks_calendar", "任务日历", "calendar")
     object CreateTask : Screen("create_task", "创建", "add")
     object CreateLocation : Screen("create_location", "新建地点", "location")
     object CreateNotificationStrategy : Screen("create_notification_strategy", "新建通知策略", "notification") {

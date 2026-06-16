@@ -52,6 +52,9 @@ enum class PriorityFilter(val label: String) {
 
 // ── 数据模型 ──
 
+private fun TaskStatus.isPendingLike(): Boolean =
+    this == TaskStatus.PENDING || this == TaskStatus.DELAYED
+
 data class TaskGroup(
     val date: String,
     val completedCount: Int,
@@ -97,7 +100,7 @@ data class TasksUiState(
     // 日历数据
     val currentMonth: String = "",
     val calendarDays: List<CalendarDay> = emptyList(),
-    val selectedDate: String? = null,
+    val selectedDate: String? = LocalDate.now().toString(),
     val selectedDateTasks: List<Task> = emptyList(),
     val selectedDateCompletedCount: Int = 0,
     val selectedDatePendingCount: Int = 0,
@@ -249,7 +252,7 @@ class TasksViewModel @Inject constructor(
             .let { list ->
                 when (statusFilter) {
                     StatusFilter.ALL -> list
-                    StatusFilter.PENDING -> list.filter { it.status == TaskStatus.PENDING }
+                    StatusFilter.PENDING -> list.filter { it.status.isPendingLike() }
                     StatusFilter.COMPLETED -> list.filter { it.status == TaskStatus.COMPLETED }
                     StatusFilter.OVERDUE -> list.filter { it.status == TaskStatus.OVERDUE }
                     StatusFilter.CANCELLED -> list.filter { it.status == TaskStatus.CANCELLED }
@@ -391,7 +394,7 @@ class TasksViewModel @Inject constructor(
             day.copy(
                 hasTask = dayTasks.isNotEmpty(),
                 taskCount = dayTasks.size,
-                pendingCount = dayTasks.count { it.status == TaskStatus.PENDING },
+                pendingCount = dayTasks.count { it.status.isPendingLike() },
                 completedCount = dayTasks.count { it.status == TaskStatus.COMPLETED },
                 overdueCount = dayTasks.count { it.status == TaskStatus.OVERDUE },
                 cancelledCount = dayTasks.count { it.status == TaskStatus.CANCELLED }
@@ -404,14 +407,35 @@ class TasksViewModel @Inject constructor(
         val dateTasks = allTasks.filter { task ->
             (task.dueDate?.toLocalDate() ?: task.createdAt.toLocalDate()).toString() == date
         }
-        val filtered = applyFilters(dateTasks, state.statusFilter, state.selectedCategoryId, state.priorityFilter)
+        val filtered = applyCalendarFilters(dateTasks, state.selectedCategoryId, state.priorityFilter)
         _uiState.value = _uiState.value.copy(
             selectedDateTasks = filtered,
             selectedDateCompletedCount = filtered.count { it.status == TaskStatus.COMPLETED },
-            selectedDatePendingCount = filtered.count { it.status == TaskStatus.PENDING },
+            selectedDatePendingCount = filtered.count { it.status.isPendingLike() },
             selectedDateOverdueCount = filtered.count { it.status == TaskStatus.OVERDUE },
             selectedDateCancelledCount = filtered.count { it.status == TaskStatus.CANCELLED }
         )
+    }
+
+    private fun applyCalendarFilters(
+        tasks: List<Task>,
+        categoryId: String?,
+        priorityFilter: PriorityFilter
+    ): List<Task> {
+        return tasks
+            .let { list ->
+                if (categoryId == null) list
+                else list.filter { it.category.id == categoryId }
+            }
+            .let { list ->
+                when (priorityFilter) {
+                    PriorityFilter.ALL -> list
+                    PriorityFilter.IMPORTANT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT }
+                    PriorityFilter.IMPORTANT_NOT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_NOT_URGENT }
+                    PriorityFilter.NOT_IMPORTANT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_URGENT }
+                    PriorityFilter.NOT_IMPORTANT_NOT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT }
+                }
+            }
     }
 
     // ── 公开操作 ──

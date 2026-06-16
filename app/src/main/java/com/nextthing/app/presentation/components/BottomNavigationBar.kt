@@ -47,7 +47,7 @@ fun BottomNavigationBar(
         BottomNavItem(
             icon = "list",
             label = "任务",
-            isSelected = currentRoute == Screen.Tasks.route,
+            isSelected = currentRoute == Screen.Tasks.route || currentRoute == Screen.TasksCalendar.route,
             onClick = { onNavigate(Screen.Tasks.route) }
         )
         BottomNavItem(

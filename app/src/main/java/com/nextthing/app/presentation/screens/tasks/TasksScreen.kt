@@ -49,9 +49,14 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun TasksScreen(
     viewModel: TasksViewModel = hiltViewModel(),
-    onNavigateToTaskDetail: (String) -> Unit = {}
+    onNavigateToTaskDetail: (String) -> Unit = {},
+    initialView: TaskView? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(initialView) {
+        initialView?.let(viewModel::selectView)
+    }
 
     // 下拉菜单展开状态
     var openDropdown by remember { mutableStateOf<String?>(null) }
