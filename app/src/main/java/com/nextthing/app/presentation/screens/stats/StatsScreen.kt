@@ -79,13 +79,14 @@ fun StatsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(BgPrimary),
-            contentPadding = PaddingValues(bottom = 24.dp)
+            contentPadding = PaddingValues(bottom = 112.dp)
         ) {
-            // Tab 切换
             item {
-                StatsTabRow(
+                StatsImmersiveHeader(
+                    uiState = uiState,
                     selectedTab = uiState.selectedTab,
-                    onTabSelected = { viewModel.selectTab(it) }
+                    onTabSelected = { viewModel.selectTab(it) },
+                    onOverviewTimeRangeSelected = { viewModel.selectOverviewTimeRange(it) }
                 )
             }
 
@@ -135,40 +136,414 @@ fun StatsScreen(
 }
 
 @Composable
+private fun StatsImmersiveHeader(
+    uiState: StatsUiState,
+    selectedTab: StatsTab,
+    onTabSelected: (StatsTab) -> Unit,
+    onOverviewTimeRangeSelected: (OverviewTimeRange) -> Unit
+) {
+    val header = remember(uiState, selectedTab) {
+        buildStatsHeaderModel(uiState, selectedTab)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF171B2D),
+                        Color(0xFF242E53),
+                        Color(0xFF0F9DB2)
+                    )
+                )
+            )
+    ) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            drawCircle(
+                color = Color.White.copy(alpha = 0.09f),
+                radius = size.width * 0.32f,
+                center = Offset(size.width * 0.88f, size.height * 0.14f)
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFF4F63E7), Color(0xFF0F9DB2))
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "NT",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = "统计",
+                            color = Color.White.copy(alpha = 0.68f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = header.title,
+                            color = Color.White,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Surface(
+                    color = Color.White.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                ) {
+                    Text(
+                        text = header.badge,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            StatsTabRow(
+                selectedTab = selectedTab,
+                onTabSelected = onTabSelected,
+                immersive = true
+            )
+
+            if (selectedTab == StatsTab.OVERVIEW) {
+                OverviewTimeRangeChips(
+                    selectedTimeRange = uiState.selectedOverviewTimeRange,
+                    onTimeRangeSelected = onOverviewTimeRangeSelected
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.11f))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = header.label,
+                            color = Color.White.copy(alpha = 0.68f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = header.value,
+                            color = Color.White,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Black,
+                            lineHeight = 32.sp
+                        )
+                    }
+                    Surface(
+                        color = Color.White.copy(alpha = 0.13f),
+                        shape = RoundedCornerShape(50),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                    ) {
+                        Text(
+                            text = header.state,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Text(
+                    text = header.summary,
+                    color = Color.White.copy(alpha = 0.82f),
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    header.signals.forEach { signal ->
+                        HeaderSignalCard(
+                            label = signal.first,
+                            value = signal.second,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class StatsHeaderModel(
+    val title: String,
+    val label: String,
+    val value: String,
+    val badge: String,
+    val state: String,
+    val summary: String,
+    val signals: List<Pair<String, String>>
+)
+
+private fun buildStatsHeaderModel(
+    uiState: StatsUiState,
+    selectedTab: StatsTab
+): StatsHeaderModel {
+    val completion = "${uiState.completionRate.roundToInt()}%"
+    val healthState = when {
+        uiState.healthScore >= 85 -> "优秀"
+        uiState.healthScore >= 70 -> "良好"
+        uiState.healthScore >= 50 -> "需要校准"
+        else -> "风险上升"
+    }
+    val firstInsight = uiState.insights.firstOrNull()?.message
+
+    return when (selectedTab) {
+        StatsTab.OVERVIEW -> StatsHeaderModel(
+            title = "洞察中枢",
+            label = "AI 判断",
+            value = when {
+                uiState.totalTasks == 0 -> "等待数据"
+                uiState.healthScore >= 75 -> "节奏回稳"
+                uiState.healthScore >= 50 -> "节奏波动"
+                else -> "需要收敛"
+            },
+            badge = if (uiState.totalTasks == 0) "待分析" else "健康度 ${uiState.healthScore}",
+            state = if (uiState.totalTasks == 0) "暂无风险" else healthState,
+            summary = if (uiState.totalTasks == 0) {
+                "完成几个任务后，我会在这里提炼你的执行节奏、逾期风险和下一步优先级。"
+            } else {
+                firstInsight ?: "完成几个任务后，我会在这里提炼你的执行节奏、逾期风险和下一步优先级。"
+            },
+            signals = listOf(
+                "完成率" to if (uiState.totalTasks == 0) "--" else completion,
+                "逾期" to "${uiState.coreMetricOverdue}",
+                "重要紧急" to "${uiState.coreMetricImportantUrgent}"
+            )
+        )
+        StatsTab.CATEGORY -> StatsHeaderModel(
+            title = "分类分析",
+            label = "结构判断",
+            value = "投入分布",
+            badge = "${uiState.categoryStats.size} 类",
+            state = "看结构",
+            summary = "分类页重点看任务投入是否偏科，以及哪些分类完成率高、拖延成本低。",
+            signals = listOf(
+                "分类数" to "${uiState.categoryStats.size}",
+                "排行" to "${uiState.categoryEfficiencyRanking.size}",
+                "热力" to if (uiState.categoryWeekdayHeatmap.isEmpty()) "暂无" else "已生成"
+            )
+        )
+        StatsTab.TREND -> StatsHeaderModel(
+            title = "趋势追踪",
+            label = "趋势判断",
+            value = if (uiState.completionRateTrend.isEmpty()) "等待数据" else "持续观察",
+            badge = uiState.selectedTrendTimeRange.displayName,
+            state = "看变化",
+            summary = "趋势页保留完成量、完成率、周期时间和累积流，用来判断效率是在变好还是变差。",
+            signals = listOf(
+                "日趋势" to "${uiState.weeklyTrend.size}",
+                "完成率" to "${uiState.completionRateTrend.size}",
+                "周期" to "${uiState.cycleTimeTrend.size}"
+            )
+        )
+        StatsTab.EFFICIENCY -> StatsHeaderModel(
+            title = "效率诊断",
+            label = "效率判断",
+            value = when {
+                uiState.completedTasks == 0 -> "等待数据"
+                uiState.procrastinationRadar != null -> "${uiState.procrastinationRadar.totalScore} 分"
+                else -> "待评估"
+            },
+            badge = uiState.selectedEfficiencyTimeRange.displayName,
+            state = when {
+                uiState.completedTasks == 0 -> "待分析"
+                uiState.procrastinationRadar != null -> uiState.procrastinationRadar.efficiencyGrade
+                else -> "诊断"
+            },
+            summary = when {
+                uiState.completedTasks == 0 -> "完成一些任务后，我会从准时率、响应速度、完成稳定性和任务漏斗里找出主要阻力。"
+                uiState.procrastinationRadar != null -> "当前最强项是「${uiState.procrastinationRadar.strongestDimension}」，最需要提升的是「${uiState.procrastinationRadar.weakestDimension}」。"
+                else -> "效率页会从准时率、响应速度、完成稳定性和任务漏斗里找出主要阻力。"
+            },
+            signals = listOf(
+                "准时率" to if (uiState.completedTasks == 0) "--" else "${uiState.onTimeCompletionRate.roundToInt()}%",
+                "漏斗" to if (uiState.taskFunnel == null) "暂无" else "已生成",
+                "热力" to if (uiState.timeHeatmap.isEmpty()) "暂无" else "已生成"
+            )
+        )
+        StatsTab.AI_INSIGHT -> StatsHeaderModel(
+            title = "AI 周报",
+            label = "本周判断",
+            value = uiState.weeklyReport?.title ?: "等待生成",
+            badge = if (uiState.isGeneratingReport || uiState.isAnalyzingBehavior) "分析中" else "AI",
+            state = "行动建议",
+            summary = uiState.weeklyReport?.summary
+                ?: uiState.behaviorInsight?.patterns?.firstOrNull()
+                ?: "AI 洞察会把行为模式、周报摘要和下周建议收敛成可以执行的行动。",
+            signals = listOf(
+                "行为模式" to (uiState.behaviorInsight?.patterns?.size?.toString() ?: "0"),
+                "改进建议" to (uiState.behaviorInsight?.suggestions?.size?.toString() ?: "0"),
+                "周报" to if (uiState.weeklyReport == null) "未生成" else "已生成"
+            )
+        )
+    }
+}
+
+@Composable
+private fun HeaderSignalCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(10.dp))
+            .padding(8.dp)
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.62f),
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = value,
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun OverviewTimeRangeChips(
+    selectedTimeRange: OverviewTimeRange,
+    onTimeRangeSelected: (OverviewTimeRange) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.10f))
+            .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        OverviewTimeRange.values().forEach { range ->
+            val selected = selectedTimeRange == range
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (selected) Color.White else Color.Transparent)
+                    .clickable { onTimeRangeSelected(range) }
+                    .padding(vertical = 7.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = range.displayName,
+                    color = if (selected) Color(0xFF171B2D) else Color.White.copy(alpha = 0.70f),
+                    fontSize = 12.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun StatsTabRow(
     selectedTab: StatsTab,
-    onTabSelected: (StatsTab) -> Unit
+    onTabSelected: (StatsTab) -> Unit,
+    immersive: Boolean = false
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = BgCard)
+            .then(if (immersive) Modifier else Modifier.padding(16.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (immersive) Color.White.copy(alpha = 0.10f) else BgCard
+        ),
+        border = if (immersive) BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)) else null
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             StatsTab.values().forEach { tab ->
                 val isSelected = selectedTab == tab
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(
-                            if (isSelected) Primary else Color.Transparent
+                            when {
+                                immersive && isSelected -> Color.White
+                                isSelected -> Primary
+                                else -> Color.Transparent
+                            }
                         )
                         .clickable { onTabSelected(tab) }
-                        .padding(vertical = 12.dp),
+                        .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tab.title,
-                        color = if (isSelected) Color.White else TextSecondary,
-                        fontSize = 14.sp,
+                        color = when {
+                            immersive && isSelected -> Color(0xFF171B2D)
+                            immersive -> Color.White.copy(alpha = 0.70f)
+                            isSelected -> Color.White
+                            else -> TextSecondary
+                        },
+                        fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                     )
                 }
@@ -184,17 +559,9 @@ private fun OverviewContent(uiState: StatsUiState, viewModel: StatsViewModel) {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 任务洞察卡片（规则洞察 + AI 深度分析合并）
-        InsightsCard(
-            insights = uiState.insights,
-            selectedTimeRange = uiState.selectedOverviewTimeRange,
-            onTimeRangeSelected = { viewModel.selectOverviewTimeRange(it) },
-            aiSummary = uiState.aiSummary,
-            isAILoading = uiState.isAISummaryLoading,
-            aiError = uiState.aiSummaryError,
-            onGenerateAI = { viewModel.generateAISummary() },
-            onClearAIError = { viewModel.clearAISummaryError() }
-        )
+        Spacer(modifier = Modifier.height(2.dp))
+
+        OverviewMetricGrid(uiState = uiState, viewModel = viewModel)
 
         // 新增：本周vs上周对比卡片
         uiState.weekComparison?.let { comparison ->
@@ -206,6 +573,134 @@ private fun OverviewContent(uiState: StatsUiState, viewModel: StatsViewModel) {
 
         // 完成率进度条
         CompletionProgressCard(uiState)
+
+        if (uiState.totalTasks > 0) {
+            ImportanceDistributionCard(uiState)
+        }
+    }
+}
+
+@Composable
+private fun OverviewMetricGrid(
+    uiState: StatsUiState,
+    viewModel: StatsViewModel
+) {
+    val progressTitle = if (uiState.coreMetricProgressType == "count") "已完成" else "完成率"
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OverviewMetricTile(
+                label = "待办任务",
+                value = uiState.coreMetricPending.toString(),
+                trend = "需要推进",
+                color = Primary,
+                modifier = Modifier.weight(1f),
+                onClick = { viewModel.showTaskList(TaskListType.PENDING) }
+            )
+            OverviewMetricTile(
+                label = "逾期",
+                value = uiState.coreMetricOverdue.toString(),
+                trend = if (uiState.coreMetricOverdue == 0) "当前清爽" else "优先处理",
+                color = Danger,
+                modifier = Modifier.weight(1f),
+                onClick = { viewModel.showTaskList(TaskListType.OVERDUE) }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OverviewMetricTile(
+                label = "重要紧急",
+                value = uiState.coreMetricImportantUrgent.toString(),
+                trend = if (uiState.coreMetricImportantUrgent == 0) "风险较低" else "风险仍在",
+                color = Warning,
+                modifier = Modifier.weight(1f),
+                onClick = { viewModel.showTaskList(TaskListType.IMPORTANT_URGENT) }
+            )
+            OverviewMetricTile(
+                label = progressTitle,
+                value = uiState.coreMetricProgress,
+                trend = "当前进度",
+                color = Success,
+                modifier = Modifier.weight(1f),
+                onClick = { viewModel.showTaskList(TaskListType.COMPLETED) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun OverviewMetricTile(
+    label: String,
+    value: String,
+    trend: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier
+            .height(104.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border.copy(alpha = 0.65f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                )
+            }
+
+            Column {
+                Text(
+                    text = value,
+                    color = TextPrimary,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1
+                )
+                Text(
+                    text = trend,
+                    color = color,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 
@@ -1273,13 +1768,17 @@ private fun EfficiencyContent(uiState: StatsUiState, viewModel: StatsViewModel) 
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. 效率雷达图（六维度评分 + 蛛网结构）
-        uiState.procrastinationRadar?.let {
+        if (uiState.completedTasks == 0) {
+            EfficiencyReadinessCard(uiState = uiState)
+        } else {
+            // 1. 效率雷达图（六维度评分 + 蛛网结构）
+            uiState.procrastinationRadar?.let {
             ProcrastinationRadarCard(
                 radarData = it,
                 selectedTimeRange = uiState.selectedEfficiencyTimeRange,
                 onTimeRangeSelected = { range -> viewModel.selectEfficiencyTimeRange(range) }
             )
+            }
         }
 
         // 2. 黄金时段热力图
@@ -1297,6 +1796,79 @@ private fun EfficiencyContent(uiState: StatsUiState, viewModel: StatsViewModel) 
 
         // 4. 效率建议卡
         EfficiencyAdviceCard(uiState = uiState)
+    }
+}
+
+@Composable
+private fun EfficiencyReadinessCard(uiState: StatsUiState) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border.copy(alpha = 0.65f))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "效率诊断准备中",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+            Text(
+                text = "完成一些任务后，这里会生成综合效率评分、准时率、响应速度和稳定性分析。",
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                color = TextSecondary
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompactReadinessMetric(
+                    label = "已完成",
+                    value = uiState.completedTasks.toString(),
+                    color = Success,
+                    modifier = Modifier.weight(1f)
+                )
+                CompactReadinessMetric(
+                    label = "待办",
+                    value = uiState.pendingTasks.toString(),
+                    color = Primary,
+                    modifier = Modifier.weight(1f)
+                )
+                CompactReadinessMetric(
+                    label = "逾期",
+                    value = uiState.overdueTasks.toString(),
+                    color = Danger,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactReadinessMetric(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.08f))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(text = label, fontSize = 11.sp, color = TextMuted, maxLines = 1)
+        Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = color)
     }
 }
 
@@ -5165,6 +5737,8 @@ private fun AIInsightContent(
     uiState: StatsUiState,
     viewModel: StatsViewModel
 ) {
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -5173,194 +5747,196 @@ private fun AIInsightContent(
     ) {
         Spacer(modifier = Modifier.height(4.dp))
 
-        // ── 行为模式分析 ──
-        Text("行为模式分析", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-
-        Button(
-            onClick = { viewModel.analyzeBehavior() },
-            enabled = !uiState.isAnalyzingBehavior,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF6C63FF),
-                disabledContainerColor = Color(0xFF6C63FF).copy(alpha = 0.5f)
-            )
+        AIActionCard(
+            title = "行为模式分析",
+            description = "从完成时间、延期、分类和节奏里找出稳定模式。",
+            accent = Color(0xFF4F63E7),
+            actionText = if (uiState.isAnalyzingBehavior) "分析中..." else "分析我的行为模式",
+            loading = uiState.isAnalyzingBehavior,
+            onAction = { viewModel.analyzeBehavior() }
         ) {
-            if (uiState.isAnalyzingBehavior) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = Color.White
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("分析中...")
+            val insight = uiState.behaviorInsight
+            if (insight == null) {
+                AIEmptyHint("分析后会显示高效时段、易积压节点和可复用习惯。")
             } else {
-                Text("🔍 分析我的行为模式")
-            }
-        }
-
-        // 行为分析结果
-        uiState.behaviorInsight?.let { insight ->
-            if (insight.patterns.isNotEmpty()) {
-                Surface(
-                    color = Color(0xFF6C63FF).copy(alpha = 0.06f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("发现的模式", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6C63FF))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        insight.patterns.forEach { pattern ->
-                            Row(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Text("•", fontSize = 14.sp, color = Color(0xFF6C63FF))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(pattern, fontSize = 14.sp, color = TextPrimary)
-                            }
-                        }
-                    }
+                if (insight.patterns.isNotEmpty()) {
+                    AIResultBlock(
+                        title = "发现的模式",
+                        items = insight.patterns,
+                        accent = Color(0xFF4F63E7)
+                    )
                 }
-            }
-
-            if (insight.suggestions.isNotEmpty()) {
-                Surface(
-                    color = Color(0xFF4CAF50).copy(alpha = 0.06f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("改进建议", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        insight.suggestions.forEach { suggestion ->
-                            Row(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Text("💡", fontSize = 14.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(suggestion, fontSize = 14.sp, color = TextPrimary)
-                            }
-                        }
-                    }
+                if (insight.suggestions.isNotEmpty()) {
+                    AIResultBlock(
+                        title = "改进建议",
+                        items = insight.suggestions,
+                        accent = Success
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-        HorizontalDivider(color = Border, thickness = 0.5.dp)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ── 周报生成 ──
-        Text("本周周报", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-
-        Button(
-            onClick = { viewModel.generateWeeklyReport() },
-            enabled = !uiState.isGeneratingReport,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF00BCD4),
-                disabledContainerColor = Color(0xFF00BCD4).copy(alpha = 0.5f)
-            )
+        AIActionCard(
+            title = "本周周报",
+            description = "把本周表现整理成摘要、亮点、待改进和下周建议。",
+            accent = Color(0xFF0F9DB2),
+            actionText = if (uiState.isGeneratingReport) "生成中..." else "生成本周周报",
+            loading = uiState.isGeneratingReport,
+            onAction = { viewModel.generateWeeklyReport() }
         ) {
-            if (uiState.isGeneratingReport) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = Color.White
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("生成中...")
+            val report = uiState.weeklyReport
+            if (report == null) {
+                AIEmptyHint("生成后会在这里展示可复制的周报内容。")
             } else {
-                Text("📝 生成本周周报")
-            }
-        }
-
-        uiState.weeklyReport?.let { report ->
-            Surface(
-                color = Color(0xFF00BCD4).copy(alpha = 0.08f),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(report.title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00BCD4))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(report.summary, fontSize = 14.sp, color = TextPrimary, lineHeight = 20.sp)
-                }
-            }
-
-            if (report.highlights.isNotEmpty()) {
                 Surface(
-                    color = Color(0xFFFFC107).copy(alpha = 0.08f),
+                    color = Color(0xFF0F9DB2).copy(alpha = 0.08f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("🌟 本周亮点", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFA000))
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(report.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F9DB2))
                         Spacer(modifier = Modifier.height(8.dp))
-                        report.highlights.forEach { highlight ->
-                            Row(modifier = Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-                                Text("•", fontSize = 14.sp, color = Color(0xFFFFA000))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(highlight, fontSize = 14.sp, color = TextPrimary)
-                            }
-                        }
+                        Text(report.summary, fontSize = 13.sp, color = TextPrimary, lineHeight = 19.sp)
                     }
                 }
-            }
 
-            if (report.improvements.isNotEmpty()) {
-                Surface(
-                    color = Color(0xFFFF9800).copy(alpha = 0.06f),
-                    shape = RoundedCornerShape(12.dp)
+                AIResultBlock("本周亮点", report.highlights, Warning)
+                AIResultBlock("待改进", report.improvements, Color(0xFFFF9800))
+                AIResultBlock("下周建议", report.nextWeekSuggestions, Success)
+
+                OutlinedButton(
+                    onClick = {
+                        val exportText = viewModel.exportWeeklyReport() ?: return@OutlinedButton
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("周报", exportText))
+                        android.widget.Toast.makeText(context, "周报已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFF0F9DB2))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("📈 待改进", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        report.improvements.forEach { improvement ->
-                            Row(modifier = Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-                                Text("•", fontSize = 14.sp, color = Color(0xFFFF9800))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(improvement, fontSize = 14.sp, color = TextPrimary)
-                            }
-                        }
-                    }
+                    Text("复制周报到剪贴板", color = Color(0xFF0F9DB2))
                 }
-            }
-
-            if (report.nextWeekSuggestions.isNotEmpty()) {
-                Surface(
-                    color = Color(0xFF4CAF50).copy(alpha = 0.06f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("🚀 下周建议", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        report.nextWeekSuggestions.forEach { suggestion ->
-                            Row(modifier = Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-                                Text("•", fontSize = 14.sp, color = Color(0xFF4CAF50))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(suggestion, fontSize = 14.sp, color = TextPrimary)
-                            }
-                        }
-                    }
-                }
-            }
-
-            val context = LocalContext.current
-            OutlinedButton(
-                onClick = {
-                    val exportText = viewModel.exportWeeklyReport() ?: return@OutlinedButton
-                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("周报", exportText))
-                    android.widget.Toast.makeText(context, "周报已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, Color(0xFF00BCD4))
-            ) {
-                Text("📋 复制周报到剪贴板", color = Color(0xFF00BCD4))
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun AIActionCard(
+    title: String,
+    description: String,
+    accent: Color,
+    actionText: String,
+    loading: Boolean,
+    onAction: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border.copy(alpha = 0.65f))
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(description, fontSize = 12.sp, lineHeight = 18.sp, color = TextSecondary)
+                }
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(accent)
+                )
+            }
+
+            Button(
+                onClick = onAction,
+                enabled = !loading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = accent,
+                    disabledContainerColor = accent.copy(alpha = 0.52f)
+                )
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(actionText, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun AIEmptyHint(text: String) {
+    Surface(
+        color = BgSecondary,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            fontSize = 12.sp,
+            color = TextSecondary,
+            lineHeight = 18.sp
+        )
+    }
+}
+
+@Composable
+private fun AIResultBlock(
+    title: String,
+    items: List<String>,
+    accent: Color
+) {
+    if (items.isEmpty()) return
+
+    Surface(
+        color = accent.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = accent)
+            items.forEach { item ->
+                Row(verticalAlignment = Alignment.Top) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 7.dp)
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(accent)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(item, fontSize = 13.sp, color = TextPrimary, lineHeight = 19.sp)
+                }
+            }
+        }
     }
 }
