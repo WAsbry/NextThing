@@ -49,12 +49,12 @@ data class LifeSuggestion(
 data class WeatherInfo(
     val condition: WeatherCondition,
     val temperature: Int, // 当前温度，整数
-    val temperatureMax: Int, // 最高温度
-    val temperatureMin: Int, // 最低温度
+    val temperatureMax: Int?, // 最高温度；当前天气接口不提供时为空
+    val temperatureMin: Int?, // 最低温度；当前天气接口不提供时为空
     val humidity: Int, // 湿度百分比
     val windSpeed: Int, // 风速 km/h
-    val pm25: Int, // PM2.5指数
-    val uvIndex: Int, // 紫外线指数
+    val pm25: Int?, // PM2.5 指数；未请求空气质量接口时为空
+    val uvIndex: Int?, // 紫外线指数；未请求天气指数接口时为空
     val suggestion: LifeSuggestion?, // 最重要的生活建议
     val updateTime: LocalDateTime,
     val locationName: String
@@ -71,12 +71,12 @@ data class WeatherInfo(
         }
         
         // PM2.5检查
-        if (pm25 > 75) {
+        if (pm25 != null && pm25 > 75) {
             suggestions.add(LifeSuggestion(LifeSuggestionType.MASK, "戴口罩", pm25 > 150))
         }
         
         // 紫外线检查
-        if (uvIndex > 7) {
+        if (uvIndex != null && uvIndex > 7) {
             suggestions.add(LifeSuggestion(LifeSuggestionType.SUNSCREEN, "防晒", uvIndex > 10))
         }
         
@@ -99,4 +99,4 @@ data class WeatherResponse(
     val success: Boolean,
     val data: WeatherInfo?,
     val error: String?
-) 
+)

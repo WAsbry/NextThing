@@ -1,32 +1,62 @@
 *.iml
-.gradle
-/local.properties
-/.idea/
 .DS_Store
+
+# Android Studio / Gradle local state
+.gradle/
+/.idea/
+/local.properties
 /build
+/app/build/
 /captures
 .externalNativeBuild
 .cxx
 
-# APK
+# Build artifacts
 *.apk
-NextThing-release.apk
+*.aab
+*.ap_
+*.zip
+*.dex
+*.class
+*.log
+mapping.txt
+output-metadata.json
+/local-artifacts/
 
-# Keystore & keys
+# Keystore, signing, secrets
 *.pem
 *.jks
+*.keystore
 release.keystore
+/app/release.keystore
+/app/src/main/assets/ed25519-private.pem
+.env
+.env.*
+secrets.properties
 
-# Claude Code
+# Local AI/agent settings
 .claude/
 
-# Documentation (local only)
-doc/
+# Runtime logs and captured test evidence are local-only.
+/logs/
 
-# AI models (>100MB, GitHub limit)
+# Documentation under docs/ is maintained in Git. Keep local render scratch files out.
+/docs/.rendered/
+
+# Local UI capture / inspection scratch files
+/nt_*.xml
+/tmp_*.png
+/app/proguardMapping.txt
+
+# AI models and runtime binaries are local-only.
+/app/src/main/assets/models/
+/app/src/main/jniLibs/
 *.onnx
+*.tflite
 *.pth
+*.pt
 *.bin
-
-# Native libs (>50MB)
+*.mnn
+*.ncnn
+*.param
 *.so

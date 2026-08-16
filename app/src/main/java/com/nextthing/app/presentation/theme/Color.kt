@@ -25,13 +25,13 @@ data class AppColors(
 )
 
 val LightAppColors = AppColors(
-    primary = Color(0xFF6C5CE7),
-    primaryDark = Color(0xFF5A4BD1),
+    primary = Color(0xFF0A84FF),
+    primaryDark = Color(0xFF006EDB),
     success = Color(0xFF4CAF50),
     warning = Color(0xFFFF9800),
     danger = Color(0xFFF44336),
     accentPurple = Color(0xFFAB47BC),
-    bgPrimary = Color(0xFFF8F9FC),
+    bgPrimary = Color(0xFFF7F8FC),
     bgCard = Color(0xFFFFFFFF),
     bgSecondary = Color(0xFFF1F3F8),
     textPrimary = Color(0xFF2D3436),

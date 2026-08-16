@@ -10,6 +10,7 @@ import com.nextthing.app.domain.model.Task
 import com.nextthing.app.domain.repository.NotificationStrategyRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.LocalDateTime
@@ -27,6 +28,7 @@ class TaskAlarmManager @Inject constructor(
     private val notificationStrategyRepository: NotificationStrategyRepository
 ) {
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    private val alarmScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // 记录每个任务已调度的提前提醒分钟列表，用于取消时清理
     private val prefs = context.getSharedPreferences("task_alarm_advance", Context.MODE_PRIVATE)
@@ -52,7 +54,7 @@ class TaskAlarmManager @Inject constructor(
         }
 
         // 异步获取策略，判断是否为高优先级模式，然后调度闹钟
-        CoroutineScope(Dispatchers.IO).launch {
+        alarmScope.launch {
             try {
                 val strategy = notificationStrategyRepository.getStrategyById(notificationStrategyId)
                 val isHighPriority = strategy != null &&
@@ -94,7 +96,7 @@ class TaskAlarmManager @Inject constructor(
                         .apply()
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).e("调度闹钟失败: ${e.message}")
+                Timber.tag(TAG).e(e, "调度闹钟失败")
             }
         }
     }
@@ -129,11 +131,11 @@ class TaskAlarmManager @Inject constructor(
         advanceMinutes: Int,
         useAlarmClock: Boolean = false
     ) {
-        val intent = Intent(context, TaskAlarmReceiver::class.java).apply {
-            putExtra("taskId", taskId)
-            putExtra("notificationStrategyId", notificationStrategyId)
-            putExtra("isAdvanceReminder", isAdvanceReminder)
-            putExtra("advanceMinutes", advanceMinutes)
+        val intent = Intent(context, TaskAlarmService::class.java).apply {
+            putExtra(TaskAlarmService.EXTRA_TASK_ID, taskId)
+            putExtra(TaskAlarmService.EXTRA_STRATEGY_ID, notificationStrategyId)
+            putExtra(TaskAlarmService.EXTRA_IS_ADVANCE, isAdvanceReminder)
+            putExtra(TaskAlarmService.EXTRA_ADVANCE_MINUTES, advanceMinutes)
         }
 
         val requestCode = if (isAdvanceReminder) {
@@ -142,12 +144,27 @@ class TaskAlarmManager @Inject constructor(
             getRequestCode(taskId)
         }
 
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        cancelAllDeliveryPendingIntents(requestCode)
+        val pendingIntent = if (useAlarmClock) {
+            val activityIntent = Intent(context, TaskAlarmActivity::class.java).apply {
+                putExtras(intent)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            }
+            PendingIntent.getActivity(
+                context,
+                requestCode,
+                activityIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            checkNotNull(
+                getServicePendingIntent(
+                    requestCode = requestCode,
+                    intent = intent,
+                    flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+        }
 
         val triggerAtMillis = triggerTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
@@ -191,17 +208,70 @@ class TaskAlarmManager @Inject constructor(
     }
 
     private fun cancelSingleAlarm(requestCode: Int) {
-        val intent = Intent(context, TaskAlarmReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        val intent = Intent(context, TaskAlarmService::class.java)
+        val pendingIntent = getServicePendingIntent(
+            requestCode = requestCode,
+            intent = intent,
+            flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
         pendingIntent?.let {
             alarmManager.cancel(it)
             it.cancel()
         }
+        cancelActivityAlarm(requestCode)
+        cancelLegacyBroadcastAlarm(requestCode)
+    }
+
+    private fun getServicePendingIntent(
+        requestCode: Int,
+        intent: Intent,
+        flags: Int
+    ): PendingIntent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        PendingIntent.getForegroundService(context, requestCode, intent, flags)
+    } else {
+        PendingIntent.getService(context, requestCode, intent, flags)
+    }
+
+    private fun cancelLegacyBroadcastAlarm(requestCode: Int) {
+        val legacyIntent = Intent(context, TaskAlarmReceiver::class.java)
+        val legacyPendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            legacyIntent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        legacyPendingIntent?.let {
+            alarmManager.cancel(it)
+            it.cancel()
+        }
+    }
+
+    private fun cancelActivityAlarm(requestCode: Int) {
+        val activityIntent = Intent(context, TaskAlarmActivity::class.java)
+        val activityPendingIntent = PendingIntent.getActivity(
+            context,
+            requestCode,
+            activityIntent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        activityPendingIntent?.let {
+            alarmManager.cancel(it)
+            it.cancel()
+        }
+    }
+
+    private fun cancelAllDeliveryPendingIntents(requestCode: Int) {
+        val serviceIntent = Intent(context, TaskAlarmService::class.java)
+        getServicePendingIntent(
+            requestCode = requestCode,
+            intent = serviceIntent,
+            flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )?.let {
+            alarmManager.cancel(it)
+            it.cancel()
+        }
+        cancelActivityAlarm(requestCode)
+        cancelLegacyBroadcastAlarm(requestCode)
     }
 
     private fun getRequestCode(taskId: String): Int {

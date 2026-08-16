@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextThing Logo 方案对比</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, 'SF Pro Display', 'PingFang SC', sans-serif;
+  background: #1a1a2e;
+  color: white;
+  padding: 60px 40px;
+}
+
+h1 {
+  text-align: center;
+  font-size: 28px;
+  font-weight: 300;
+  margin-bottom: 60px;
+  color: rgba(255,255,255,0.5);
+}
+h1 strong { font-weight: 700; color: white; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px;
+  padding: 60px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-label {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.card-desc {
+  margin-top: 32px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.card-badge {
+  margin-top: 12px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-recommend { background: rgba(108,92,231,0.3); color: #A29BFE; }
+.badge-tech { background: rgba(0,184,148,0.2); color: #00B894; }
+.badge-elegant { background: rgba(253,203,110,0.2); color: #FDCB6E; }
+.badge-unique { background: rgba(255,118,117,0.2); color: #FF7675; }
+
+/* ── 方案 A: 渐变流光（当前方案） ── */
+.logo-shimmer {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  background: linear-gradient(90deg, #6C5CE7, #A29BFE, #74B9FF, #00B894, #FDCB6E, #6C5CE7);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* ── 方案 B: 呼吸光晕 ── */
+.logo-breathe {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: #A29BFE;
+  text-shadow: 0 0 20px rgba(108,92,231,0.6), 0 0 40px rgba(108,92,231,0.3);
+  animation: breathe 3s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { 
+    text-shadow: 0 0 20px rgba(108,92,231,0.4), 0 0 40px rgba(108,92,231,0.2);
+    opacity: 0.85;
+  }
+  50% { 
+    text-shadow: 0 0 30px rgba(108,92,231,0.8), 0 0 60px rgba(108,92,231,0.4), 0 0 80px rgba(108,92,231,0.2);
+    opacity: 1;
+  }
+}
+
+/* ── 方案 C: NT 图标 + 文字 ── */
+.logo-monogram {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.monogram-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 800;
+  color: white;
+  letter-spacing: -1px;
+  box-shadow: 0 4px 20px rgba(108,92,231,0.4);
+  animation: iconPulse 3s ease-in-out infinite;
+}
+@keyframes iconPulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(108,92,231,0.3); }
+  50% { box-shadow: 0 4px 30px rgba(108,92,231,0.6), 0 0 40px rgba(108,92,231,0.2); }
+}
+.monogram-text {
+  font-size: 32px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: -0.5px;
+}
+
+/* ── 方案 D: 霓虹灯 ── */
+.logo-neon {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: #fff;
+  text-shadow: 
+    0 0 7px #fff,
+    0 0 10px #fff,
+    0 0 21px #fff,
+    0 0 42px #6C5CE7,
+    0 0 82px #6C5CE7,
+    0 0 92px #6C5CE7,
+    0 0 102px #6C5CE7,
+    0 0 151px #6C5CE7;
+  animation: neonFlicker 4s infinite;
+}
+@keyframes neonFlicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    text-shadow: 
+      0 0 7px #fff,
+      0 0 10px #fff,
+      0 0 21px #fff,
+      0 0 42px #6C5CE7,
+      0 0 82px #6C5CE7,
+      0 0 92px #6C5CE7;
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+  }
+}
+
+/* ── 方案 E: 渐变填充 + 底部横线 ── */
+.logo-underline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.logo-underline-text {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.logo-underline-bar {
+  width: 60px;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #6C5CE7, #A29BFE);
+  margin-top: 8px;
+  animation: barExpand 2s ease-out forwards;
+}
+@keyframes barExpand {
+  from { width: 0; opacity: 0; }
+  to { width: 120px; opacity: 1; }
+}
+
+/* ── 方案 F: 打字机 ── */
+.logo-typewriter {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: #A29BFE;
+  border-right: 3px solid #A29BFE;
+  white-space: nowrap;
+  overflow: hidden;
+  animation: 
+    typing 2s steps(9, end) forwards,
+    blink 0.7s step-end infinite;
+  width: 0;
+}
+@keyframes typing {
+  from { width: 0; }
+  to { width: 380px; }
+}
+@keyframes blink {
+  50% { border-color: transparent; }
+}
+
+/* ── 方案 G: 粒子字母 ── */
+.logo-particle-wrapper {
+  position: relative;
+  width: 380px;
+  height: 60px;
+}
+.logo-particle {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  position: relative;
+}
+.logo-particle::before {
+  content: 'NextThing';
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, #6C5CE7, #A29BFE);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: blur(2px);
+  animation: particleWave 2s ease-in-out infinite;
+}
+@keyframes particleWave {
+  0%, 100% { filter: blur(2px); opacity: 0.5; }
+  50% { filter: blur(0px); opacity: 0; }
+}
+
+/* ── 浅色背景版本 ── */
+.light-card {
+  background: #F8F9FC;
+  border-color: #E8ECF1;
+}
+.light-card .card-label { color: rgba(0,0,0,0.25); }
+.light-card .card-desc { color: rgba(0,0,0,0.4); }
+
+.light-card .logo-breathe {
+  color: #6C5CE7;
+}
+.light-card .logo-neon {
+  color: #2D3436;
+  text-shadow: 
+    0 0 7px rgba(108,92,231,0.3),
+    0 0 20px rgba(108,92,231,0.2),
+    0 0 40px rgba(108,92,231,0.1);
+}
+
+.light-card .monogram-text { color: #2D3436; }
+</style>
+</head>
+<body>
+
+<h1>NextThing <strong>Logo 方案对比</strong></h1>
+
+<div class="grid">
+
+  <!-- A: 渐变流光 -->
+  <div class="card">
+    <span class="card-label">A</span>
+    <div class="logo-shimmer">NextThing</div>
+    <div class="card-desc">渐变流光 — 彩虹光波从左到右循环扫过<br>科技感强，适合 AI 产品定位</div>
+    <div class="card-badge badge-recommend">当前方案</div>
+  </div>
+
+  <!-- B: 呼吸光晕 -->
+  <div class="card">
+    <span class="card-label">B</span>
+    <div class="logo-breathe">NextThing</div>
+    <div class="card-desc">呼吸光晕 — 紫蓝纯色 + 脉冲式光晕<br>简洁优雅，有"生命感"，像 AI 在呼吸</div>
+    <div class="card-badge badge-elegant">优雅</div>
+  </div>
+
+  <!-- C: NT 图标 + 文字 -->
+  <div class="card">
+    <span class="card-label">C</span>
+    <div class="logo-monogram">
+      <div class="monogram-icon">NT</div>
+      <div class="monogram-text">NextThing</div>
+    </div>
+    <div class="card-desc">NT 图标 + 文字 — 图标可独立用作 App Icon<br>图标有脉冲光晕，文字稳定</div>
+    <div class="card-badge badge-tech">实用</div>
+  </div>
+
+  <!-- D: 霓虹灯 -->
+  <div class="card">
+    <span class="card-label">D</span>
+    <div class="logo-neon">NextThing</div>
+    <div class="card-desc">霓虹灯 — 白色文字 + 紫蓝外发光<br>赛博朋克感，偶尔闪烁，记忆点极强</div>
+    <div class="card-badge badge-unique">独特</div>
+  </div>
+
+  <!-- E: 渐变填充 + 底部横线 -->
+  <div class="card">
+    <span class="card-label">E</span>
+    <div class="logo-underline">
+      <div class="logo-underline-text">NextThing</div>
+      <div class="logo-underline-bar"></div>
+    </div>
+    <div class="card-desc">渐变文字 + 展开横线<br>Logo 出现时有"画底线"动效，干净利落</div>
+    <div class="card-badge badge-elegant">精致</div>
+  </div>
+
+  <!-- F: 打字机 -->
+  <div class="card">
+    <span class="card-label">F</span>
+    <div class="logo-typewriter">NextThing</div>
+    <div class="card-desc">打字机效果 — 字母逐个出现 + 光标闪烁<br>叙事感强，像 AI 在自我介绍</div>
+    <div class="card-badge badge-unique">叙事</div>
+  </div>
+
+  <!-- G: 微粒子 -->
+  <div class="card">
+    <span class="card-label">G</span>
+    <div class="logo-particle-wrapper">
+      <div class="logo-particle">NextThing</div>
+    </div>
+    <div class="card-desc">微粒子 — 文字有轻微的模糊/清晰波动<br>暗示"数字粒子聚合"，AI 感十足</div>
+    <div class="card-badge badge-tech">AI 感</div>
+  </div>
+
+  <!-- 浅色背景测试 -->
+  <div class="card light-card">
+    <span class="card-label">浅色测试</span>
+    <div class="logo-breathe">NextThing</div>
+    <div class="card-desc">呼吸光晕在浅色背景上的效果<br>验证 Logo 在实际页面中的可用性</div>
+  </div>
+
+</div>
+
+<div style="text-align: center; margin-top: 60px; color: rgba(255,255,255,0.3); font-size: 14px;">
+  选择你最喜欢的方案编号（A-G），也可以组合多个方案的元素
+</div>
+
+</body>
+</html>

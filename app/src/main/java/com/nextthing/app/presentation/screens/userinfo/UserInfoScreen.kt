@@ -1,18 +1,53 @@
 package com.nextthing.app.presentation.screens.userinfo
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,29 +57,103 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import com.nextthing.app.presentation.theme.*
 import com.nextthing.app.R
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val ProfileStatusBar = Color(0xFFF4EFFF)
+private val ProfileBgStart = Color(0xFFF4EFFF)
+private val ProfileBgMid = Color(0xFFF7F3FF)
+private val ProfileBgEnd = Color(0xFFFBFAFF)
+private val ProfilePurple = Color(0xFF7057F5)
+private val ProfilePurpleSoft = Color(0xFFB06DFF)
+private val ProfileInk = Color(0xFF202331)
+private val ProfileDeep = Color(0xFF2F2850)
+private val ProfileSub = Color(0xFF656B78)
+private val ProfileMuted = Color(0xFFA6ACB8)
+private val ProfileLine = Color(0xFFEEF0F5)
+private val ProfileGreen = Color(0xFF20A875)
+private val ProfileDanger = Color(0xFFDF5C66)
+
+private fun Modifier.profilePageBackground(): Modifier = drawBehind {
+    drawRect(
+        brush = Brush.horizontalGradient(
+            colors = listOf(ProfileBgStart, ProfileBgMid, ProfileBgEnd),
+            startX = 0f,
+            endX = size.width
+        )
+    )
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(ProfilePurpleSoft.copy(alpha = 0.18f), Color.Transparent),
+            center = Offset(size.width * 0.15f, size.height * 0.08f),
+            radius = size.width * 0.48f
+        )
+    )
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(ProfilePurple.copy(alpha = 0.12f), Color.Transparent),
+            center = Offset(size.width * 0.92f, size.height * 0.18f),
+            radius = size.width * 0.50f
+        )
+    )
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Composable
 fun UserInfoScreen(
     onBackPressed: () -> Unit = {},
     onLogout: () -> Unit = {},
+    onNavigateToAchievement: () -> Unit = {},
     viewModel: UserInfoViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val logoutEvent by viewModel.logoutEvent.collectAsState()
+    val context = LocalContext.current
+    val view = LocalView.current
+
+    DisposableEffect(view) {
+        val window = context.findActivity()?.window
+        val previousStatusBarColor = window?.statusBarColor
+        val previousLightStatusBar = window?.let {
+            WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars
+        }
+        window?.statusBarColor = ProfileStatusBar.toArgb()
+        window?.let {
+            WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = true
+        }
+        onDispose {
+            window?.let {
+                previousStatusBarColor?.let { color -> it.statusBarColor = color }
+                previousLightStatusBar?.let { light ->
+                    WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = light
+                }
+            }
+        }
+    }
 
     LaunchedEffect(logoutEvent) {
         if (logoutEvent) {
@@ -52,211 +161,78 @@ fun UserInfoScreen(
         }
     }
 
-    // 昵称编辑对话框状态
     var showNicknameDialog by remember { mutableStateOf(false) }
-
-    // 图片选择器 - 使用 PickVisualMedia 提供更好的用户体验
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
-        uri?.let {
-            viewModel.updateAvatar(it)
-        }
+        uri?.let(viewModel::updateAvatar)
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgPrimary)
+            .profilePageBackground()
     ) {
-        // 顶部导航栏 - 紧凑设计
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color.White,
-            shadowElevation = 1.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)  // 标准Material高度
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.fillMaxSize()) {
+            ProfileTopBar(onBackPressed = onBackPressed)
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                // 返回按钮
-                IconButton(
-                    onClick = onBackPressed,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Text(
-                        text = "‹",
-                        fontSize = 32.sp,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Light
+                item {
+                    IdentityCard(
+                        nickname = uiState.nickname.ifBlank { "未设置昵称" },
+                        avatarUri = uiState.avatarUri,
+                        usageDays = uiState.usageDays,
+                        unlockedAchievements = uiState.unlockedAchievementsCount,
+                        totalAchievements = uiState.totalAchievementsCount,
+                        onAchievementClick = onNavigateToAchievement
                     )
                 }
 
-                // 标题
-                Text(
-                    text = "账号信息",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
-                )
-
-                // 占位，保持标题居中
-                Spacer(modifier = Modifier.size(48.dp))
-            }
-        }
-
-        // 内容区域
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(1f),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            // 基础信息标题
-            item {
-                Text(
-                    text = "基础信息",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-
-            // 头像
-            item {
-                UserInfoItem(
-                    label = "头像",
-                    avatarUri = uiState.avatarUri,
-                    showAvatar = true,
-                    showArrow = true,
-                    onClick = {
-                        imagePickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                item {
+                    SectionHeader(title = "资料编辑", trailing = "头像与昵称")
+                    ProfileListCard {
+                        ProfileEditRow(
+                            iconText = "IMG",
+                            iconColor = ProfilePurple,
+                            title = "头像",
+                            subtitle = "点击更换头像",
+                            showArrow = false,
+                            onClick = {
+                                imagePickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            }
+                        )
+                        DividerLine()
+                        ProfileEditRow(
+                            iconText = "NAME",
+                            iconColor = ProfilePurpleSoft,
+                            title = "昵称",
+                            subtitle = "点击编辑昵称",
+                            showArrow = true,
+                            onClick = { showNicknameDialog = true }
                         )
                     }
-                )
-            }
-
-            // 昵称
-            item {
-                UserInfoItem(
-                    label = "昵称",
-                    value = uiState.nickname.ifEmpty { "未设置" },
-                    showArrow = true,
-                    onClick = { showNicknameDialog = true }
-                )
-            }
-
-            // ID
-            item {
-                UserInfoItem(
-                    label = "ID",
-                    value = uiState.userId.ifEmpty { "加载中..." },
-                    showCopy = true,
-                    onClick = { viewModel.copyUserId() }
-                )
-            }
-
-            // 账号绑定标题
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "账号绑定",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-
-            // 手机号
-            item {
-                UserInfoItem(
-                    label = "手机号",
-                    value = uiState.phoneNumber.ifEmpty { "未绑定" },
-                    actionText = if (uiState.phoneNumber.isEmpty()) "" else "换绑",
-                    showArrow = true,
-                    onClick = {
-                        viewModel.showBindDialog(BindType.PHONE)
-                    }
-                )
-            }
-
-            // 微信
-            item {
-                UserInfoItem(
-                    label = "微信",
-                    value = uiState.wechatId.ifEmpty { "未绑定" },
-                    actionText = if (uiState.wechatId.isEmpty()) "" else "换绑",
-                    showArrow = true,
-                    onClick = {
-                        viewModel.showBindDialog(BindType.WECHAT)
-                    }
-                )
-            }
-
-            // QQ
-            item {
-                UserInfoItem(
-                    label = "QQ",
-                    value = uiState.qqId.ifEmpty { "未绑定" },
-                    actionText = if (uiState.qqId.isEmpty()) "" else "换绑",
-                    showArrow = true,
-                    onClick = {
-                        viewModel.showBindDialog(BindType.QQ)
-                    }
-                )
-            }
-
-            // 退出登录按钮
-            item {
-                Spacer(modifier = Modifier.height(32.dp))
-                Button(
-                    onClick = { viewModel.logout() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 40.dp)
-                        .height(50.dp),
-                    shape = RoundedCornerShape(25.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Primary,
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text(
-                        text = "退出登录",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
-                    )
                 }
-            }
 
-            // 注销账号文字
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "注销账号",
-                    fontSize = 14.sp,
-                    color = TextMuted,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.deleteAccount() }
-                        .padding(vertical = 16.dp),
-                    textAlign = TextAlign.Center
-                )
+                item {
+                    SectionHeader(title = "账号状态", trailing = "登录")
+                    LoginStatusCard()
+                }
+
+                item {
+                    SectionHeader(title = "账号操作")
+                    LogoutButton(onClick = viewModel::logout)
+                }
             }
         }
 
-        // 昵称编辑对话框
         if (showNicknameDialog) {
             EditNicknameDialog(
-                currentNickname = uiState.nickname,
                 onDismiss = { showNicknameDialog = false },
                 onConfirm = { newNickname ->
                     viewModel.updateNickname(newNickname)
@@ -264,217 +240,179 @@ fun UserInfoScreen(
                 }
             )
         }
-
-        // 绑定输入对话框
-        if (uiState.showBindDialog) {
-            BindAccountDialog(
-                type = uiState.bindDialogType ?: BindType.PHONE,
-                onDismiss = { viewModel.hideBindDialog() },
-                onConfirm = { value ->
-                    viewModel.bindAccount(value)
-                }
-            )
-        }
     }
 }
 
 @Composable
-private fun EditNicknameDialog(
-    currentNickname: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var inputValue by remember { mutableStateOf(currentNickname) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "修改昵称",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        },
-        text = {
-            OutlinedTextField(
-                value = inputValue,
-                onValueChange = {
-                    if (it.length <= 20) {  // 限制最大20个字符
-                        inputValue = it
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(text = "请输入昵称", color = TextMuted)
-                },
-                supportingText = {
-                    Text(
-                        text = "${inputValue.length}/20",
-                        fontSize = 12.sp,
-                        color = TextMuted
-                    )
-                },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Primary,
-                    unfocusedBorderColor = Border,
-                    cursorColor = Primary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (inputValue.isNotBlank()) {
-                        onConfirm(inputValue.trim())
-                    }
-                },
-                enabled = inputValue.isNotBlank() && inputValue.trim() != currentNickname
-            ) {
-                Text(
-                    text = "确定",
-                    color = if (inputValue.isNotBlank() && inputValue.trim() != currentNickname)
-                        Primary else TextMuted,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = "取消",
-                    color = TextSecondary
-                )
-            }
-        },
-        containerColor = BgCard,
-        shape = RoundedCornerShape(16.dp)
-    )
-}
-
-@Composable
-private fun BindAccountDialog(
-    type: BindType,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var inputValue by remember { mutableStateOf("") }
-
-    val title = when (type) {
-        BindType.PHONE -> "绑定手机号"
-        BindType.WECHAT -> "绑定微信"
-        BindType.QQ -> "绑定QQ"
-    }
-
-    val placeholder = when (type) {
-        BindType.PHONE -> "请输入手机号"
-        BindType.WECHAT -> "请输入微信号"
-        BindType.QQ -> "请输入QQ号"
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = title,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        },
-        text = {
-            OutlinedTextField(
-                value = inputValue,
-                onValueChange = { inputValue = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(text = placeholder, color = TextMuted)
-                },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Primary,
-                    unfocusedBorderColor = Border,
-                    cursorColor = Primary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (inputValue.isNotBlank()) {
-                        onConfirm(inputValue)
-                    }
-                }
-            ) {
-                Text(
-                    text = "确定",
-                    color = Primary,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = "取消",
-                    color = TextSecondary
-                )
-            }
-        },
-        containerColor = BgCard,
-        shape = RoundedCornerShape(16.dp)
-    )
-}
-
-@Composable
-private fun UserInfoItem(
-    label: String,
-    value: String = "",
-    avatarUri: Uri? = null,
-    showAvatar: Boolean = false,
-    showArrow: Boolean = false,
-    showCopy: Boolean = false,
-    actionText: String = "",
-    onClick: () -> Unit = {}
-) {
-    Card(
+private fun ProfileTopBar(onBackPressed: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = BgCard
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 1.dp
-        )
+            .height(50.dp)
+            .padding(start = 12.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = showArrow || showCopy) { onClick() }
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            modifier = Modifier.size(40.dp),
+            shape = CircleShape,
+            color = Color(0xFFFAFBFD).copy(alpha = 0.78f),
+            border = BorderStroke(1.dp, Color(0xFFE9ECF2).copy(alpha = 0.88f)),
+            shadowElevation = 2.dp
         ) {
-            // 标签
-            Text(
-                text = label,
-                fontSize = 16.sp,
-                color = TextPrimary,
-                fontWeight = FontWeight.Normal
+            IconButton(onClick = onBackPressed, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = ProfileInk,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+
+        Text(
+            text = "个人资料",
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center,
+            color = ProfileInk,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Black
+        )
+
+        Spacer(modifier = Modifier.size(40.dp))
+    }
+}
+
+@Composable
+private fun IdentityCard(
+    nickname: String,
+    avatarUri: Uri?,
+    usageDays: Int,
+    unlockedAchievements: Int,
+    totalAchievements: Int,
+    onAchievementClick: () -> Unit
+) {
+    val breathingTransition = rememberInfiniteTransition(label = "profileIdentityBreathing")
+    val breath by breathingTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1550, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "profileIdentityGlow"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val strokeWidth = 2.dp.toPx() + 3.dp.toPx() * breath
+                drawRoundRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.24f + 0.18f * breath),
+                            Color(0xFFFF7BEF).copy(alpha = 0.24f + 0.30f * breath),
+                            Color(0xFF7AE9FF).copy(alpha = 0.20f + 0.28f * breath),
+                            Color.White.copy(alpha = 0.18f + 0.14f * breath)
+                        ),
+                        start = Offset.Zero,
+                        end = Offset(size.width, size.height)
+                    ),
+                    cornerRadius = CornerRadius(28.dp.toPx(), 28.dp.toPx()),
+                    style = Stroke(width = strokeWidth)
+                )
+            }
+            .padding(4.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(ProfilePurple.copy(alpha = 0.95f), ProfilePurpleSoft.copy(alpha = 0.88f))
+                )
             )
+            .drawBehind {
+                val softAlpha = 0.20f + 0.22f * breath
+                val brightAlpha = 0.18f + 0.26f * breath
+                val radiusBoost = 30.dp.toPx() * breath
+                val drift = 26.dp.toPx() * breath
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // 右侧内容
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.18f + 0.14f * breath),
+                    radius = 84.dp.toPx() + radiusBoost,
+                    center = Offset(size.width - 4.dp.toPx(), -8.dp.toPx())
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = softAlpha),
+                            Color(0xFFFF9FE8).copy(alpha = brightAlpha),
+                            Color.Transparent
+                        ),
+                        center = Offset(62.dp.toPx() + drift, 62.dp.toPx()),
+                        radius = 130.dp.toPx() + radiusBoost
+                    ),
+                    radius = 130.dp.toPx() + radiusBoost,
+                    center = Offset(62.dp.toPx() + drift, 62.dp.toPx())
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF71F0FF).copy(alpha = 0.16f + 0.26f * breath),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.70f, size.height * 0.18f + drift),
+                        radius = 120.dp.toPx() + radiusBoost
+                    ),
+                    radius = 120.dp.toPx() + radiusBoost,
+                    center = Offset(size.width * 0.70f, size.height * 0.18f + drift)
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFFFF1B9).copy(alpha = 0.18f + 0.18f * breath),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.82f, size.height * 0.76f),
+                        radius = 140.dp.toPx() + 20.dp.toPx() * breath
+                    ),
+                    radius = 140.dp.toPx() + 20.dp.toPx() * breath,
+                    center = Offset(size.width * 0.82f, size.height * 0.76f)
+                )
+            }
+            .padding(16.dp)
+    ) {
+        Column {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // 头像
-                if (showAvatar) {
-                    val presetPainter = painterResource(R.drawable.preset_avatar)
+                val presetPainter = painterResource(R.drawable.preset_avatar)
+                Box(
+                    modifier = Modifier
+                        .size(92.dp)
+                        .drawBehind {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.62f + 0.22f * breath),
+                                        Color(0xFFFF8DEB).copy(alpha = 0.38f + 0.30f * breath),
+                                        Color(0xFF85EFFF).copy(alpha = 0.20f + 0.24f * breath),
+                                        Color.Transparent
+                                    ),
+                                    center = center,
+                                    radius = 48.dp.toPx() + 18.dp.toPx() * breath
+                                ),
+                                radius = 48.dp.toPx() + 18.dp.toPx() * breath,
+                                center = center
+                            )
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.28f + 0.28f * breath),
+                                radius = 39.dp.toPx() + 8.dp.toPx() * breath,
+                                center = center,
+                                style = Stroke(width = 2.dp.toPx() + 2.dp.toPx() * breath)
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
                     AsyncImage(
                         model = avatarUri,
                         contentDescription = "头像",
@@ -482,48 +420,456 @@ private fun UserInfoItem(
                         error = presetPainter,
                         fallback = presetPainter,
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape),
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .border(3.dp, Color.White.copy(alpha = 0.86f + 0.10f * breath), CircleShape),
                         contentScale = ContentScale.Crop
                     )
                 }
 
-                // 值
-                if (value.isNotEmpty() && !showAvatar) {
-                    Text(
-                        text = value,
-                        fontSize = 15.sp,
-                        color = TextSecondary
-                    )
-                }
+                Spacer(modifier = Modifier.width(8.dp))
 
-                // 操作文字（换绑）
-                if (actionText.isNotEmpty()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = nickname,
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        HonorBadge()
+                    }
                     Text(
-                        text = actionText,
-                        fontSize = 14.sp,
-                        color = Primary
+                        text = "你在 NextThing 中的身份资料",
+                        color = Color.White.copy(alpha = 0.78f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 7.dp)
                     )
+                    MedalPreview()
                 }
+            }
 
-                // 复制图标
-                if (showCopy) {
-                    Icon(
-                        painter = painterResource(id = android.R.drawable.ic_menu_save),
-                        contentDescription = "复制",
-                        tint = TextMuted,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MetricPill(
+                    label = "使用天数",
+                    value = "${usageDays.coerceAtLeast(1)} 天",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricPill(
+                    label = "成就解锁",
+                    value = "$unlockedAchievements / $totalAchievements",
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
-                // 箭头
-                if (showArrow) {
-                    Text(
-                        text = "›",
-                        fontSize = 24.sp,
-                        color = TextMuted,
-                        fontWeight = FontWeight.Light
+            AchievementEntry(onClick = onAchievementClick)
+        }
+    }
+}
+
+@Composable
+private fun HonorBadge() {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, Color(0xFFFFD97C).copy(alpha = 0.70f))
+    ) {
+        Row(
+            modifier = Modifier
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF3A276B), Color(0xFF6B4EE8), Color(0xFF2B2052))),
+                    RoundedCornerShape(999.dp)
+                )
+                .padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFFFFF1B9), Color(0xFFD79D2A))))
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+            Text(
+                text = "见习掌控师",
+                color = Color(0xFFF9E7A9),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun MedalPreview() {
+    Row(
+        modifier = Modifier.padding(top = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        listOf(ProfilePurple, Color(0xFFF1A832), Color(0xFF1AAEC0)).forEachIndexed { index, color ->
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .offset(x = (-5 * index).dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color.White.copy(alpha = 0.28f), color)
+                        )
                     )
+                    .border(2.dp, Color.White.copy(alpha = 0.72f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "★",
+                    color = Color(0xFFFFF4BC),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricPill(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.16f))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.68f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Text(
+            text = value,
+            color = Color.White,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun AchievementEntry(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .clip(RoundedCornerShape(17.dp))
+            .clickable(onClick = onClick)
+            .background(Color.White.copy(alpha = 0.16f))
+            .border(1.dp, Color.White.copy(alpha = 0.20f), RoundedCornerShape(17.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFFFFF3B3), Color(0xFFF0AC35)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("★", color = Color(0xFF5A3B00), fontSize = 13.sp, fontWeight = FontWeight.Black)
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 10.dp)
+        ) {
+            Text("成就中心", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
+            Text(
+                "查看已解锁成就与徽章详情",
+                color = Color.White.copy(alpha = 0.70f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.74f)
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, trailing: String? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 2.dp, end = 2.dp, top = 14.dp, bottom = 7.dp),
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = title,
+            color = ProfileInk,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Black
+        )
+        if (trailing != null) {
+            Text(
+                text = trailing,
+                color = ProfileMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileListCard(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.82f))
+            .border(1.dp, ProfilePurple.copy(alpha = 0.09f), RoundedCornerShape(16.dp))
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun ProfileEditRow(
+    iconText: String,
+    iconColor: Color,
+    title: String,
+    subtitle: String,
+    showArrow: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(iconColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = iconText,
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                maxLines = 1
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 10.dp)
+        ) {
+            Text(title, color = ProfileInk, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+            Text(
+                subtitle,
+                color = ProfileSub,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+
+        if (showArrow) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = ProfileMuted,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DividerLine() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .padding(start = 61.dp)
+            .background(ProfileLine)
+    )
+}
+
+@Composable
+private fun LoginStatusCard() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.82f))
+            .border(1.dp, ProfileGreen.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
+            .padding(13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(ProfileGreen),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("OK", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 10.dp)
+        ) {
+            Text("登录状态正常", color = ProfileInk, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+            Text(
+                "当前账号已登录，可正常同步和使用 AI 能力",
+                color = ProfileSub,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+
+        Text("已登录", color = ProfileGreen, fontSize = 12.sp, fontWeight = FontWeight.Black)
+    }
+}
+
+@Composable
+private fun LogoutButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp),
+        shape = RoundedCornerShape(999.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = ProfileDanger.copy(alpha = 0.08f),
+            contentColor = ProfileDanger
+        ),
+        border = BorderStroke(1.dp, ProfileDanger.copy(alpha = 0.16f)),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp)
+    ) {
+        Text("退出登录", fontSize = 14.sp, fontWeight = FontWeight.Black)
+    }
+}
+
+@Composable
+private fun EditNicknameDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var inputValue by remember { mutableStateOf("") }
+    val trimmed = inputValue.trim()
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            color = Color.White,
+            tonalElevation = 0.dp,
+            shadowElevation = 24.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "编辑昵称",
+                    color = ProfileInk,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = "输入你的新昵称",
+                    color = ProfileSub,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 14.dp)
+                )
+
+                OutlinedTextField(
+                    value = inputValue,
+                    onValueChange = {
+                        if (it.length <= 20) {
+                            inputValue = it
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text("输入你的新昵称", color = Color(0xFFA1A8B8), fontSize = 14.sp)
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ProfilePurple,
+                        unfocusedBorderColor = Color(0xFFE6E9F2),
+                        focusedContainerColor = Color(0xFFF7F8FC),
+                        unfocusedContainerColor = Color(0xFFF7F8FC),
+                        cursorColor = ProfilePurple,
+                        focusedTextColor = ProfileInk,
+                        unfocusedTextColor = ProfileInk
+                    )
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0xFFF0F2F8))
+                    ) {
+                        Text("取消", color = Color(0xFF5F6678), fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    }
+                    Button(
+                        onClick = { onConfirm(trimmed) },
+                        enabled = trimmed.isNotEmpty(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp),
+                        shape = RoundedCornerShape(999.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ProfilePurple,
+                            contentColor = Color.White,
+                            disabledContainerColor = ProfilePurple.copy(alpha = 0.38f),
+                            disabledContentColor = Color.White.copy(alpha = 0.72f)
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp)
+                    ) {
+                        Text("确认", fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    }
                 }
             }
         }

@@ -55,7 +55,7 @@ object TaskWorkScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             OVERDUE_CHECK_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             overdueCheckRequest
         )
 
@@ -93,7 +93,7 @@ object TaskWorkScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             DELAYED_CONVERT_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             delayedConvertRequest
         )
 
@@ -163,7 +163,7 @@ object TaskWorkScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             TASK_NOTIFICATION_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             notificationRequest
         )
 
@@ -198,7 +198,7 @@ object TaskWorkScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             COUNTDOWN_UPDATE_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             countdownRequest
         )
 
@@ -236,7 +236,7 @@ object TaskWorkScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             RECURRING_TASKS_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             recurringTasksRequest
         )
 
@@ -288,6 +288,7 @@ object TaskWorkScheduler {
             repeatInterval = 1,
             repeatIntervalTimeUnit = TimeUnit.DAYS
         )
+            .setInputData(workDataOf(DailyBriefingWorker.KEY_BRIEFING_TYPE to com.nextthing.app.domain.service.AIBriefingGenerator.BriefingType.MORNING.name))
             .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
             .build()
@@ -305,6 +306,7 @@ object TaskWorkScheduler {
             repeatInterval = 1,
             repeatIntervalTimeUnit = TimeUnit.DAYS
         )
+            .setInputData(workDataOf(DailyBriefingWorker.KEY_BRIEFING_TYPE to com.nextthing.app.domain.service.AIBriefingGenerator.BriefingType.EVENING.name))
             .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
             .build()

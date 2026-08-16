@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.CancellationException
 import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -109,6 +110,8 @@ class TaskGeofenceRepositoryImpl @Inject constructor(
         return try {
             taskGeofenceDao.insert(taskGeofence.toEntity())
             Result.success(taskGeofence.id)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             timber.log.Timber.tag("TaskGeofence").e(e, "❌ 插入任务地理围栏关联失败")
             Result.failure(e)
@@ -211,6 +214,8 @@ class TaskGeofenceRepositoryImpl @Inject constructor(
                 .d("✅ 创建任务地理围栏关联: taskId=$taskId, locationId=$geofenceLocationId, radius=$radius")
 
             Result.success(taskGeofence.id)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             timber.log.Timber.tag("TaskGeofence").e(e, "❌ 创建任务地理围栏关联失败")
             Result.failure(e)
@@ -239,5 +244,4 @@ class TaskGeofenceRepositoryImpl @Inject constructor(
         )
     }
 }
-
 

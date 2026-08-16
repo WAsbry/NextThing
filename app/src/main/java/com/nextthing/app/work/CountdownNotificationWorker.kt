@@ -10,6 +10,7 @@ import com.nextthing.app.domain.repository.TaskRepository
 import com.nextthing.app.util.NotificationHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.time.LocalDateTime
@@ -73,9 +74,15 @@ class CountdownNotificationWorker @AssistedInject constructor(
 
             Timber.i("CountdownNotificationWorker: 已刷新 $updateCount 条通知")
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "CountdownNotificationWorker: 刷新通知失败")
-            Result.retry()
+            WorkerFailurePolicy.result(TAG, runAttemptCount)
         }
+    }
+
+    private companion object {
+        const val TAG = "CountdownNotificationWorker"
     }
 }

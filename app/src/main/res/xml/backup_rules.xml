@@ -6,8 +6,6 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="datastore/ai_prefs.preferences_pb" />
+    <exclude domain="file" path="datastore/auth_tokens.preferences_pb" />
 </full-backup-content>

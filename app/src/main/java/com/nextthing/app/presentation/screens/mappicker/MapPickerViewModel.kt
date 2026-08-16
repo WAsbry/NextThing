@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.amap.api.services.core.LatLonPoint
 import com.amap.api.services.geocoder.GeocodeSearch
 import com.amap.api.services.geocoder.RegeocodeQuery
+import com.amap.api.services.poisearch.PoiSearch
+import com.amap.api.services.poisearch.PoiResult
+import com.amap.api.services.core.PoiItem
 import com.nextthing.app.domain.service.LocationService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +32,7 @@ class MapPickerViewModel @Inject constructor(
     val uiState: StateFlow<MapPickerUiState> = _uiState.asStateFlow()
 
     private var geocodeSearch: GeocodeSearch? = null
+    private var appContext: android.content.Context? = null
 
     private var hasInitialLocation = false
 
@@ -45,7 +49,9 @@ class MapPickerViewModel @Inject constructor(
                     latitude = initialLat,
                     longitude = initialLng,
                     hasSelectedLocation = true,
-                    isLoadingAddress = true
+                    isLoadingAddress = true,
+                    // 让地图在 MapView 完成创建后也能收到一次明确的镜头更新。
+                    moveToken = System.nanoTime()
                 )
             }
             // 清除参数，避免下次误用
@@ -61,9 +67,9 @@ class MapPickerViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 Timber.tag("MapPicker").d("📍 正在获取当前位置...")
-                _uiState.update { it.copy(isLoadingAddress = true) }
+                _uiState.update { it.copy(isLocating = true, addressHint = null) }
 
-                val currentLocation = locationService.getCurrentLocation()
+                val currentLocation = locationService.getCurrentLocation(forceRefresh = true)
                 if (currentLocation != null) {
                     Timber.tag("MapPicker").d("✅ 获取当前位置成功: (${currentLocation.latitude}, ${currentLocation.longitude})")
                     _uiState.update {
@@ -73,19 +79,34 @@ class MapPickerViewModel @Inject constructor(
                             address = currentLocation.address.ifEmpty {
                                 "${currentLocation.city}${currentLocation.district}"
                             },
-                            isLoadingAddress = false
+                            isLoadingAddress = false,
+                            isLocating = false,
+                            addressHint = null,
+                            hasSelectedLocation = true,
+                            moveToken = System.nanoTime()
                         )
                     }
                 } else {
                     Timber.tag("MapPicker").w("⚠️ 无法获取当前位置，使用默认位置")
-                    _uiState.update { it.copy(isLoadingAddress = false) }
+                    _uiState.update {
+                        it.copy(
+                            isLoadingAddress = false,
+                            isLocating = false,
+                            hasSelectedLocation = false,
+                            address = "",
+                            addressHint = "未能获取当前位置，请检查系统定位开关和应用定位权限"
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 Timber.tag("MapPicker").e(e, "❌ 获取当前位置失败")
                 _uiState.update {
                     it.copy(
                         isLoadingAddress = false,
-                        errorMessage = "获取当前位置失败"
+                        isLocating = false,
+                        hasSelectedLocation = false,
+                        address = "",
+                        addressHint = "定位请求失败，请稍后重试"
                     )
                 }
             }
@@ -97,13 +118,17 @@ class MapPickerViewModel @Inject constructor(
      */
     fun initGeocodeSearch(context: android.content.Context) {
         try {
-            geocodeSearch = GeocodeSearch(context)
+            appContext = context.applicationContext
+            // 搜索 SDK 的隐私状态必须先于 GeocodeSearch / PoiSearch 初始化。
+            com.amap.api.services.core.ServiceSettings.updatePrivacyShow(appContext, true, true)
+            com.amap.api.services.core.ServiceSettings.updatePrivacyAgree(appContext, true)
+            geocodeSearch = GeocodeSearch(appContext)
             Timber.tag("MapPicker").d("✅ GeocodeSearch 初始化成功")
 
             // 如果有初始位置，执行逆地理编码
             if (hasInitialLocation) {
                 val state = _uiState.value
-                performReverseGeocode(state.latitude, state.longitude)
+                performReverseGeocode(state.latitude!!, state.longitude!!)
             }
         } catch (e: Exception) {
             Timber.tag("MapPicker").e(e, "❌ GeocodeSearch 初始化失败")
@@ -123,12 +148,89 @@ class MapPickerViewModel @Inject constructor(
                 longitude = longitude,
                 hasSelectedLocation = true,
                 isLoadingAddress = true,
+                isLocating = false,
+                addressHint = null,
                 errorMessage = null
             )
         }
 
         // 执行逆地理编码
         performReverseGeocode(latitude, longitude)
+    }
+
+    fun updateSearchQuery(query: String) {
+        _uiState.update { it.copy(searchQuery = query, searchResults = emptyList()) }
+    }
+
+    fun clearSearch() {
+        _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
+    }
+
+    fun searchPlaces() {
+        val keyword = _uiState.value.searchQuery.trim()
+        if (keyword.isBlank() || _uiState.value.isSearching) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSearching = true, searchResults = emptyList(), errorMessage = null) }
+            try {
+                val results: List<PlaceSearchResult> = withContext(Dispatchers.IO) {
+                    val query = PoiSearch.Query(keyword, "", "")
+                    query.pageSize = 6
+                    query.pageNum = 0
+                    suspendCoroutine<List<PlaceSearchResult>> { continuation ->
+                        val context = appContext
+                        if (context == null) {
+                            continuation.resume(emptyList())
+                            return@suspendCoroutine
+                        }
+                        val search = PoiSearch(context, query)
+                        search.setOnPoiSearchListener(object : PoiSearch.OnPoiSearchListener {
+                            override fun onPoiSearched(result: PoiResult?, code: Int) {
+                                if (code == 1000) {
+                                    continuation.resume(
+                                        result?.pois.orEmpty().mapNotNull { poi ->
+                                            poi.latLonPoint?.let { point ->
+                                                PlaceSearchResult(
+                                                    title = poi.title.orEmpty(),
+                                                    address = poi.snippet.orEmpty(),
+                                                    latitude = point.latitude,
+                                                    longitude = point.longitude
+                                                )
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    continuation.resume(emptyList())
+                                }
+                            }
+                            override fun onPoiItemSearched(item: PoiItem?, code: Int) = Unit
+                        })
+                        search.searchPOIAsyn()
+                    }
+                }
+                _uiState.update { it.copy(isSearching = false, searchResults = results) }
+            } catch (e: Exception) {
+                Timber.tag("MapPicker").e(e, "POI 搜索失败")
+                _uiState.update { it.copy(isSearching = false, errorMessage = "搜索地点失败，请重试") }
+            }
+        }
+    }
+
+    fun selectSearchResult(place: PlaceSearchResult) {
+        _uiState.update {
+            it.copy(
+                latitude = place.latitude,
+                longitude = place.longitude,
+                address = place.address.ifBlank { place.title },
+                hasSelectedLocation = true,
+                isLoadingAddress = true,
+                isLocating = false,
+                searchQuery = place.title,
+                searchResults = emptyList(),
+                moveToken = System.nanoTime()
+            )
+        }
+        performReverseGeocode(place.latitude, place.longitude)
     }
 
     /**
@@ -141,10 +243,10 @@ class MapPickerViewModel @Inject constructor(
                     val search = geocodeSearch
                     if (search == null) {
                         Timber.tag("MapPicker").w("geocodeSearch 未初始化，跳过逆地理编码")
-                        return@withContext "获取地址失败"
+                        return@withContext null
                     }
 
-                    suspendCoroutine { continuation ->
+                    suspendCoroutine<String?> { continuation ->
                         val query = RegeocodeQuery(
                             LatLonPoint(latitude, longitude),
                             200f, // 搜索半径
@@ -159,12 +261,12 @@ class MapPickerViewModel @Inject constructor(
                                 ) {
                                     if (code == 1000) {
                                         val regeocodeAddress = result?.regeocodeAddress
-                                        val addressStr = regeocodeAddress?.formatAddress ?: "未知地址"
+                                        val addressStr = regeocodeAddress?.formatAddress
                                         Timber.tag("MapPicker").d("✅ 逆地理编码成功: $addressStr")
                                         continuation.resume(addressStr)
                                     } else {
                                         Timber.tag("MapPicker").e("❌ 逆地理编码失败: code=$code")
-                                        continuation.resume("获取地址失败")
+                                        continuation.resume(null)
                                     }
                                 }
 
@@ -183,16 +285,17 @@ class MapPickerViewModel @Inject constructor(
 
                 _uiState.update {
                     it.copy(
-                        address = address,
-                        isLoadingAddress = false
+                        address = address ?: it.address,
+                        isLoadingAddress = false,
+                        addressHint = if (address == null) "未能解析附近地址，仍可确认该坐标" else null
                     )
                 }
             } catch (e: Exception) {
                 Timber.tag("MapPicker").e(e, "❌ 逆地理编码异常")
                 _uiState.update {
                     it.copy(
-                        address = "获取地址失败",
                         isLoadingAddress = false,
+                        addressHint = "未能解析附近地址，仍可确认该坐标",
                         errorMessage = e.message
                     )
                 }

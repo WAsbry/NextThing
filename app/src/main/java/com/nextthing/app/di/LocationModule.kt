@@ -2,12 +2,11 @@ package com.nextthing.app.di
 
 import android.content.Context
 import com.nextthing.app.data.service.AmapLocationServiceImpl
-import com.nextthing.app.data.service.LocationServiceImpl
 import com.nextthing.app.data.service.GeofenceCheckServiceImpl
 import com.nextthing.app.domain.service.LocationService
 import com.nextthing.app.domain.service.GeofenceCheckService
 import com.nextthing.app.domain.service.GeofenceManager
-import com.nextthing.app.domain.service.GeofenceManagerImpl
+import com.nextthing.app.domain.service.WorkerOnlyGeofenceManager
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -36,24 +35,6 @@ abstract class LocationModule {
     @Binds
     @Singleton
     abstract fun bindGeofenceManager(
-        geofenceManagerImpl: GeofenceManagerImpl
+        geofenceManager: WorkerOnlyGeofenceManager
     ): GeofenceManager
-
-    companion object {
-        @Provides
-        @Singleton
-        fun provideLocationServiceImpl(
-            @ApplicationContext context: Context
-        ): LocationServiceImpl {
-            return LocationServiceImpl(context)
-        }
-
-        @Provides
-        @Singleton
-        fun provideGeofenceManagerImpl(
-            @ApplicationContext context: Context
-        ): GeofenceManagerImpl {
-            return GeofenceManagerImpl(context)
-        }
-    }
-} 
+}

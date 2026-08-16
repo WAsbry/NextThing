@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextThing — 登录页设计稿</title>
+<style>
+:root {
+  --primary: #6C5CE7;
+  --primary-light: #A29BFE;
+  --primary-dark: #5A4BD1;
+  --success: #00B894;
+  --danger: #FF7675;
+  --bg-page: #F8F9FC;
+  --bg-card: #FFFFFF;
+  --bg-input: #F1F3F8;
+  --bg-input-focus: #EEF0FF;
+  --text-primary: #2D3436;
+  --text-secondary: #636E72;
+  --text-muted: #B2BEC3;
+  --border: #E8ECF1;
+  --border-focus: #6C5CE7;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.08), 0 4px 8px rgba(0,0,0,0.04);
+  --shadow-primary: 0 4px 16px rgba(108, 92, 231, 0.25);
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, 'SF Pro Display', 'PingFang SC', sans-serif;
+  background: #E8ECF1;
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  padding: 40px 20px;
+  flex-wrap: wrap;
+}
+
+/* ── 手机外框 ── */
+.phone {
+  width: 375px;
+  height: 812px;
+  background: var(--bg-page);
+  border-radius: 40px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 8px 20px rgba(0,0,0,0.1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.status-bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.page-label {
+  position: absolute;
+  bottom: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── 登录页布局 ── */
+.login-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 28px;
+  overflow-y: auto;
+}
+
+/* Logo — NT 图标 + 文字 */
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 48px;
+  margin-bottom: 20px;
+}
+
+.brand-logo-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #6C5CE7, #5A4BD1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: white;
+  letter-spacing: -1px;
+  box-shadow: 0 4px 16px rgba(108,92,231,0.35);
+  animation: iconPulse 3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes iconPulse {
+  0%, 100% { box-shadow: 0 4px 16px rgba(108,92,231,0.25); }
+  50% { box-shadow: 0 4px 24px rgba(108,92,231,0.5), 0 0 40px rgba(108,92,231,0.15); }
+}
+
+.brand-logo-text {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.8px;
+}
+
+/* 启动页 Logo — 更大 */
+.splash-brand-logo {
+  margin-top: 0;
+  margin-bottom: 0;
+  flex-direction: column;
+  gap: 20px;
+}
+.splash-brand-logo .brand-logo-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 22px;
+  font-size: 34px;
+}
+.splash-brand-logo .brand-logo-text {
+  font-size: 36px;
+}
+
+/* 登录页 Logo */
+.login-brand-logo {
+  margin-top: 56px;
+  margin-bottom: 24px;
+}
+.login-brand-logo .brand-logo-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  font-size: 20px;
+}
+.login-brand-logo .brand-logo-text {
+  font-size: 26px;
+}
+
+/* 注册页 Logo */
+.register-brand-logo {
+  margin-top: 56px;
+  margin-bottom: 24px;
+}
+.register-brand-logo .brand-logo-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  font-size: 20px;
+}
+.register-brand-logo .brand-logo-text {
+  font-size: 26px;
+}
+
+.login-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  letter-spacing: -0.3px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 36px;
+}
+
+/* 表单 */
+.login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.input-field {
+  width: 100%;
+  height: 52px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  padding: 0 16px 0 48px;
+  font-size: 15px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.input-field::placeholder {
+  color: var(--text-muted);
+}
+.input-field:focus {
+  border-color: var(--border-focus);
+  background: var(--bg-input-focus);
+  box-shadow: var(--shadow-primary);
+}
+
+/* 输入框错误态 */
+.input-field.error {
+  border-color: var(--danger);
+  background: rgba(255,118,117,0.04);
+  box-shadow: 0 0 0 3px rgba(255,118,117,0.1);
+}
+
+.error-text {
+  font-size: 12px;
+  color: var(--danger);
+  margin-top: -8px;
+  padding-left: 4px;
+}
+
+/* CTA 按钮 */
+.login-btn {
+  width: 100%;
+  height: 50px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-primary);
+  transition: all 0.2s;
+  margin-top: 8px;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.login-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(108, 92, 231, 0.35);
+}
+.login-btn:active {
+  transform: translateY(0);
+}
+.login-btn:disabled {
+  background: var(--text-muted);
+  box-shadow: var(--shadow-sm);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Loading 旋转 */
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 注册链接 */
+.login-footer {
+  margin-top: 24px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.login-footer a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+.login-footer a:hover {
+  text-decoration: underline;
+}
+
+/* 密码显示切换 */
+.password-toggle {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.password-toggle:hover { color: var(--text-secondary); }
+
+/* ── 启动页 ── */
+.splash-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-logo-deprecated {
+  display: none;
+}
+
+/* removed splash-name */
+
+.splash-tagline {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.splash-loading {
+  margin-top: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.splash-loading .spinner-dark {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.splash-loading span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.splash-version {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── 权限弹窗（系统级模拟） ── */
+.permission-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 16px 40px;
+  z-index: 10;
+}
+.permission-dialog {
+  width: 100%;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.25s ease-out;
+}
+@keyframes slideUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.permission-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+.permission-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.permission-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.permission-actions {
+  display: flex;
+  gap: 10px;
+}
+.permission-btn {
+  flex: 1;
+  height: 44px;
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.permission-btn-deny {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+}
+.permission-btn-allow {
+  background: var(--primary);
+  color: white;
+  box-shadow: var(--shadow-primary);
+}
+
+/* ── 键盘弹出模拟 ── */
+.keyboard {
+  height: 260px;
+  background: #E0E0E0;
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  padding: 6px 4px;
+  gap: 4px;
+}
+.keyboard-row {
+  width: 100%;
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.key {
+  height: 38px;
+  border-radius: 5px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  color: var(--text-primary);
+  box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+}
+.key-char { width: 32px; }
+.key-space { width: 180px; }
+.key-action { width: 44px; background: #D5D5D5; font-size: 14px; }
+
+/* ── 注册页 ── */
+.register-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 1. 启动页 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="phone" style="position: relative;">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+  <div class="splash-content">
+    <div class="brand-logo splash-brand-logo">
+      <div class="brand-logo-icon">NT</div>
+      <span class="brand-logo-text">NextThing</span>
+    </div>
+    <div class="splash-tagline" style="margin-top: 16px;">你的 AI 伙伴</div>
+    <div class="splash-loading" style="margin-top: 60px;">
+      <div class="spinner-dark"></div>
+      <span>正在准备...</span>
+    </div>
+  </div>
+  <div class="splash-version">v1.0.0 · 端侧AI驱动</div>
+  <div class="page-label">1. 启动页</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 2. 启动页 + 权限弹窗 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="phone" style="position: relative;">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+  <div class="splash-content">
+    <div class="brand-logo splash-brand-logo">
+      <div class="brand-logo-icon">NT</div>
+      <span class="brand-logo-text">NextThing</span>
+    </div>
+    <div class="splash-tagline" style="margin-top: 16px;">你的 AI 伙伴</div>
+  </div>
+  <!-- 权限弹窗 -->
+  <div class="permission-overlay">
+    <div class="permission-dialog">
+      <div class="permission-icon">🔔</div>
+      <div class="permission-title">允许 NextThing 发送通知？</div>
+      <div class="permission-desc">通知可以帮助你及时收到任务提醒和 AI 伙伴的消息。</div>
+      <div class="permission-actions">
+        <button class="permission-btn permission-btn-deny">拒绝</button>
+        <button class="permission-btn permission-btn-allow">允许</button>
+      </div>
+    </div>
+  </div>
+  <div class="page-label">2. 启动页 · 权限申请</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 3. 登录页 — 初始空表单 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="phone" style="position: relative;">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+  <div class="login-content">
+    <div class="brand-logo login-brand-logo">
+      <div class="brand-logo-icon">NT</div>
+      <span class="brand-logo-text">NextThing</span>
+    </div>
+    <div class="login-title">欢迎回来</div>
+    <div class="login-subtitle">登录以继续使用</div>
+    <div class="login-form">
+      <div class="input-wrapper">
+        <span class="input-icon">👤</span>
+        <input class="input-field" type="text" placeholder="请输入用户名" />
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">🔒</span>
+        <input class="input-field" type="password" placeholder="请输入密码" />
+        <span class="password-toggle">👁</span>
+      </div>
+      <button class="login-btn" disabled>登 录</button>
+    </div>
+    <div class="login-footer">
+      没有账号？<a href="#">注册</a>
+    </div>
+  </div>
+  <div class="page-label">3. 登录页 · 空表单</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 4. 登录页 — 用户名输入中（键盘弹出） -->
+<!-- ══════════════════════════════════════════ -->
+<div class="phone" style="position: relative;">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+  <div class="login-content" style="padding-bottom: 0;">
+    <div class="brand-logo login-brand-logo" style="margin-top: 24px; margin-bottom: 14px;">
+      <div class="brand-logo-icon" style="width: 40px; height: 40px; font-size: 17px;">NT</div>
+      <span class="brand-logo-text" style="font-size: 22px;">NextThing</span>
+    </div>
+    <div class="login-title" style="font-size: 18px;">欢迎回来</div>
+    <div class="login-subtitle" style="margin-bottom: 24px; font-size: 13px;">登录以继续使用</div>
+    <div class="login-form">
+      <div class="input-wrapper">
+        <span class="input-icon">👤</span>
+        <input class="input-field" style="border-color: var(--border-focus); background: var(--bg-input-focus); box-shadow: var(--shadow-primary);" type="text" value="梅狸猫" placeholder="请输入用户名" />
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">🔒</span>
+        <input class="input-field" type="password" placeholder="请输入密码" />
+        <span class="password-toggle">👁</span>
+      </div>
+      <button class="login-btn" disabled>登 录</button>
+    </div>
+    <div class="login-footer" style="margin-top: 16px;">
+      没有账号？<a href="#">注册</a>
+    </div>
+  </div>
+  <!-- 模拟键盘 -->
+  <div class="keyboard">
+    <div class="keyboard-row">
+      <div class="key key-char">Q</div><div class="key key-char">W</div><div class="key key-char">E</div>
+      <div class="key key-char">R</div><div class="key key-char">T</div><div class="key key-char">Y</div>
+      <div class="key key-char">U</div><div class="key key-char">I</div><div class="key key-char">O</div>
+      <div class="key key-char">P</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key key-char">A</div><div class="key key-char">S</div><div class="key key-char">D</div>
+      <div class="key key-char">F</div><div class="key key-char">G</div><div class="key key-char">H</div>
+      <div class="key key-char">J</div><div class="key key-char">K</div><div class="key key-char">L</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key key-action">⇧</div>
+      <div class="key key-char">Z</div><div class="key key-char">X</div><div class="key key-char">C</div>
+      <div class="key key-char">V</div><div class="key key-char">B</div><div class="key key-char">N</div>
+      <div class="key key-char">M</div><div class="key key-action">⌫</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key key-action">123</div>
+      <div class="key key-space">中/英</div>
+      <div class="key key-action">返回</div>
+    </div>
+  </div>
+  <div class="page-label">4. 登录页 · 键盘弹出</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 5. 登录页 — 表单填写完成 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="phone" style="position: relative;">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+  <div class="login-content">
+    <div class="brand-logo login-brand-logo">
+      <div class="brand-logo-icon">NT</div>
+      <span class="brand-logo-text">NextThing</span>
+    </div>
+    <div class="login-title">欢迎回来</div>
+    <div class="login-subtitle">登录以继续使用</div>
+    <div class="login-form">
+      <div class="input-wrapper">
+        <span class="input-icon">👤</span>
+        <input class="input-field" type="text" value="梅狸猫大王" />
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">🔒</span>
+        <input class="input-field" type="password" value="••••••••" />
+        <span class="password-toggle">👁</span>
+      </div>
+      <button class="login-btn">登 录</button>
+    </div>
+    <div class="login-footer">
+      没有账号？<a href="#">注册</a>
+    </div>
+  </div>
+  <div class="page-label">5. 登录页 · 表单完成（可登录）</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 6. 登录页 — 登录中 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="phone" style="position: relative;">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+  <div class="login-content">
+    <div class="brand-logo login-brand-logo">
+      <div class="brand-logo-icon">NT</div>
+      <span class="brand-logo-text">NextThing</span>
+    </div>
+    <div class="login-title">欢迎回来</div>
+    <div class="login-subtitle">登录以继续使用</div>
+    <div class="login-form">
+      <div class="input-wrapper">
+        <span class="input-icon">👤</span>
+        <input class="input-field" type="text" value="梅狸猫大王" disabled />
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">🔒</span>
+        <input class="input-field" type="password" value="••••••••" disabled />
+        <span class="password-toggle">👁</span>
+      </div>
+      <button class="login-btn" disabled>
+        <div class="spinner"></div>
+        登录中...
+      </button>
+    </div>
+    <div class="login-footer">
+      没有账号？<a href="#">注册</a>
+    </div>
+  </div>
+  <div class="page-label">6. 登录页 · 登录中</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 7. 登录页 — 登录失败 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="phone" style="position: relative;">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+  <div class="login-content">
+    <div class="brand-logo login-brand-logo">
+      <div class="brand-logo-icon">NT</div>
+      <span class="brand-logo-text">NextThing</span>
+    </div>
+    <div class="login-title">欢迎回来</div>
+    <div class="login-subtitle">登录以继续使用</div>
+    <div class="login-form">
+      <div class="input-wrapper">
+        <span class="input-icon">👤</span>
+        <input class="input-field" type="text" value="梅狸猫大王" />
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">🔒</span>
+        <input class="input-field error" type="password" value="••••••••" />
+        <span class="password-toggle">👁</span>
+      </div>
+      <div class="error-text">用户名或密码错误，请重试</div>
+      <button class="login-btn">登 录</button>
+    </div>
+    <div class="login-footer">
+      没有账号？<a href="#">注册</a>
+    </div>
+  </div>
+  <div class="page-label">7. 登录页 · 登录失败</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- 8. 注册页 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="phone" style="position: relative;">
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+  <div class="login-content">
+    <div class="brand-logo register-brand-logo">
+      <div class="brand-logo-icon">NT</div>
+      <span class="brand-logo-text">NextThing</span>
+    </div>
+    <div class="login-title">创建账号</div>
+    <div class="login-subtitle">开始你的 AI 伙伴之旅</div>
+    <div class="register-form">
+      <div class="input-wrapper">
+        <span class="input-icon">👤</span>
+        <input class="input-field" type="text" placeholder="设置用户名" />
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">📧</span>
+        <input class="input-field" type="email" placeholder="请输入邮箱" />
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">🔒</span>
+        <input class="input-field" type="password" placeholder="设置密码（至少6位）" />
+        <span class="password-toggle">👁</span>
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">🔒</span>
+        <input class="input-field" type="password" placeholder="确认密码" />
+      </div>
+      <button class="login-btn" style="background: var(--success); box-shadow: 0 4px 16px rgba(0,184,148,0.25);">注 册</button>
+    </div>
+    <div class="login-footer">
+      已有账号？<a href="#">登录</a>
+    </div>
+  </div>
+  <div class="page-label">8. 注册页</div>
+</div>
+
+</body>
+</html>

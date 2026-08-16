@@ -153,7 +153,7 @@ fun TaskEntity.toSyncDto(): TaskSyncDto {
         isTemplate = isTemplate,
         templateTaskId = templateTaskId,
         instanceDate = instanceDate?.toTimestamp(),
-        deleted = false
+        deleted = deleted
     )
 }
 
@@ -185,7 +185,8 @@ fun TaskSyncDto.toEntity(syncStatus: SyncStatus = SyncStatus.SYNCED): TaskEntity
         templateTaskId = templateTaskId,
         instanceDate = instanceDate?.toLocalDateTime(),
         syncStatus = syncStatus,
-        serverUpdatedAt = updatedAt
+        serverUpdatedAt = updatedAt,
+        deleted = deleted
     )
 }
 
@@ -368,6 +369,6 @@ fun CategoryEntity.toSyncDto(): CategorySyncDto {
         sortOrder = sortOrder,
         createdAt = createdAt.toTimestamp(),
         isEnabled = isEnabled,
-        deleted = false
+        deleted = deleted
     )
-} 
+}

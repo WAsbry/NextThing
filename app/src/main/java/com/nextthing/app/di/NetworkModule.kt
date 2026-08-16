@@ -4,7 +4,10 @@ import com.nextthing.app.data.remote.api.AuthApi
 import com.nextthing.app.data.remote.api.TaskApi
 import com.nextthing.app.data.remote.api.SyncApi
 import com.nextthing.app.data.remote.api.AIChatApi
+import com.nextthing.app.data.remote.api.WeatherApi
 import com.nextthing.app.data.remote.interceptor.AuthInterceptor
+import com.nextthing.app.data.remote.interceptor.TokenAuthenticator
+import com.nextthing.app.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import dagger.Module
@@ -23,7 +26,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "http://124.223.60.93:9529/"
+    private val BASE_URL = BuildConfig.BACKEND_BASE_URL
 
     @Provides
     @Singleton
@@ -33,15 +36,24 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+    fun provideOkHttpClient(
+        authInterceptor: AuthInterceptor,
+        tokenAuthenticator: TokenAuthenticator
+    ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            redactHeader("Authorization")
+            level = if (BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
         }
         return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
             .addInterceptor(authInterceptor)
+            .authenticator(tokenAuthenticator)
             .addInterceptor(logging)
             .build()
     }
@@ -62,11 +74,44 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("auth-refresh")
+    fun provideRefreshOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
+        .build()
+
+    @Provides
+    @Singleton
+    @Named("auth-refresh")
+    fun provideRefreshRetrofit(
+        gson: Gson,
+        @Named("auth-refresh") client: OkHttpClient
+    ): Retrofit = Retrofit.Builder()
+        .baseUrl(BASE_URL)
+        .addConverterFactory(GsonConverterFactory.create(gson))
+        .client(client)
+        .build()
+
+    @Provides
+    @Singleton
+    @Named("auth-refresh")
+    fun provideRefreshAuthApi(
+        @Named("auth-refresh") retrofit: Retrofit
+    ): AuthApi = retrofit.create(AuthApi::class.java)
+
+    @Provides
+    @Singleton
     fun provideTaskApi(retrofit: Retrofit): TaskApi = retrofit.create(TaskApi::class.java)
 
     @Provides
     @Singleton
     fun provideSyncApi(retrofit: Retrofit): SyncApi = retrofit.create(SyncApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideWeatherApi(retrofit: Retrofit): WeatherApi =
+        retrofit.create(WeatherApi::class.java)
 
     @Provides
     @Singleton
@@ -82,15 +127,24 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("ai-backend")
-    fun provideAIBackendOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+    fun provideAIBackendOkHttpClient(
+        authInterceptor: AuthInterceptor,
+        tokenAuthenticator: TokenAuthenticator
+    ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            redactHeader("Authorization")
+            level = if (BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
         }
         return OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(authInterceptor)
+            .authenticator(tokenAuthenticator)
             .addInterceptor(logging)
             .build()
     }

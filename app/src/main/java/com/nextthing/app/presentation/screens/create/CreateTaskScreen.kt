@@ -14,9 +14,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import java.time.LocalTime
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,12 +44,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,9 +63,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -116,6 +120,7 @@ fun CreateTaskScreen(
     onNavigateToGeofenceSettings: () -> Unit = {},
     onNavigateToManageCategories: () -> Unit = {},
     onNavigateToRepeatCustom: () -> Unit = {},
+    onNavigateToAIConfig: () -> Unit = {},
     viewModel: CreateTaskViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -123,10 +128,24 @@ fun CreateTaskScreen(
     val availableGeofenceLocations by viewModel.availableGeofenceLocations.collectAsState()
     val isASRRecording by viewModel.isASRRecording.collectAsState()
     val isModelReady by viewModel.isModelReady.collectAsState()
+    val asrErrorMessage by viewModel.asrErrorMessage.collectAsState()
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshAIRouteStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // 折叠状态管理 - 使用单一状态追踪当前展开的卡片
     var expandedCard by remember { mutableStateOf<String?>(null) }
@@ -172,6 +191,7 @@ fun CreateTaskScreen(
         uiState = uiState,
         isRecording = isASRRecording,
         isModelReady = isModelReady,
+        asrErrorMessage = asrErrorMessage,
         onBack = onBackPressed,
         onTitleChange = viewModel::updateTitle,
         onStartRecording = {
@@ -184,6 +204,8 @@ fun CreateTaskScreen(
             Timber.tag("VoiceButton").d("onVoiceEnd: 调用 stopASR")
             viewModel.stopASR()
         },
+        onParseWithAI = viewModel::parseWithAI,
+        onNavigateToAIConfig = onNavigateToAIConfig,
         onSaveManualTask = {
             viewModel.createTask()
             onBackPressed()
@@ -734,110 +756,144 @@ internal fun PreciseTimeConfigCard(
     modifier: Modifier = Modifier,
     isEditMode: Boolean = true
 ) {
-    // 内部临时状态，用于时间选择器
-    val currentTime = remember { LocalTime.now() }
-    var tempHour by remember { mutableStateOf(preciseTime?.first ?: currentTime.hour) }
-    var tempMinute by remember { mutableStateOf(preciseTime?.second ?: currentTime.minute) }
-    var wasCleared by remember { mutableStateOf(false) }
-
-    // 当展开时，重置临时状态为当前值或已选值
-    LaunchedEffect(isExpanded) {
-        if (isExpanded) {
-            wasCleared = false // 重置清除标志
-            if (preciseTime != null) {
-                tempHour = preciseTime.first
-                tempMinute = preciseTime.second
-            } else {
-                val now = LocalTime.now()
-                tempHour = now.hour
-                tempMinute = now.minute
-            }
-        }
-        // 移除自动保存逻辑，只通过"确定"按钮保存
-    }
-
-    Column(modifier = modifier) {
-        Card(
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(80.dp)
+            .clickable(enabled = isEditMode) { onExpandToggle() },
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(0.5.dp, Border),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .clickable(enabled = isEditMode) { onExpandToggle() },
-            colors = CardDefaults.cardColors(containerColor = BgCard),
-            border = BorderStroke(0.5.dp, Border),
-            shape = RoundedCornerShape(8.dp)
+                .fillMaxSize()
+                .padding(12.dp)
         ) {
-            Box(
+            Text(
+                text = "精确时间",
+                color = TextSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.TopStart)
+            )
+
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
+                    .fillMaxWidth()
+                    .align(Alignment.CenterStart)
+                    .padding(top = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // 左上角标签
                 Text(
-                    text = "精确时间",
-                    color = TextSecondary,
-                    fontSize = 10.sp,
-                    modifier = Modifier.align(Alignment.TopStart)
+                    text = "⏰",
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(end = 8.dp)
                 )
 
-                // 主要内容行
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.CenterStart)
-                        .padding(top = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "⏰",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
+                Text(
+                    text = preciseTime?.let {
+                        String.format("%02d:%02d", it.first, it.second)
+                    } ?: "未设置",
+                    color = if (preciseTime != null) TextPrimary else TextSecondary,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
 
-                    Text(
-                        text = if (preciseTime != null) {
-                            String.format("%02d:%02d", preciseTime.first, preciseTime.second)
-                        } else {
-                            "未设置"
-                        },
-                        color = if (preciseTime != null) TextPrimary else TextSecondary,
-                        fontSize = 14.sp,
-                        modifier = Modifier.weight(1f)
+                if (isEditMode) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "选择精确时间",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
                     )
-
-                    if (isEditMode) {
-                        Icon(
-                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
                 }
             }
         }
+    }
 
-        // 展开的时间选择器
-        if (isExpanded && isEditMode) {
-            Card(
+    if (isExpanded && isEditMode) {
+        val now = remember { LocalTime.now() }
+        PreciseTimePickerDialog(
+            initialHour = preciseTime?.first ?: now.hour,
+            initialMinute = preciseTime?.second ?: now.minute,
+            onDismiss = onExpandToggle,
+            onClear = {
+                onPreciseTimeSelected(null)
+                onExpandToggle()
+            },
+            onConfirm = { hour, minute ->
+                Timber.tag("NotificationTask").d("【UI】用户确认精确时间: $hour:$minute")
+                onPreciseTimeSelected(Pair(hour, minute))
+                onExpandToggle()
+            }
+        )
+    }
+}
+
+private val PreciseTimeBlue = Color(0xFF1A7DFA)
+
+@Composable
+internal fun PreciseTimePickerDialog(
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onClear: () -> Unit,
+    onConfirm: (Int, Int) -> Unit
+) {
+    var tempHour by remember(initialHour) { mutableIntStateOf(initialHour) }
+    var tempMinute by remember(initialMinute) { mutableIntStateOf(initialMinute) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = BgCard),
-                border = BorderStroke(0.5.dp, Border),
-                shape = RoundedCornerShape(8.dp)
+                    .border(1.dp, Color(0x6618202C), RoundedCornerShape(8.dp)),
+                color = BgCard,
+                shape = RoundedCornerShape(8.dp),
+                shadowElevation = 12.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // iOS 风格时间选择器
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("选择精确时间", color = Color(0xFF0E131D), fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold)
+                            Text("上下滑动选择小时和分钟", color = Color(0xFF5C6B82), fontSize = 13.sp, lineHeight = 18.sp)
+                        }
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(20.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "关闭",
+                                tint = Color(0xFF5C6B82),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            .height(154.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 小时选择器
                         TimePickerColumn(
                             items = (0..23).toList(),
                             selectedItem = tempHour,
@@ -846,22 +902,13 @@ internal fun PreciseTimeConfigCard(
                             formatItem = { String.format("%02d", it) }
                         )
 
-                        // 冒号分隔
-                        Box(
-                            modifier = Modifier
-                                .width(20.dp)
-                                .fillMaxHeight(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = ":",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Primary
-                            )
-                        }
+                        Text(
+                            text = ":",
+                            color = TextPrimary,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
 
-                        // 分钟选择器
                         TimePickerColumn(
                             items = (0..59).toList(),
                             selectedItem = tempMinute,
@@ -871,57 +918,32 @@ internal fun PreciseTimeConfigCard(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 操作按钮行
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 清除按钮
+                        Spacer(modifier = Modifier.weight(1f))
                         OutlinedButton(
-                            onClick = {
-                                wasCleared = true
-                                onPreciseTimeSelected(null)
-                                onExpandToggle()
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(40.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = TextSecondary
-                            ),
-                            border = BorderStroke(1.dp, Border),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                            onClick = onDismiss,
+                            modifier = Modifier.width(76.dp).height(40.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFFDEE5F0)),
+                            contentPadding = PaddingValues(0.dp)
                         ) {
-                            Text("清除", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("取消", fontSize = 15.sp, color = Color(0xFF0E131D), fontWeight = FontWeight.Medium)
                         }
-
-                        // 确定按钮
                         Button(
-                            onClick = {
-                                Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                                Timber.tag("NotificationTask").d("【UI】用户点击精确时间'确定'按钮")
-                                Timber.tag("NotificationTask").d("  选择的时间: $tempHour:$tempMinute")
-                                onPreciseTimeSelected(Pair(tempHour, tempMinute))
-                                Timber.tag("NotificationTask").d("  已调用 onPreciseTimeSelected()")
-                                Timber.tag("NotificationTask").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                                onExpandToggle()
-                            },
-                            modifier = Modifier
-                                .weight(2f)
-                                .height(40.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Primary
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                            onClick = { onConfirm(tempHour, tempMinute) },
+                            colors = ButtonDefaults.buttonColors(containerColor = PreciseTimeBlue),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.width(76.dp).height(40.dp)
                         ) {
                             Text(
-                                "确定 ${String.format("%02d:%02d", tempHour, tempMinute)}",
+                                text = "确定",
                                 color = Color.White,
-                                fontSize = 14.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -932,8 +954,6 @@ internal fun PreciseTimeConfigCard(
     }
 }
 
-// 时间选择器列组件 - iOS风格的滚动选择器
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TimePickerColumn(
     items: List<Int>,
@@ -942,131 +962,31 @@ private fun TimePickerColumn(
     modifier: Modifier = Modifier,
     formatItem: (Int) -> String = { it.toString() }
 ) {
-    val coroutineScope = rememberCoroutineScope()
     val itemHeight = 44.dp
-
-    // 初始化滚动位置
+    val selectedIndex = items.indexOf(selectedItem).coerceAtLeast(0)
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = selectedItem
+        initialFirstVisibleItemIndex = selectedIndex
     )
 
-    // 标记是否正在进行自动吸附滚动
-    var isSnapping by remember { mutableStateOf(false) }
-    // 记录上一次滚动状态，用于检测从滚动到停止的转变
-    var wasScrolling by remember { mutableStateOf(false) }
-    // 记录上一次选中的项，避免重复更新
-    var lastSelectedItem by remember { mutableStateOf(selectedItem) }
-
-    // 实时更新选中项（滚动过程中）- 只用于视觉反馈，不触发吸附
-    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
-        if (!isSnapping && listState.isScrollInProgress) {
-            val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
-            if (visibleItemsInfo.isEmpty()) {
-                Timber.tag("TimePickerScroll").w("⚠️ visibleItemsInfo为空")
-                return@LaunchedEffect
-            }
-
-            val viewportStart = listState.layoutInfo.viewportStartOffset
-            val viewportEnd = listState.layoutInfo.viewportEndOffset
-            val viewportCenterY = viewportStart + (viewportEnd - viewportStart) / 2
-
-            var closestItem = selectedItem
-            var minDistance = Int.MAX_VALUE
-
-            visibleItemsInfo.forEach { itemInfo ->
-                // 计算每个项目的中心Y坐标（相对于视口）
-                val itemCenterY = itemInfo.offset + itemInfo.size / 2
-                // 计算项目中心与视口中心的距离
-                val distance = kotlin.math.abs(itemCenterY - viewportCenterY)
-
-                if (distance < minDistance) {
-                    minDistance = distance
-                    closestItem = itemInfo.index
-                }
-            }
-
-            if (closestItem in items.indices && closestItem != lastSelectedItem) {
-                Timber.tag("TimePickerScroll").d("📍 滚动中: 选中项从 $lastSelectedItem 更新到 $closestItem (值=${items[closestItem]})")
-                lastSelectedItem = closestItem
-                onItemSelected(items[closestItem])
-            }
-        }
-    }
-
-    // iOS风格的自动吸附：只在用户手动滚动停止后触发一次
-    LaunchedEffect(listState.isScrollInProgress) {
-        val isCurrentlyScrolling = listState.isScrollInProgress
-
-        Timber.tag("TimePickerScroll").v("🔄 滚动状态: wasScrolling=$wasScrolling, isCurrentlyScrolling=$isCurrentlyScrolling, isSnapping=$isSnapping")
-
-        // 只在从滚动状态切换到停止状态时执行吸附，且不是正在吸附中
-        if (wasScrolling && !isCurrentlyScrolling && !isSnapping) {
-            Timber.tag("TimePickerScroll").d("🎯 滚动停止，开始吸附逻辑")
-
-            // 延迟一小段时间，确保惯性滚动完全停止
+    LaunchedEffect(listState.isScrollInProgress, items) {
+        if (!listState.isScrollInProgress) {
             kotlinx.coroutines.delay(50)
-
             val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
-            if (visibleItemsInfo.isEmpty()) {
-                Timber.tag("TimePickerScroll").w("⚠️ 吸附时visibleItemsInfo为空")
-                wasScrolling = false
-                return@LaunchedEffect
-            }
-
-            val viewportStart = listState.layoutInfo.viewportStartOffset
-            val viewportEnd = listState.layoutInfo.viewportEndOffset
-            val viewportCenterY = viewportStart + (viewportEnd - viewportStart) / 2
-
-            var closestItem = selectedItem
-            var minDistance = Int.MAX_VALUE
-
-            visibleItemsInfo.forEach { itemInfo ->
-                // 计算每个项目的中心Y坐标（相对于视口）
-                val itemCenterY = itemInfo.offset + itemInfo.size / 2
-                // 计算项目中心与视口中心的距离
-                val distance = kotlin.math.abs(itemCenterY - viewportCenterY)
-
-                if (distance < minDistance) {
-                    minDistance = distance
-                    closestItem = itemInfo.index
+            if (visibleItemsInfo.isNotEmpty()) {
+                val viewportCenter = (
+                    listState.layoutInfo.viewportStartOffset +
+                        listState.layoutInfo.viewportEndOffset
+                    ) / 2
+                val closestItem = visibleItemsInfo.minByOrNull { itemInfo ->
+                    kotlin.math.abs(itemInfo.offset + itemInfo.size / 2 - viewportCenter)
                 }
-            }
-
-            if (closestItem in items.indices) {
-                Timber.tag("TimePickerScroll").d("🎯 吸附目标: index=$closestItem, value=${items[closestItem]}, 当前选中=$selectedItem")
-
-                if (closestItem != lastSelectedItem) {
-                    Timber.tag("TimePickerScroll").d("✅ 更新选中项: $lastSelectedItem -> $closestItem")
-                    lastSelectedItem = closestItem
-                    onItemSelected(items[closestItem])
-                }
-
-                // 执行吸附滚动
-                Timber.tag("TimePickerScroll").d("🔧 开始吸附动画到 index=$closestItem")
-                isSnapping = true
-                wasScrolling = false // 立即重置，防止吸附动画完成后再次触发
-                coroutineScope.launch {
-                    try {
-                        listState.animateScrollToItem(
-                            index = closestItem,
-                            scrollOffset = 0
-                        )
-                        Timber.tag("TimePickerScroll").d("✅ 吸附动画完成")
-                    } catch (e: Exception) {
-                        Timber.tag("TimePickerScroll").e(e, "❌ 吸附动画失败")
-                    } finally {
-                        isSnapping = false
-                        Timber.tag("TimePickerScroll").d("🏁 重置isSnapping标志")
+                closestItem?.let { itemInfo ->
+                    val closestValue = items[itemInfo.index]
+                    if (closestValue != selectedItem) {
+                        onItemSelected(closestValue)
                     }
+                    listState.animateScrollToItem(itemInfo.index)
                 }
-            } else {
-                Timber.tag("TimePickerScroll").w("⚠️ closestItem=$closestItem 超出范围 [0, ${items.size})")
-                wasScrolling = false
-            }
-        } else {
-            // 更新滚动状态记录（只在非吸附状态下更新）
-            if (!isSnapping) {
-                wasScrolling = isCurrentlyScrolling
             }
         }
     }
@@ -1074,14 +994,24 @@ private fun TimePickerColumn(
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .background(Color.White, RoundedCornerShape(12.dp))
+            .background(Color.White)
     ) {
+        // The selection frame sits behind the list so it never covers the value.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .align(Alignment.Center)
+                .background(Color(0xFFEBF5FF), RoundedCornerShape(8.dp))
+                .border(2.dp, Color(0xFF1A7DFA), RoundedCornerShape(8.dp))
+        )
+
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             userScrollEnabled = true,
-            contentPadding = PaddingValues(vertical = 44.dp)
+            contentPadding = PaddingValues(vertical = 55.dp)
         ) {
             items(items.size) { index ->
                 val item = items[index]
@@ -1095,27 +1025,14 @@ private fun TimePickerColumn(
                 ) {
                     Text(
                         text = formatItem(item),
-                        fontSize = if (isSelected) 26.sp else 22.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) Primary else TextSecondary.copy(alpha = 0.25f),
+                        fontSize = if (isSelected) 22.sp else 15.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) Color(0xFF1A7DFA) else Color(0xFF91A1B5),
                         textAlign = TextAlign.Center
                     )
                 }
             }
         }
-
-        // iOS 风格中间选中区域高亮框
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .align(Alignment.Center)
-                .background(
-                    Primary.copy(alpha = 0.08f),
-                    RoundedCornerShape(12.dp)
-                )
-                .border(1.5.dp, Primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-        )
 
         // iOS 风格上下渐隐遮罩
         Box(
@@ -1125,10 +1042,9 @@ private fun TimePickerColumn(
                 .align(Alignment.TopCenter)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.White, Color.Transparent)
+                        colors = listOf(BgCard, Color.Transparent)
                     )
                 )
-                .pointerInput(Unit) { detectTapGestures { } }
         )
         Box(
             modifier = Modifier
@@ -1137,10 +1053,9 @@ private fun TimePickerColumn(
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.White)
+                        colors = listOf(Color.Transparent, BgCard)
                     )
                 )
-                .pointerInput(Unit) { detectTapGestures { } }
         )
     }
 }
@@ -2174,6 +2089,8 @@ internal fun MaterialDatePickerDialog(
 
     DatePickerDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.border(1.dp, Color(0x6618202C), RoundedCornerShape(8.dp)),
+        shape = RoundedCornerShape(8.dp),
         confirmButton = {
             TextButton(
                 onClick = {

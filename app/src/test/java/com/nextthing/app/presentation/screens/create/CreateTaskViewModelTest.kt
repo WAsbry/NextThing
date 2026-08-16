@@ -1,5 +1,7 @@
 package com.nextthing.app.presentation.screens.create
 
+import com.nextthing.app.data.service.AIRouteMode
+import com.nextthing.app.data.service.AIRouteStatus
 import com.nextthing.app.domain.model.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -13,6 +15,30 @@ import org.junit.Test
  * 这里测试纯 Kotlin 数据逻辑层，覆盖全部 20 个状态的数据状态。
  */
 class CreateTaskViewModelTest {
+
+    @Test
+    fun aiRoute_externalProvider_showsProviderEnabled() {
+        val ui = AIRouteStatus(AIRouteMode.ExternalProvider).toCreateTaskRouteUi()
+
+        assertEquals("DeepSeek 已启用", ui.statusText)
+        assertEquals("使用本机 API Key 自动整理语音/文字任务", ui.detailText)
+    }
+
+    @Test
+    fun aiRoute_backendFallback_showsServerAIEnabled() {
+        val ui = AIRouteStatus(AIRouteMode.BackendFallback).toCreateTaskRouteUi()
+
+        assertEquals("服务端 AI 已启用", ui.statusText)
+        assertEquals("已登录，可直接自动整理语音/文字任务", ui.detailText)
+    }
+
+    @Test
+    fun aiRoute_unavailable_showsConfigurationRequired() {
+        val ui = AIRouteStatus(AIRouteMode.Unavailable).toCreateTaskRouteUi()
+
+        assertEquals("AI 解析未启用", ui.statusText)
+        assertEquals("登录或配置 API Key 后可使用 AI 自动整理", ui.detailText)
+    }
 
     // ── 状态 1：空表单（按钮禁用）──
 
@@ -81,6 +107,7 @@ class CreateTaskViewModelTest {
         val state = CreateTaskUiState()
         val category = state.category // computed property
         assertEquals("生活", category.name)
+        assertEquals(PresetCategories.LIFE_ID, category.id)
     }
 
     // ── 状态 5：重要程度选择 ──
@@ -132,10 +159,9 @@ class CreateTaskViewModelTest {
     fun state8_aiSingleResult_showsResult() {
         val result = AITaskParseResult(
             title = "开会",
-            dueDate = java.time.LocalDate.of(2025, 6, 10),
-            dueTime = "15:00",
+            dueDate = java.time.LocalDateTime.of(2025, 6, 10, 15, 0),
             categoryName = "工作",
-            importanceUrgency = TaskImportanceUrgency.IMPORTANT_URGENT
+            importance = TaskImportanceUrgency.IMPORTANT_URGENT
         )
         val state = CreateTaskUiState(
             showAIResult = true,
@@ -152,9 +178,9 @@ class CreateTaskViewModelTest {
     @Test
     fun state9_aiMultiResult_showsAllResults() {
         val results = listOf(
-            AITaskParseResult(title = "完成项目报告", importanceUrgency = TaskImportanceUrgency.IMPORTANT_URGENT),
-            AITaskParseResult(title = "给张经理发邮件", importanceUrgency = TaskImportanceUrgency.IMPORTANT_NOT_URGENT),
-            AITaskParseResult(title = "预约下周会议室", importanceUrgency = TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT)
+            AITaskParseResult(title = "完成项目报告", importance = TaskImportanceUrgency.IMPORTANT_URGENT),
+            AITaskParseResult(title = "给张经理发邮件", importance = TaskImportanceUrgency.IMPORTANT_NOT_URGENT),
+            AITaskParseResult(title = "预约下周会议室", importance = TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT)
         )
         val state = CreateTaskUiState(
             showAIResult = true,

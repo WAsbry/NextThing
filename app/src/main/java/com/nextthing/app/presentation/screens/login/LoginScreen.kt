@@ -301,7 +301,28 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .background(
+                        color = BgSecondary,
+                        shape = RoundedCornerShape(999.dp)
+                    )
+                    .clickable(enabled = !uiState.isLoading) { viewModel.continueAsLocalUser() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "先进入本地模式",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             // 切换登录/注册
             Row(

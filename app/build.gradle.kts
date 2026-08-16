@@ -14,16 +14,43 @@ val localProperties = Properties().apply {
     if (file.exists()) load(file.inputStream())
 }
 
+val asrBackend = providers.gradleProperty("asrBackend")
+    .orElse("npu")
+    .get()
+    .lowercase()
+check(asrBackend in setOf("cpu", "npu")) {
+    "Unsupported -PasrBackend=$asrBackend. Expected cpu or npu."
+}
+
+val backendBaseUrl = localProperties.getProperty("BACKEND_BASE_URL")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "https://api.qianqian.chat/"
+check(backendBaseUrl.endsWith('/')) {
+    "BACKEND_BASE_URL must end with '/'."
+}
+
+val releaseKeystoreFile = file("release.keystore")
+val releaseStorePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD").orEmpty()
+val releaseKeyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS").orEmpty()
+val releaseKeyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD").orEmpty()
+val hasReleaseSigning = releaseKeystoreFile.isFile &&
+    releaseStorePassword.isNotBlank() &&
+    releaseKeyAlias.isNotBlank() &&
+    releaseKeyPassword.isNotBlank()
+
 android {
     namespace = "com.nextthing.app"
     compileSdk = 34
 
     signingConfigs {
-        create("release") {
-            storeFile = file("release.keystore")
-            storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD") ?: ""
-            keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS") ?: "release"
-            keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD") ?: ""
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -38,10 +65,22 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
 
-        buildConfigField("String", "AMAP_API_KEY", "\"${localProperties.getProperty("AMAP_API_KEY") ?: ""}\"")
+        buildConfigField("String", "ASR_BACKEND", "\"$asrBackend\"")
+        buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
 
         manifestPlaceholders["AMAP_API_KEY"] = localProperties.getProperty("AMAP_API_KEY") ?: ""
+    }
+
+    sourceSets {
+        getByName("main") {
+            if (asrBackend == "cpu") {
+                assets.srcDir(rootProject.file("local-artifacts/original-cpu-sensevoice"))
+            }
+        }
     }
 
     buildTypes {
@@ -52,13 +91,29 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                null
+            }
         }
         debug {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
+            )
+        }
+        create("smoke") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".smoke"
+            versionNameSuffix = "-smoke"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+            buildConfigField(
+                "String",
+                "BACKEND_BASE_URL",
+                "\"http://127.0.0.1:18080/\""
             )
         }
     }
@@ -70,21 +125,13 @@ android {
             .forEach { output ->
                 val buildType = variant.buildType.name
                 if (buildType == "release") {
-                    output.outputFileName = "NextThing-release.apk"
-                }
-            }
-
-        if (variant.buildType.name == "release") {
-            variant.assembleProvider?.configure {
-                doLast {
-                    val apkFile = file("${layout.buildDirectory.get()}/outputs/apk/release/NextThing-release.apk")
-                    val destFile = file("${rootProject.projectDir}/NextThing-release.apk")
-                    if (apkFile.exists()) {
-                        apkFile.copyTo(destFile, overwrite = true)
+                    output.outputFileName = if (hasReleaseSigning) {
+                        "NextThing-release.apk"
+                    } else {
+                        "NextThing-release-unsigned.apk"
                     }
                 }
             }
-        }
     }
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -108,6 +155,10 @@ android {
         warningsAsErrors = false
     }
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -129,8 +180,9 @@ dependencies {
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.ui:ui-tooling-preview")
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.6")
@@ -164,9 +216,6 @@ dependencies {
     // Timber
     implementation("com.jakewharton.timber:timber:5.0.1")
 
-    // BouncyCastle for EdDSA support
-    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
-
     // WorkManager + Hilt integration
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.hilt:hilt-work:1.1.0")
@@ -188,6 +237,10 @@ dependencies {
     implementation(libs.litert.support)
     implementation(libs.litert.gpu)
 
+    // Qualcomm Hexagon NPU via QNN HTP backend
+    implementation("com.qualcomm.qti:qnn-runtime:2.34.0")
+    implementation("com.qualcomm.qti:qnn-litert-delegate:2.34.0")
+
     // TarsosDSP（端侧音频处理，MFCC 提取）
     implementation("be.tarsos.dsp:core:2.5")
 
@@ -196,9 +249,8 @@ dependencies {
 
     // Location Services
     implementation("com.google.android.gms:play-services-location:21.0.1")
-    implementation("com.amap.api:location:6.4.3")
-    implementation("com.amap.api:map2d:6.0.0")
-    implementation("com.amap.api:search:9.7.0")
+    // 高德 3D 地图合包，包含地图、定位和搜索 SDK；不要与旧 map2d/独立定位搜索依赖并存。
+    implementation("com.amap.api:navi-3dmap-location-search:11.2.000_3dmap11.2.000_loc11.2.000_sea9.8.0")
     implementation("com.google.android.gms:play-services-maps:18.2.0")
 
     testImplementation(libs.junit)

@@ -1,13 +1,14 @@
 package com.nextthing.app.presentation.screens.settings
 
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.content.ContextWrapper
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import com.nextthing.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -20,15 +21,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.nextthing.app.domain.model.ThemeMode
@@ -37,28 +43,88 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.nextthing.app.data.preferences.AIPreferences
-import com.nextthing.app.data.preferences.AIProvider
 import com.nextthing.app.presentation.theme.*
 import kotlinx.coroutines.launch
+
+private val MineStatusBar = Color(0xFFF4EFFF)
+private val MineBgStart = Color(0xFFF4EFFF)
+private val MineBgMid = Color(0xFFF7F3FF)
+private val MineBgEnd = Color(0xFFFBFAFF)
+private val MineInk = Color(0xFF202331)
+private val MineDeep = Color(0xFF2F2850)
+private val MineSub = Color(0xFF656B78)
+private val MineProfileSub = Color(0xFF7B7391)
+private val MineMuted = Color(0xFFA6ACB8)
+private val MineLine = Color(0xFFEEF0F5)
+
+private fun Modifier.mineControlPanelBackground(): Modifier = drawBehind {
+    drawRect(
+        brush = Brush.horizontalGradient(
+            colors = listOf(MineBgStart, MineBgMid, MineBgEnd),
+            startX = 0f,
+            endX = size.width
+        )
+    )
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(Color(0xFFB06DFF).copy(alpha = 0.18f), Color.Transparent),
+            center = Offset(size.width * 0.14f, size.height * 0.04f),
+            radius = size.width * 0.45f
+        )
+    )
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(Color(0xFF7057F5).copy(alpha = 0.12f), Color.Transparent),
+            center = Offset(size.width * 0.92f, size.height * 0.18f),
+            radius = size.width * 0.48f
+        )
+    )
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
     onNavigateToUserInfo: () -> Unit = {},
+    onNavigateToAIConfig: () -> Unit = {},
     onNavigateToGeofence: () -> Unit = {},
     onNavigateToAchievement: () -> Unit = {},
     onNavigateToViewPreferences: () -> Unit = {},
     onNavigateToThemeSettings: () -> Unit = {},
-    onNavigateToSync: () -> Unit = {}
+    onNavigateToSync: () -> Unit = {},
+    onNavigateToBriefing: () -> Unit = {},
+    onNavigateToReminderStrategy: () -> Unit = {},
+    onNavigateToExportData: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val view = LocalView.current
 
-    // 相册选择头像
-    val avatarPickerLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
-        uri?.let { viewModel.updateAvatar(it) }
+    DisposableEffect(view) {
+        val window = context.findActivity()?.window
+        val previousStatusBarColor = window?.statusBarColor
+        val previousLightStatusBar = window?.let {
+            WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars
+        }
+        window?.statusBarColor = MineStatusBar.toArgb()
+        window?.let {
+            WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = true
+        }
+        onDispose {
+            window?.let {
+                previousStatusBarColor?.let { color -> it.statusBarColor = color }
+                previousLightStatusBar?.let { light ->
+                    WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = light
+                }
+            }
+        }
     }
 
     // 帮助弹窗状态
@@ -95,17 +161,6 @@ fun SettingsScreen(
             onExport = { startDate, endDate, format ->
                 viewModel.exportData(startDate, endDate, format)
             }
-        )
-    }
-
-    // AI 配置弹窗
-    if (uiState.showAIConfigDialog) {
-        AIConfigDialog(
-            currentProvider = uiState.aiProvider,
-            currentApiKey = uiState.aiApiKey,
-            currentModel = uiState.aiModel,
-            onSave = { provider, apiKey, model -> viewModel.saveAIConfig(provider, apiKey, model) },
-            onDismiss = { viewModel.hideAIConfigDialog() }
         )
     }
 
@@ -175,56 +230,99 @@ fun SettingsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = BgPrimary,
+        containerColor = MineBgMid,
         // 外层 NavHost 已处理系统 insets，内层不重复添加
         contentWindowInsets = WindowInsets(0.dp)
     ) { innerPadding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(BgPrimary)
-                .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 32.dp, top = 8.dp)
+                .mineControlPanelBackground()
+                .padding(innerPadding)
         ) {
 
-            // ── 1. 用户信息 + 成就卡片（合并） ──────────────────
-            item {
-                UserProfileCard(
-                    username = uiState.username,
-                    avatarUri = uiState.avatarUri,
-                    usageDays = uiState.usageDays,
-                    completedCount = uiState.completedCount,
-                    streakDays = uiState.streakDays,
-                    achievements = uiState.recentAchievements,
-                    unlockedCount = uiState.unlockedAchievementsCount,
-                    totalCount = uiState.totalAchievementsCount,
-                    onUserClick = onNavigateToUserInfo,
-                    onAchievementClick = onNavigateToAchievement,
-                    onAvatarClick = {
-                        avatarPickerLauncher.launch(
-                            PickVisualMediaRequest(PickVisualMedia.ImageOnly)
-                        )
-                    }
-                )
-            }
+            UserProfileCard(
+                username = uiState.username,
+                avatarUri = uiState.avatarUri,
+                usageDays = uiState.usageDays,
+                completedCount = uiState.completedCount,
+                pendingCount = uiState.pendingCount,
+                streakDays = uiState.streakDays,
+                achievements = uiState.recentAchievements,
+                unlockedCount = uiState.unlockedAchievementsCount,
+                totalCount = uiState.totalAchievementsCount,
+                onUserClick = onNavigateToUserInfo,
+                onAchievementClick = onNavigateToAchievement,
+                onAvatarClick = onNavigateToUserInfo
+            )
 
-            // ── 2. 功能区 ────────────────────────────────────
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = 56.dp, top = 0.dp)
+            ) {
+
             item {
-                SectionHeader(title = "功能")
+                SectionHeader(title = "AI 增强", subtitle = "配置与自动化")
             }
 
             item {
                 SettingsGroupCard {
                     SettingsRow(
-                        icon = "📍",
+                        icon = "AI",
+                        iconBgColor = Color(0xFF4F63E7),
+                        title = "AI 智能助手",
+                        subtitle = if (uiState.aiApiKey.isNotBlank())
+                            "DeepSeek · 已配置"
+                        else "填写 DeepSeek API Key",
+                        onClick = onNavigateToAIConfig
+                    )
+                    RowDivider()
+                    SettingsRow(
+                        icon = "BR",
+                        iconBgColor = Color(0xFFFF7A1A),
+                        title = "智能早晚报",
+                        subtitle = if (uiState.briefingEnabled)
+                            "已开启 · 早报 ${String.format("%02d:%02d", uiState.morningHour, uiState.morningMinute)} / 晚报 ${String.format("%02d:%02d", uiState.eveningHour, uiState.eveningMinute)}"
+                        else "基于任务状态生成早报和晚报",
+                        onClick = onNavigateToBriefing
+                    )
+                }
+            }
+
+            item {
+                SectionHeader(title = "任务增强", subtitle = "触发与提醒")
+            }
+
+            item {
+                SettingsGroupCard {
+                    SettingsRow(
+                        icon = "LOC",
                         iconBgColor = Color(0xFF2196F3),
                         title = "地理围栏",
-                        subtitle = if (uiState.geofenceCount > 0) "${uiState.geofenceCount} 个地点 · 已启用" else "暂未设置地点",
+                        subtitle = if (uiState.geofenceCount > 0) "${uiState.geofenceCount} 个地点 · 到达/离开提醒" else "地点触发、到达离开提醒",
                         onClick = onNavigateToGeofence
                     )
                     RowDivider()
                     SettingsRow(
-                        icon = "🎨",
+                        icon = "REM",
+                        iconBgColor = Color(0xFFF08A35),
+                        title = "提醒策略",
+                        subtitle = "声音、震动、提前提醒与通知方式",
+                        onClick = onNavigateToReminderStrategy
+                    )
+                }
+            }
+
+            item {
+                SectionHeader(title = "偏好设置", subtitle = "显示与主题")
+            }
+
+            item {
+                SettingsGroupCard {
+                    SettingsRow(
+                        icon = "THE",
                         iconBgColor = Color(0xFF9C27B0),
                         title = "主题设置",
                         subtitle = "当前：$themeModeLabel",
@@ -232,127 +330,43 @@ fun SettingsScreen(
                     )
                     RowDivider()
                     SettingsRow(
-                        icon = "👁️",
+                        icon = "VIEW",
                         iconBgColor = Color(0xFF00897B),
                         title = "视图偏好",
                         subtitle = "折叠视图、显示模式",
                         onClick = onNavigateToViewPreferences
                     )
-                    RowDivider()
+                }
+            }
+
+            item {
+                SectionHeader(title = "数据管理", subtitle = "同步与导出")
+            }
+
+            item {
+                SettingsGroupCard {
                     SettingsRow(
-                        icon = "☁️",
+                        icon = "SYNC",
                         iconBgColor = Color(0xFF1565C0),
                         title = "数据同步",
-                        subtitle = "云端同步、冲突解决",
+                        subtitle = "同步状态、立即同步与冲突处理",
                         onClick = onNavigateToSync
                     )
                     RowDivider()
                     SettingsRow(
-                        icon = "✨",
-                        iconBgColor = Color(0xFF7C4DFF),
-                        title = "AI 智能助手",
-                        subtitle = if (uiState.aiApiKey.isNotBlank())
-                            "${uiState.aiProvider.displayName} · 已配置"
-                        else "未配置，点击设置 API Key",
-                        onClick = { viewModel.showAIConfigDialog() },
-                        onHelpClick = { showAIHelpDialog = true }
-                    )
-                    RowDivider()
-                    SettingsRow(
-                        icon = "🎙",
-                        iconBgColor = Color(0xFF0277BD),
-                        title = "语音识别",
-                        subtitle = "端侧 · 离线可用",
-                        showArrow = false,
-                        onClick = {},
-                        onHelpClick = { showASRHelpDialog = true }
-                    )
-                    RowDivider()
-                    SettingsRow(
-                        icon = "📰",
-                        iconBgColor = Color(0xFFFF6D00),
-                        title = "智能早晚报",
-                        subtitle = if (uiState.briefingEnabled)
-                            "已开启 · 早报 ${String.format("%02d:%02d", uiState.morningHour, uiState.morningMinute)} / 晚报 ${String.format("%02d:%02d", uiState.eveningHour, uiState.eveningMinute)}"
-                        else "未开启，点击配置",
-                        onClick = { viewModel.showBriefingDialog() }
-                    )
-                }
-            }
-
-            // ── 5. 数据区 ────────────────────────────────────
-            item {
-                SectionHeader(title = "数据")
-            }
-
-            item {
-                SettingsGroupCard {
-                    SettingsRow(
-                        icon = "📤",
+                        icon = "OUT",
                         iconBgColor = Color(0xFF42A5F5),
                         title = "导出数据",
-                        subtitle = "导出任务为 Excel/CSV/Markdown",
-                        onClick = { viewModel.showExportSheet() }
-                    )
-                    RowDivider()
-                    SettingsRow(
-                        icon = "🗑️",
-                        iconBgColor = Danger.copy(alpha = 0.8f),
-                        title = "清除已完成",
-                        subtitle = if (uiState.completedCount > 0) "删除全部 ${uiState.completedCount} 条已完成任务" else "暂无已完成任务",
-                        titleColor = if (uiState.completedCount > 0) Danger else TextMuted,
-                        onClick = {
-                            if (uiState.completedCount > 0) viewModel.showClearConfirmDialog()
-                        }
+                        subtitle = "选择时间范围，导出 Excel / CSV / Markdown",
+                        onClick = onNavigateToExportData
                     )
                 }
             }
 
-            // ── 6. 关于区 ────────────────────────────────────
             item {
-                SectionHeader(title = "关于")
+                Spacer(modifier = Modifier.height(8.dp))
             }
-
-            item {
-                SettingsGroupCard {
-                    SettingsRow(
-                        icon = "💬",
-                        iconBgColor = Color(0xFF66BB6A),
-                        title = "意见反馈",
-                        subtitle = "帮助我们改进 NextThing",
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:")
-                                putExtra(Intent.EXTRA_SUBJECT, "NextThing 意见反馈")
-                            }
-                            context.startActivity(Intent.createChooser(intent, "发送反馈"))
-                        }
-                    )
-                    RowDivider()
-                    SettingsRow(
-                        icon = "📱",
-                        iconBgColor = Color(0xFF78909C),
-                        title = "关于应用",
-                        subtitle = "版本 v1.0.0",
-                        showArrow = false,
-                        onClick = {}
-                    )
-                }
-            }
-
-            // ── 7. 底部版权 ──────────────────────────────────
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    text = "NextThing v1.0.0  ·  © 2024",
-                    fontSize = 12.sp,
-                    color = TextMuted,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                )
-            }
+        }
         }
     }
 }
@@ -367,6 +381,7 @@ private fun UserProfileCard(
     avatarUri: Uri?,
     usageDays: Int,
     completedCount: Int,
+    pendingCount: Int,
     streakDays: Int,
     achievements: List<com.nextthing.app.domain.model.AchievementProgress>,
     unlockedCount: Int,
@@ -386,26 +401,14 @@ private fun UserProfileCard(
             .map { it.value }
     }
 
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = BgCard),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // ── 上半部分：头像 + 昵称 + 徽章 ──
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onUserClick)
-                    .padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 头像（圆角矩形，点击换图）
-                // fallback/error/placeholder 统一兜底为预置头像，避免 URI 无效时空白
-                val avatarShape = RoundedCornerShape(14.dp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val avatarShape = CircleShape
                 val presetPainter = painterResource(R.drawable.preset_avatar)
                 AsyncImage(
                     model = avatarUri,
@@ -414,121 +417,153 @@ private fun UserProfileCard(
                     error = presetPainter,
                     fallback = presetPainter,
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(58.dp)
                         .clip(avatarShape)
                         .clickable(onClick = onAvatarClick),
                     contentScale = ContentScale.Crop
                 )
 
-                Spacer(modifier = Modifier.width(14.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-                // 昵称 + 成就徽章（同行）
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = onUserClick)
                 ) {
-                    Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = username,
                             fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            fontWeight = FontWeight.Black,
+                            color = MineDeep
                         )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = "已使用 $usageDays 天",
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        HonorTitleChip(text = "见习掌控师")
                     }
 
-                    // 最佳徽章（与昵称同行，靠右）
-                    if (bestBadges.isNotEmpty()) {
-                        Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
-                            bestBadges.take(5).forEach { progress ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(getBadgeTierBg(progress.type.tier)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(text = progress.type.icon, fontSize = 16.sp)
-                                }
-                            }
-                        }
-                    }
+                    Spacer(modifier = Modifier.height(7.dp))
+
+                    AchievementPreview(modifier = Modifier.clickable(onClick = onAchievementClick))
                 }
             }
 
-            // ── 分隔线 ──
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                color = Border.copy(alpha = 0.5f),
-                thickness = 0.5.dp
-            )
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // ── 下半部分：数据摘要 + 成就入口 ──
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // 左侧：核心数据
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    MiniStat(value = "$completedCount", label = "已完成", color = Success)
-                    MiniStat(value = "$streakDays", label = "连续天数", color = Color(0xFFFF7043))
-                }
-
-                // 右下角：成就入口
-                Surface(
-                    onClick = onAchievementClick,
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xFFFFF8E1)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(text = "🏆", fontSize = 14.sp)
-                        Text(
-                            text = "$unlockedCount/$totalCount",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFFF8F00)
-                        )
-                        Text(
-                            text = "›",
-                            fontSize = 16.sp,
-                            color = Color(0xFFFFB300),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                AssetStat(value = "$completedCount", label = "已完成", hint = "累计推进")
+                AssetStat(
+                    value = "$streakDays",
+                    label = "连续天数",
+                    hint = if (streakDays > 0) "习惯积累" else "习惯还未形成"
+                )
+                AssetStat(value = "$pendingCount", label = "待办任务", hint = "当前队列")
+                AssetStat(value = "$usageDays", label = "使用天数", hint = "开始积累")
             }
         }
     }
 }
 
 @Composable
-private fun MiniStat(value: String, label: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun AchievementPreview(
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .height(28.dp)
+            .width(78.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy((-5).dp)
+    ) {
+        AchievementMedal(bgColor = Color(0xFF7657FF), isMain = false)
+        AchievementMedal(bgColor = Color(0xFFF1A832), isMain = true)
+        AchievementMedal(bgColor = Color(0xFF20B4C6), isMain = false)
+    }
+}
+
+@Composable
+private fun AchievementMedal(bgColor: Color, isMain: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .background(
+                if (isMain) {
+                    Brush.sweepGradient(
+                        listOf(
+                            Color(0xFFFFE68A),
+                            Color(0xFFF1A832),
+                            Color(0xFF7657FF),
+                            Color(0xFF20B4C6),
+                            Color(0xFFFFE68A)
+                        )
+                    )
+                } else {
+                    Brush.linearGradient(listOf(Color.White.copy(alpha = 0.72f), bgColor))
+                }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = "★", fontSize = 10.sp, color = Color(0xFFFFF4BC), fontWeight = FontWeight.Black)
+    }
+}
+
+@Composable
+private fun HonorTitleChip(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        Color(0xFF3A276B),
+                        Color(0xFF6B4EE8),
+                        Color(0xFF2B2052)
+                    )
+                )
+            )
+            .padding(start = 12.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            color = Color(0xFFF9E7A9)
+        )
+    }
+}
+
+@Composable
+private fun RowScope.AssetStat(value: String, label: String, hint: String) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(15.dp))
+            .background(Color.White.copy(alpha = 0.54f))
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = MineProfileSub,
+            maxLines = 1
+        )
         Text(
             text = value,
             fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = color
+            fontWeight = FontWeight.Black,
+            color = MineDeep
         )
         Text(
-            text = label,
-            fontSize = 11.sp,
-            color = TextSecondary
+            text = hint,
+            fontSize = 9.sp,
+            color = Color(0xFF8C85A0),
+            maxLines = 1
         )
     }
 }
@@ -547,14 +582,29 @@ private fun getBadgeTierBg(tier: com.nextthing.app.domain.model.AchievementTier)
 // ──────────────────────────────────────────────────────────
 
 @Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Medium,
-        color = TextSecondary,
-        modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 6.dp)
-    )
+private fun SectionHeader(title: String, subtitle: String? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 5.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Text(
+            text = title,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Black,
+            color = MineInk
+        )
+        if (subtitle != null) {
+            Text(
+                text = subtitle,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MineMuted
+            )
+        }
+    }
 }
 
 @Composable
@@ -563,9 +613,10 @@ private fun SettingsGroupCard(content: @Composable ColumnScope.() -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = BgCard),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.78f)),
+        border = BorderStroke(1.dp, Color(0xFF7057F5).copy(alpha = 0.09f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(content = content)
     }
@@ -577,8 +628,10 @@ private fun SettingsRow(
     iconBgColor: Color,
     title: String,
     subtitle: String,
-    titleColor: Color = TextPrimary,
+    titleColor: Color = MineInk,
     showArrow: Boolean = true,
+    showSwitch: Boolean = false,
+    switchChecked: Boolean = false,
     onHelpClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
@@ -586,17 +639,23 @@ private fun SettingsRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 13.dp),
+            .padding(horizontal = 13.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(iconBgColor.copy(alpha = 0.15f)),
+                .size(34.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(iconBgColor),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = icon, fontSize = 18.sp)
+            Text(
+                text = icon,
+                fontSize = if (icon.length > 2) 8.sp else 11.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                maxLines = 1
+            )
         }
 
         Spacer(modifier = Modifier.width(14.dp))
@@ -604,15 +663,15 @@ private fun SettingsRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
                 color = titleColor
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
-                fontSize = 12.sp,
-                color = TextSecondary
+                fontSize = 11.sp,
+                color = MineSub
             )
         }
 
@@ -630,11 +689,26 @@ private fun SettingsRow(
             Spacer(modifier = Modifier.width(8.dp))
         }
 
+        if (showSwitch) {
+            Switch(
+                checked = switchChecked,
+                onCheckedChange = null,
+                enabled = false,
+                colors = SwitchDefaults.colors(
+                    disabledCheckedThumbColor = Color.White,
+                    disabledCheckedTrackColor = Primary,
+                    disabledUncheckedThumbColor = Color.White,
+                    disabledUncheckedTrackColor = Color(0xFFE5E8F0),
+                    disabledUncheckedBorderColor = Color.Transparent
+                )
+            )
+        }
+
         if (showArrow) {
             Text(
                 text = "›",
-                fontSize = 22.sp,
-                color = TextMuted,
+                fontSize = 20.sp,
+                color = MineMuted,
                 fontWeight = FontWeight.Light
             )
         }
@@ -645,7 +719,7 @@ private fun SettingsRow(
 private fun RowDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(start = 68.dp, end = 16.dp),
-        color = Border.copy(alpha = 0.6f),
+        color = MineLine,
         thickness = 0.5.dp
     )
 }
@@ -669,110 +743,6 @@ data class SettingItem(
 )
 
 enum class SettingType { SWITCH, ARROW, TEXT }
-
-// ══════════════════════════════════════════════════════════════
-// AI 配置弹窗
-// ══════════════════════════════════════════════════════════════
-
-@Composable
-private fun AIConfigDialog(
-    currentProvider: AIProvider,
-    currentApiKey: String,
-    currentModel: String,
-    onSave: (AIProvider, String, String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var provider by remember { mutableStateOf(currentProvider) }
-    var apiKey by remember { mutableStateOf(currentApiKey) }
-    var model by remember { mutableStateOf(currentModel) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                "AI 智能助手配置",
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                // 提供商选择
-                Text("服务提供商", fontSize = 13.sp, color = TextSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AIProvider.entries.forEach { p ->
-                        FilterChip(
-                            selected = provider == p,
-                            onClick = {
-                                provider = p
-                                if (model.isBlank()) model = ""
-                            },
-                            label = { Text(p.displayName, fontSize = 13.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Primary.copy(alpha = 0.15f),
-                                selectedLabelColor = Primary
-                            )
-                        )
-                    }
-                }
-
-                // API Key 输入
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    label = { Text("API Key") },
-                    placeholder = { Text("sk-...", color = TextMuted) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Primary,
-                        unfocusedBorderColor = Border
-                    )
-                )
-
-                // 模型名称（可选）
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = { model = it },
-                    label = { Text("模型名称（留空使用默认）") },
-                    placeholder = { Text(provider.defaultModel, color = TextMuted) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Primary,
-                        unfocusedBorderColor = Border
-                    )
-                )
-
-                // 默认模型提示
-                Text(
-                    "默认模型：${provider.defaultModel}",
-                    fontSize = 11.sp,
-                    color = TextMuted
-                )
-
-                // 安全提示
-                Text(
-                    "API Key 仅保存在本地设备，不会上传",
-                    fontSize = 11.sp,
-                    color = TextMuted
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(provider, apiKey.trim(), model.trim()) }
-            ) {
-                Text("保存", color = Primary, fontWeight = FontWeight.SemiBold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消", color = TextSecondary)
-            }
-        }
-    )
-}
 
 // ══════════════════════════════════════════════════════════════
 // AI 智能助手 帮助弹窗（全屏）
@@ -804,7 +774,7 @@ private fun AIHelpDialog(onDismiss: () -> Unit) {
                                 "比如你输入「明天下午3点开项目周会」，AI 会自动识别出：\n" +
                                 "  · 任务标题：开项目周会\n" +
                                 "  · 截止时间：明天 15:00\n\n" +
-                                "目前支持 DeepSeek 和 通义千问 两个 AI 服务。"
+                                "当前配置入口只需要填写 DeepSeek API Key，模型默认使用 deepseek-v4-flash。"
                     )
 
                     HorizontalDivider(color = Color(0xFFF0F0F0))
@@ -817,24 +787,9 @@ private fun AIHelpDialog(onDismiss: () -> Unit) {
                                 "3. 左侧菜单 → 「API Keys」\n\n" +
                                 "4. 点击「创建 API Key」\n\n" +
                                 "5. 复制生成的 Key（sk-开头）\n\n" +
-                                "6. 回到本 App → 设置 → AI 智能助手\n" +
-                                "   选择 DeepSeek → 粘贴 API Key → 保存\n\n" +
+                                "6. 回到本 App → 我的 → AI 智能助手\n" +
+                                "   粘贴 API Key → 保存并启用 AI\n\n" +
                                 "费用：注册后有免费额度，正常使用每次约 0.001 元"
-                    )
-
-                    HorizontalDivider(color = Color(0xFFF0F0F0))
-
-                    HelpSection(
-                        title = "通义千问 API Key 获取步骤",
-                        content = "1. 打开阿里云百炼平台：\n" +
-                                "   https://bailian.console.aliyun.com\n\n" +
-                                "2. 使用支付宝/阿里云账号登录\n\n" +
-                                "3. 右上角头像 → 「API-KEY 管理」\n\n" +
-                                "4. 点击「创建新的 API Key」\n\n" +
-                                "5. 复制生成的 Key（sk-开头）\n\n" +
-                                "6. 回到本 App → 设置 → AI 智能助手\n" +
-                                "   选择通义千问 → 粘贴 API Key → 保存\n\n" +
-                                "费用：新用户有免费调用额度"
                     )
 
                     HorizontalDivider(color = Color(0xFFF0F0F0))
@@ -856,11 +811,11 @@ private fun AIHelpDialog(onDismiss: () -> Unit) {
                     HelpSection(
                         title = "常见问题",
                         content = "Q: 模型名称需要填吗？\n" +
-                                "A: 不需要，留空即可，会使用默认模型。\n\n" +
+                                "A: 不需要。应用默认使用 deepseek-v4-flash。\n\n" +
                                 "Q: API Key 安全吗？\n" +
-                                "A: Key 仅保存在你的手机本地，不会上传到任何服务器。\n\n" +
+                                "A: Key 仅保存在你的手机本地，用于后续 AI 能力调用。\n\n" +
                                 "Q: 提示「API Key 无效」？\n" +
-                                "A: 请检查是否复制完整（包括 sk- 前缀），以及是否选对了服务商。"
+                                "A: 请检查是否复制完整（包括 sk- 前缀），以及 DeepSeek 账号额度是否可用。"
                     )
 
                     Spacer(modifier = Modifier.height(32.dp))

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextThing — 底部操作栏设计方案</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#F8F9FC; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#2D3436; }
+  :root {
+    --primary: #6C5CE7; --primary-dark: #5A4BD1; --primary-light: #A29BFE;
+    --bg-card: #FFFFFF; --bg-secondary: #F1F3F8;
+    --text-primary: #2D3436; --text-secondary: #636E72; --border: #E8ECF0;
+    --danger: #FF6B6B;
+  }
+  .container { max-width:1200px; margin:0 auto; padding:32px; }
+  h1 { text-align:center; font-size:28px; color:var(--primary); margin-bottom:8px; }
+  .subtitle { text-align:center; font-size:14px; color:var(--text-secondary); margin-bottom:40px; }
+
+  .option-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:40px; }
+  .option-card { background:var(--bg-card); border-radius:20px; padding:24px; box-shadow:0 4px 20px rgba(0,0,0,0.06); }
+  .option-card .label { text-align:center; margin-bottom:4px; }
+  .option-card .label h3 { font-size:16px; color:var(--primary); }
+  .option-card .label p { font-size:12px; color:var(--text-secondary); margin-top:4px; }
+  .option-card .badge { display:inline-block; background:#EEF0FF; color:var(--primary); padding:2px 10px; border-radius:10px; font-size:11px; font-weight:600; }
+
+  /* Phone mockup for bottom bar only */
+  .phone-bottom {
+    width: 375px;
+    background: #F8F9FC;
+    border-radius: 0 0 32px 32px;
+    border: 6px solid #1a1a2e;
+    border-top: none;
+    overflow: hidden;
+    margin: 16px auto 0;
+  }
+
+  /* ====== Option A: Current ====== */
+  .bar-a { padding:16px; display:flex; align-items:center; gap:12px; }
+  .bar-a .mic { width:56px;height:56px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;box-shadow:0 4px 16px rgba(108,92,231,0.3);flex-shrink:0;cursor:pointer; }
+  .bar-a .btn { flex:1;height:48px;border-radius:999px;background:var(--primary);color:#fff;font-size:16px;font-weight:600;border:none;box-shadow:0 4px 16px rgba(108,92,231,0.25);cursor:pointer; }
+
+  /* ====== Option B: Pill bar ====== */
+  .bar-b { padding:12px 16px; }
+  .bar-b .pill-bar { display:flex;align-items:center;background:var(--primary);border-radius:999px;padding:4px;height:52px;box-shadow:0 6px 24px rgba(108,92,231,0.35); }
+  .bar-b .pill-bar .mic { width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;flex-shrink:0;cursor:pointer;margin-left:4px; }
+  .bar-b .pill-bar .divider { width:1px;height:28px;background:rgba(255,255,255,0.25);margin:0 12px; }
+  .bar-b .pill-bar .btn { flex:1;background:rgba(255,255,255,0.15);border-radius:999px;color:#fff;font-size:15px;font-weight:600;border:none;height:44px;cursor:pointer;margin-right:4px; }
+  .bar-b .pill-bar .btn:disabled { opacity:0.5; }
+
+  /* ====== Option C: Floating ====== */
+  .bar-c { padding:16px; display:flex; align-items:center; gap:16px; justify-content:center; }
+  .bar-c .mic-wrap { position:relative; }
+  .bar-c .mic { width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#A29BFE,#6C5CE7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;box-shadow:0 8px 32px rgba(108,92,231,0.4);cursor:pointer;transition:transform 0.2s; }
+  .bar-c .mic:hover { transform:scale(1.05); }
+  .bar-c .mic-ring { position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(108,92,231,0.2); }
+  .bar-c .hint { font-size:11px;color:var(--text-secondary);text-align:center;margin-top:6px; }
+  .bar-c .btn { height:52px;border-radius:16px;background:var(--bg-card);color:var(--primary);font-size:16px;font-weight:700;border:2px solid var(--primary);cursor:pointer;padding:0 32px;box-shadow:0 4px 16px rgba(108,92,231,0.1); }
+  .bar-c .btn:disabled { color:var(--text-secondary);border-color:var(--border);box-shadow:none; }
+
+  /* ====== Option D: Glass ====== */
+  .bar-d { padding:12px 16px; }
+  .bar-d .glass-bar { display:flex;align-items:center;background:rgba(255,255,255,0.8);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px;padding:8px 12px;height:60px;box-shadow:0 4px 24px rgba(0,0,0,0.06);border:1px solid rgba(108,92,231,0.1); }
+  .bar-d .glass-bar .mic { width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#A29BFE,#6C5CE7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;flex-shrink:0;cursor:pointer; }
+  .bar-d .glass-bar .btn { flex:1;height:42px;border-radius:14px;background:var(--primary);color:#fff;font-size:15px;font-weight:600;border:none;margin-left:12px;cursor:pointer; }
+  .bar-d .glass-bar .btn:disabled { background:var(--bg-secondary);color:var(--text-secondary); }
+
+  /* ====== Option E: Split ====== */
+  .bar-e { padding:12px 16px; display:flex; gap:12px; }
+  .bar-e .btn-create { flex:1;height:52px;border-radius:16px;background:linear-gradient(135deg,#6C5CE7,#5A4BD1);color:#fff;font-size:16px;font-weight:700;border:none;box-shadow:0 6px 24px rgba(108,92,231,0.35);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px; }
+  .bar-e .btn-create:disabled { background:var(--bg-secondary);color:var(--text-secondary);box-shadow:none; }
+  .bar-e .mic { width:52px;height:52px;border-radius:16px;background:var(--bg-card);border:2px solid var(--primary);display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:22px;cursor:pointer;flex-shrink:0; }
+
+  /* ====== Option F: Minimal ====== */
+  .bar-f { padding:12px 20px; display:flex; align-items:center; gap:0; }
+  .bar-f .btn { flex:1;height:48px;border-radius:14px;background:var(--primary);color:#fff;font-size:15px;font-weight:600;border:none;cursor:pointer; }
+  .bar-f .btn:disabled { background:var(--bg-secondary);color:var(--text-secondary); }
+  .bar-f .mic { width:48px;height:48px;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:24px;cursor:pointer;flex-shrink:0; }
+
+  /* Recording states */
+  .mic.recording-a { background:var(--danger)!important;animation:pulse 1.5s infinite; }
+  .mic.recording-c { background:linear-gradient(135deg,#FF8A80,#FF6B6B)!important;box-shadow:0 8px 32px rgba(255,107,107,0.4)!important; }
+  .mic.recording-d { background:linear-gradient(135deg,#FF8A80,#FF6B6B)!important; }
+  .mic.recording-e { border-color:var(--danger)!important;color:var(--danger)!important; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,107,107,0.4);} 50%{box-shadow:0 0 0 12px rgba(255,107,107,0);} }
+
+  /* Voice wave for recording state */
+  .voice-wave { display:flex;align-items:center;justify-content:center;gap:3px;height:24px; }
+  .voice-wave .bar { width:3px;background:#fff;border-radius:2px;animation:wave 0.8s ease-in-out infinite; }
+  .voice-wave .bar:nth-child(1){height:6px;animation-delay:0s;} .voice-wave .bar:nth-child(2){height:12px;animation-delay:0.1s;}
+  .voice-wave .bar:nth-child(3){height:18px;animation-delay:0.2s;} .voice-wave .bar:nth-child(4){height:12px;animation-delay:0.3s;}
+  .voice-wave .bar:nth-child(5){height:6px;animation-delay:0.4s;}
+  @keyframes wave { 0%,100%{transform:scaleY(1);} 50%{transform:scaleY(2);} }
+
+  /* State tabs */
+  .state-tabs { display:flex;gap:8px;justify-content:center;margin-top:16px; }
+  .state-tab { padding:4px 12px;border-radius:8px;font-size:11px;cursor:pointer;border:1px solid var(--border);color:var(--text-secondary); }
+  .state-tab.active { background:var(--primary);color:#fff;border-color:var(--primary); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>底部操作栏 — 6 种设计方案</h1>
+  <p class="subtitle">麦克风按钮 + 创建任务按钮 · 正常态 / 录音态 / 禁用态</p>
+
+  <div class="option-grid">
+
+    <!-- Option A -->
+    <div class="option-card">
+      <div class="label"><span class="badge">当前</span><h3>A — 圆形 + 胶囊</h3><p>现有方案，圆形麦克风 + 胶囊按钮</p></div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">已输入标题</div>
+        <div class="bar-a"><div class="mic">🎙</div><button class="btn">创建任务</button></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--danger);text-align:center;">松开结束录音</div>
+        <div class="bar-a"><div class="mic recording-a"><div class="voice-wave"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div><button class="btn" disabled style="background:var(--bg-secondary);color:var(--text-secondary);">录音中...</button></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">空标题</div>
+        <div class="bar-a"><div class="mic">🎙</div><button class="btn" disabled>创建任务</button></div>
+      </div>
+    </div>
+
+    <!-- Option B -->
+    <div class="option-card">
+      <div class="label"><span class="badge" style="background:#FFF3E0;color:#E65100;">推荐</span><h3>B — 一体化胶囊条</h3><p>品牌紫胶囊，麦克风内嵌，视觉统一</p></div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">已输入标题</div>
+        <div class="bar-b"><div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:#fff;text-align:center;background:rgba(108,92,231,0.1);">松开结束录音</div>
+        <div class="bar-b"><div class="pill-bar" style="background:var(--danger);box-shadow:0 6px 24px rgba(255,107,107,0.35);"><div class="mic" style="background:rgba(255,255,255,0.3);"><div class="voice-wave"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div><div class="divider"></div><button class="btn" disabled>录音中...</button></div></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">空标题</div>
+        <div class="bar-b"><div class="pill-bar" style="opacity:0.5;"><div class="mic">🎙</div><div class="divider"></div><button class="btn" disabled>创建任务</button></div></div>
+      </div>
+    </div>
+
+    <!-- Option C -->
+    <div class="option-card">
+      <div class="label"><span class="badge">高级</span><h3>C — 渐变悬浮 + 线框按钮</h3><p>大麦克风悬浮，线框创建按钮，轻量感</p></div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">已输入标题</div>
+        <div class="bar-c">
+          <div class="mic-wrap"><div class="mic-ring"></div><div class="mic">🎙</div><div class="hint">长按录音</div></div>
+          <button class="btn">创建任务</button>
+        </div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--danger);text-align:center;">松开结束录音</div>
+        <div class="bar-c">
+          <div class="mic-wrap"><div class="mic recording-c"><div class="voice-wave"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div></div>
+          <button class="btn" disabled style="color:var(--text-secondary);border-color:var(--border);">录音中...</button>
+        </div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">空标题</div>
+        <div class="bar-c">
+          <div class="mic-wrap"><div class="mic-ring"></div><div class="mic">🎙</div><div class="hint">长按录音</div></div>
+          <button class="btn" disabled>创建任务</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Option D -->
+    <div class="option-card">
+      <div class="label"><span class="badge">现代</span><h3>D — 毛玻璃条</h3><p>iOS 风格毛玻璃背景，圆角方块按钮</p></div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">已输入标题</div>
+        <div class="bar-d"><div class="glass-bar"><div class="mic">🎙</div><button class="btn">创建任务</button></div></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--danger);text-align:center;">松开结束录音</div>
+        <div class="bar-d"><div class="glass-bar"><div class="mic recording-d"><div class="voice-wave"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div><button class="btn" disabled style="background:var(--bg-secondary);color:var(--text-secondary);">录音中...</button></div></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">空标题</div>
+        <div class="bar-d"><div class="glass-bar"><div class="mic" style="opacity:0.5">🎙</div><button class="btn" disabled>创建任务</button></div></div>
+      </div>
+    </div>
+
+    <!-- Option E -->
+    <div class="option-card">
+      <div class="label"><span class="badge">简洁</span><h3>E — 渐变按钮 + 线框麦克风</h3><p>主操作突出，麦克风退居次位</p></div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">已输入标题</div>
+        <div class="bar-e"><button class="btn-create">创建任务</button><div class="mic">🎙</div></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--danger);text-align:center;">松开结束录音</div>
+        <div class="bar-e"><button class="btn-create" disabled style="background:var(--bg-secondary);color:var(--text-secondary);box-shadow:none;">录音中...</button><div class="mic recording-e"><div class="voice-wave" style="position:absolute;"><div class="bar" style="background:var(--danger);"></div><div class="bar" style="background:var(--danger);"></div><div class="bar" style="background:var(--danger);"></div></div></div></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">空标题</div>
+        <div class="bar-e"><button class="btn-create" disabled>创建任务</button><div class="mic">🎙</div></div>
+      </div>
+    </div>
+
+    <!-- Option F -->
+    <div class="option-card">
+      <div class="label"><span class="badge">极简</span><h3>F — 极简内嵌</h3><p>麦克风内嵌按钮右侧，最紧凑布局</p></div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">已输入标题</div>
+        <div class="bar-f"><button class="btn">创建任务</button><div class="mic">🎙</div></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--danger);text-align:center;">松开结束录音</div>
+        <div class="bar-f"><button class="btn" disabled>录音中...</button><div class="mic" style="color:var(--danger);"><div class="voice-wave"><div class="bar" style="background:var(--danger);"></div><div class="bar" style="background:var(--danger);"></div><div class="bar" style="background:var(--danger);"></div><div class="bar" style="background:var(--danger);"></div><div class="bar" style="background:var(--danger);"></div></div></div></div>
+      </div>
+      <div class="phone-bottom">
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-secondary);">空标题</div>
+        <div class="bar-f"><button class="btn" disabled>创建任务</button><div class="mic" style="opacity:0.4">🎙</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

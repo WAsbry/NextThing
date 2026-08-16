@@ -1,0 +1,262 @@
+﻿﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextThing — 创建任务 · 高级配置</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#F8F9FC; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#2D3436; }
+  :root {
+    --primary: #6C5CE7; --primary-dark: #5A4BD1; --primary-light: #A29BFE;
+    --bg-primary: #F8F9FC; --bg-card: #FFFFFF; --bg-secondary: #F1F3F8;
+    --text-primary: #2D3436; --text-secondary: #636E72; --border: #E8ECF0;
+    --danger: #FF6B6B;
+  }
+  .page-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(375px,1fr)); gap:32px; padding:32px; max-width:1600px; margin:0 auto; }
+  .page-title { grid-column:1/-1; text-align:center; padding:24px 0 8px; }
+  .page-title h1 { font-size:28px; font-weight:700; color:var(--primary); }
+  .page-title p { font-size:14px; color:var(--text-secondary); margin-top:8px; }
+  .phone { width:375px; background:var(--bg-primary); border-radius:32px; border:8px solid #1a1a2e; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.15); position:relative; min-height:720px; }
+  .phone-inner { display:flex; flex-direction:column; height:100%; min-height:720px; }
+  .status-bar { display:flex; justify-content:space-between; align-items:center; padding:8px 20px; font-size:12px; font-weight:600; color:#fff; background:var(--primary); }
+  .top-nav { height:48px; background:var(--primary); display:flex; align-items:center; justify-content:space-between; padding:0 8px; position:relative; }
+  .top-nav .back-btn { width:40px;height:40px; display:flex;align-items:center;justify-content:center; color:#fff;font-size:20px;cursor:pointer; }
+  .top-nav .title { position:absolute; left:50%;top:50%;transform:translate(-50%,-50%); color:#fff;font-size:18px;font-weight:600; }
+  .content { flex:1; padding:12px 16px; overflow-y:auto; }
+  .input-card { background:var(--bg-card); border-radius:12px; padding:12px 16px; min-height:100px; box-shadow:0 2px 8px rgba(0,0,0,0.06); margin-bottom:12px; }
+  .input-card .text { color:var(--text-primary); font-size:16px; line-height:20px; }
+  .config-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+  .config-card { background:var(--bg-card); border:0.5px solid var(--border); border-radius:8px; height:80px; padding:12px; position:relative; cursor:pointer; }
+  .config-card .label { font-size:10px; color:var(--text-secondary); position:absolute; top:8px;left:12px; }
+  .config-card .value-row { position:absolute; bottom:12px;left:12px;right:12px; display:flex;align-items:center;gap:8px; }
+  .config-card .value-row .icon { font-size:16px; }
+  .config-card .value-row .value { font-size:14px; color:var(--text-primary); flex:1; }
+  .config-card .value-row .arrow { font-size:12px; color:var(--text-secondary); }
+  .expanded-panel { background:var(--bg-card); border:0.5px solid var(--border); border-radius:8px; padding:8px; margin-top:4px; grid-column:1/-1; }
+  .bottom-action { padding:12px 16px; }
+  .pill-bar { display:flex;align-items:center;height:52px;background:var(--primary);border-radius:999px;padding:4px;box-shadow:0 6px 24px rgba(108,92,231,0.35); } .pill-bar.disabled { opacity:0.5; } .pill-bar .mic { width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;flex-shrink:0;cursor:pointer;margin-left:4px; } .pill-bar .divider { width:1px;height:28px;background:rgba(255,255,255,0.25);margin:0 8px; } .pill-bar .btn { flex:1;height:44px;border-radius:999px;background:rgba(255,255,255,0.15);color:#fff;font-size:15px;font-weight:600;border:none;cursor:pointer;margin-right:4px; } .pill-bar .btn:disabled { opacity:0.7; }
+  
+  .screen-label { text-align:center; padding:12px; font-size:14px; font-weight:600; color:var(--text-secondary); }
+  .screen-label span { display:inline-block; background:#EEF0FF; color:var(--primary); padding:4px 12px; border-radius:12px; }
+  .repeat-options { display:flex; flex-wrap:wrap; gap:8px; padding:8px 0; }
+  .repeat-chip { padding:6px 14px; border-radius:16px; font-size:13px; background:var(--bg-secondary); color:var(--text-primary); cursor:pointer; border:1.5px solid transparent; }
+  .repeat-chip.active { background:#EEF0FF; color:var(--primary); border-color:var(--primary); }
+  .weekday-selector { display:flex; gap:6px; padding:8px 0; }
+  .weekday-btn { width:36px;height:36px; border-radius:50%; display:flex;align-items:center;justify-content:center; font-size:12px; background:var(--bg-secondary); color:var(--text-primary); cursor:pointer; border:1.5px solid transparent; }
+  .weekday-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .image-preview { width:100%; height:120px; border-radius:8px; background:linear-gradient(135deg,#EEF0FF 0%,#D5CEFF 100%); display:flex; align-items:center; justify-content:center; color:var(--primary); font-size:14px; position:relative; }
+  .image-preview .remove-btn { position:absolute; top:6px;right:6px; width:24px;height:24px; border-radius:50%; background:rgba(0,0,0,0.5); color:#fff; display:flex;align-items:center;justify-content:center; font-size:12px; cursor:pointer; }
+  .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:12px; background:var(--bg-card); border:0.5px solid var(--border); border-radius:8px; }
+  .toggle-row .left { display:flex; align-items:center; gap:8px; }
+  .toggle-switch { width:44px;height:24px; border-radius:12px; background:var(--border); position:relative; cursor:pointer; transition:background 0.2s; }
+  .toggle-switch.on { background:var(--primary); }
+  .toggle-switch .knob { width:20px;height:20px; border-radius:50%; background:#fff; position:absolute; top:2px;left:2px; transition:left 0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.15); }
+  .toggle-switch.on .knob { left:22px; }
+  .notif-sheet { background:var(--bg-card); border-radius:20px 20px 0 0; width:100%; max-height:70%; overflow-y:auto; }
+  .notif-sheet .header { display:flex; justify-content:space-between; align-items:center; padding:16px; border-bottom:0.5px solid var(--border); }
+  .notif-sheet .header h3 { font-size:18px; font-weight:700; }
+  .notif-sheet .header .done-btn { color:var(--primary); font-size:14px; font-weight:600; cursor:pointer; }
+  .notif-sheet .option-row { display:flex; align-items:center; padding:12px 16px; gap:8px; cursor:pointer; }
+  .notif-sheet .radio { width:20px;height:20px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; }
+  .notif-sheet .radio.selected { border-color:var(--primary); background:var(--primary); box-shadow:inset 0 0 0 3px #fff; }
+  .notif-sheet .create-btn { margin:8px 16px 16px; padding:12px; border-radius:12px; background:var(--bg-secondary); text-align:center; color:var(--primary); font-size:14px; font-weight:500; cursor:pointer; }
+  .sheet-overlay { position:absolute; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.3); z-index:10; display:flex; align-items:flex-end; }
+</style>
+</head>
+<body>
+<div class="page-grid">
+<div class="page-title">
+  <h1>04-C — 创建任务 · 高级配置</h1>
+  <p>状态 11-15：通知策略 / 重复 / 图片 / 围栏 / 全部完成</p>
+</div>
+
+<!-- State 11: 通知策略底部弹窗 -->
+<div class="screen-label"><span>状态 11：通知策略 — ModalBottomSheet</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div class="input-card"><div class="text">完成项目报告并提交给张经理审核</div></div>
+    <div class="config-grid">
+      <div class="config-card"><div class="label">日期</div><div class="value-row"><span class="icon">📅</span><span class="value">今天(9号)</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">精确时间</div><div class="value-row"><span class="icon">⏰</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">分类</div><div class="value-row"><span class="icon">📁</span><span class="value">工作</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重要程度</div><div class="value-row"><span class="icon">🔥</span><span class="value">重要紧急</span><span class="arrow">▼</span></div></div>
+    </div>
+  </div>
+  <div class="sheet-overlay">
+    <div class="notif-sheet">
+      <div style="width:32px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0;"></div>
+      <div class="header"><h3>🔔 通知策略</h3><span class="done-btn">完成</span></div>
+      <div class="option-row"><div class="radio selected"></div><span style="font-size:14px;color:var(--primary);font-weight:500">不使用</span></div>
+      <div style="height:1px;background:var(--border);margin:0 16px;"></div>
+      <div class="option-row"><div class="radio"></div><span style="font-size:14px">默认提醒</span><span style="font-size:12px;color:var(--text-secondary);margin-left:auto">提前15分钟 · 声音+震动</span></div>
+      <div class="option-row"><div class="radio"></div><span style="font-size:14px">重要提醒</span><span style="font-size:12px;color:var(--text-secondary);margin-left:auto">提前30分钟 · 循环3次</span></div>
+      <div class="option-row"><div class="radio"></div><span style="font-size:14px">温和提醒</span><span style="font-size:12px;color:var(--text-secondary);margin-left:auto">提前5分钟 · 仅震动</span></div>
+      <div style="height:1px;background:var(--border);margin:4px 16px;"></div>
+      <div class="create-btn">+ 创建新策略</div>
+    </div>
+  </div>
+</div></div>
+
+<!-- State 12: 重复配置展开 -->
+<div class="screen-label"><span>状态 12：重复配置展开 — 频率 + 星期选择</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div class="input-card"><div class="text">完成项目报告并提交给张经理审核</div></div>
+    <div class="config-grid">
+      <div class="config-card"><div class="label">日期</div><div class="value-row"><span class="icon">📅</span><span class="value">今天(9号)</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">精确时间</div><div class="value-row"><span class="icon">⏰</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">分类</div><div class="value-row"><span class="icon">📁</span><span class="value">工作</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重要程度</div><div class="value-row"><span class="icon">🔥</span><span class="value">重要紧急</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">附件图片</div><div class="value-row"><span class="icon">📷</span><span class="value">未添加</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">通知策略</div><div class="value-row"><span class="icon">🔔</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card" style="border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)">
+        <div class="label" style="color:var(--primary)">重复 ▲</div>
+        <div class="value-row"><span class="icon">🔄</span><span class="value" style="color:var(--primary);font-weight:500">每周</span></div>
+      </div>
+      <div class="config-card"><div class="label">地理围栏</div><div class="value-row"><span class="icon">📍</span><span class="value">未启用</span><span class="arrow">▼</span></div></div>
+      <div class="expanded-panel">
+        <div class="repeat-options">
+          <div class="repeat-chip">不重复</div>
+          <div class="repeat-chip">每天</div>
+          <div class="repeat-chip active">每周</div>
+          <div class="repeat-chip">每月</div>
+          <div class="repeat-chip">工作日</div>
+          <div class="repeat-chip">自定义</div>
+        </div>
+        <div style="padding:4px 0;font-size:12px;color:var(--text-secondary);margin-top:4px;">选择星期</div>
+        <div class="weekday-selector">
+          <div class="weekday-btn">一</div>
+          <div class="weekday-btn active">二</div>
+          <div class="weekday-btn">三</div>
+          <div class="weekday-btn active">四</div>
+          <div class="weekday-btn">五</div>
+          <div class="weekday-btn">六</div>
+          <div class="weekday-btn">日</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-action"><div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div></div>
+</div></div>
+
+<!-- State 13: 图片展开 -->
+<div class="screen-label"><span>状态 13：附件图片展开 — 已选图片预览</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div class="input-card"><div class="text">完成项目报告并提交给张经理审核</div></div>
+    <div class="config-grid">
+      <div class="config-card"><div class="label">日期</div><div class="value-row"><span class="icon">📅</span><span class="value">今天(9号)</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">精确时间</div><div class="value-row"><span class="icon">⏰</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">分类</div><div class="value-row"><span class="icon">📁</span><span class="value">工作</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重要程度</div><div class="value-row"><span class="icon">🔥</span><span class="value">重要紧急</span><span class="arrow">▼</span></div></div>
+      <div class="config-card" style="border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)">
+        <div class="label" style="color:var(--primary)">附件图片 ▲</div>
+        <div class="value-row"><span class="icon">📷</span><span class="value" style="color:var(--primary);font-weight:500">已添加</span></div>
+      </div>
+      <div class="config-card"><div class="label">通知策略</div><div class="value-row"><span class="icon">🔔</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="expanded-panel">
+        <div class="image-preview">
+          <div style="text-align:center;"><div style="font-size:32px;margin-bottom:4px;">🖼</div><div>report_screenshot.jpg</div></div>
+          <div class="remove-btn">✕</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <div style="flex:1;padding:10px;background:var(--bg-secondary);border-radius:8px;text-align:center;font-size:13px;cursor:pointer;">📷 从相册选择</div>
+          <div style="flex:1;padding:10px;background:var(--bg-secondary);border-radius:8px;text-align:center;font-size:13px;cursor:pointer;">📸 拍照</div>
+        </div>
+      </div>
+      <div class="config-card"><div class="label">重复</div><div class="value-row"><span class="icon">🔄</span><span class="value">不重复</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">地理围栏</div><div class="value-row"><span class="icon">📍</span><span class="value">未启用</span><span class="arrow">▼</span></div></div>
+    </div>
+  </div>
+  <div class="bottom-action"><div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div></div>
+</div></div>
+
+<!-- State 14: 地理围栏展开 -->
+<div class="screen-label"><span>状态 14：地理围栏展开 — 开关 + 位置选择</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div class="input-card"><div class="text">完成项目报告并提交给张经理审核</div></div>
+    <div class="config-grid">
+      <div class="config-card"><div class="label">日期</div><div class="value-row"><span class="icon">📅</span><span class="value">今天(9号)</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">精确时间</div><div class="value-row"><span class="icon">⏰</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">分类</div><div class="value-row"><span class="icon">📁</span><span class="value">工作</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重要程度</div><div class="value-row"><span class="icon">🔥</span><span class="value">重要紧急</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">附件图片</div><div class="value-row"><span class="icon">📷</span><span class="value">未添加</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">通知策略</div><div class="value-row"><span class="icon">🔔</span><span class="value">默认提醒</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重复</div><div class="value-row"><span class="icon">🔄</span><span class="value">不重复</span><span class="arrow">▼</span></div></div>
+      <div class="config-card" style="border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)">
+        <div class="label" style="color:var(--primary)">地理围栏 ▲</div>
+        <div class="value-row"><span class="icon">📍</span><span class="value" style="color:var(--primary);font-weight:500">已启用</span></div>
+      </div>
+      <div class="expanded-panel">
+        <div class="toggle-row">
+          <div class="left"><span>📍</span><span style="font-size:14px">启用地理围栏</span></div>
+          <div class="toggle-switch on"><div class="knob"></div></div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-secondary);padding:4px 8px;">选择位置</div>
+        <div style="padding:4px 0;">
+          <div style="display:flex;align-items:center;padding:10px 12px;background:var(--bg-secondary);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--primary);background:var(--primary);box-shadow:inset 0 0 0 3px #fff;flex-shrink:0;"></div>
+            <span style="font-size:14px;color:var(--primary);font-weight:500;margin-left:8px;">公司</span>
+            <span style="font-size:12px;color:var(--text-secondary);margin-left:auto;">半径 200m</span>
+          </div>
+          <div style="display:flex;align-items:center;padding:10px 12px;background:var(--bg-secondary);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;"></div>
+            <span style="font-size:14px;margin-left:8px;">家</span>
+            <span style="font-size:12px;color:var(--text-secondary);margin-left:auto;">半径 500m</span>
+          </div>
+          <div style="display:flex;align-items:center;padding:10px 12px;background:var(--bg-secondary);border-radius:8px;cursor:pointer;">
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;"></div>
+            <span style="font-size:14px;margin-left:8px;">健身房</span>
+            <span style="font-size:12px;color:var(--text-secondary);margin-left:auto;">半径 300m</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <div style="flex:1;padding:10px;background:var(--bg-secondary);border-radius:8px;text-align:center;font-size:13px;color:var(--primary);cursor:pointer;">+ 添加位置</div>
+          <div style="flex:1;padding:10px;background:var(--bg-secondary);border-radius:8px;text-align:center;font-size:13px;cursor:pointer;">⚙ 围栏设置</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-action"><div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div></div>
+</div></div>
+
+<!-- State 15: 全部填写完成 -->
+<div class="screen-label"><span>状态 15：全部配置完成 — 完整填写预览</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div class="input-card"><div class="text">完成项目报告并提交给张经理审核</div></div>
+    <div class="config-grid">
+      <div class="config-card"><div class="label">日期</div><div class="value-row"><span class="icon">📅</span><span class="value">明天(10号)</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">精确时间</div><div class="value-row"><span class="icon">⏰</span><span class="value">15:00</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">分类</div><div class="value-row"><span class="icon">📁</span><span class="value">工作</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重要程度</div><div class="value-row"><span class="icon">🔥</span><span class="value">重要紧急</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">附件图片</div><div class="value-row"><span class="icon">📷</span><span class="value" style="color:var(--primary)">已添加</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">通知策略</div><div class="value-row"><span class="icon">🔔</span><span class="value">默认提醒</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重复</div><div class="value-row"><span class="icon">🔄</span><span class="value">每周 二、四</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">地理围栏</div><div class="value-row"><span class="icon">📍</span><span class="value" style="color:var(--primary)">公司 (200m)</span><span class="arrow">▼</span></div></div>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar">
+      <div class="mic">🎙</div>
+      <div class="divider"></div>
+      <button class="btn">创建任务</button>
+    </div>
+  </div>
+</div></div>
+
+</div>
+</body>
+</html>

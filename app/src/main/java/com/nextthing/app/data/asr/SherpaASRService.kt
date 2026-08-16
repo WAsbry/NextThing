@@ -5,8 +5,11 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Debug
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
+import android.os.SystemClock
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
@@ -16,8 +19,11 @@ import com.k2fsa.sherpa.onnx.OnlineParaformerModelConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineStream
+import com.k2fsa.sherpa.onnx.QnnConfig
+import com.nextthing.app.BuildConfig
 import com.nextthing.app.domain.service.ASRService
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,15 +53,39 @@ class SherpaASRService @Inject constructor(
 
     companion object {
         private const val TAG = "SherpaASR"
+        private const val BENCHMARK_TAG = "ASR-Benchmark"
         private const val SAMPLE_RATE = 16000                    // 采样率 16kHz
         private const val SHERPA_MODEL_DIR = "models/sherpa-onnx"   // assets 下的模型目录
+        private const val CPU_SENSE_VOICE_MODEL = "model.int8.onnx"
+        private const val CPU_SENSE_VOICE_TOKENS = "tokens.txt"
+        private const val QNN_SENSE_VOICE_DIR = "$SHERPA_MODEL_DIR/sense-voice-qnn-10s"
+        private const val QNN_CONTEXT_ASSET = "$QNN_SENSE_VOICE_DIR/model-sm8550-v2.bin"
+        private const val QNN_CONTEXT_SIZE_BYTES = 261_674_328L
+        private const val QNN_CONTEXT_FILE = "model-sm8550-v2.bin"
+        private const val QNN_TOKENS_SIZE_BYTES = 315_894L
+        private const val QNN_BACKEND_LIBRARY = "libQnnHtp.so"
+        private const val QNN_SYSTEM_LIBRARY = "libQnnSystem.so"
+        private const val QNN_FIXED_AUDIO_SECONDS = 10
+        private const val RESOURCE_MISSING_MESSAGE = "端侧语音资源未安装，请按 README 放置 ASR Runtime 资源包"
+
+        private val COMMON_ASR_ASSETS = listOf(
+            "$SHERPA_MODEL_DIR/paraformer/encoder.int8.onnx",
+            "$SHERPA_MODEL_DIR/paraformer/decoder.int8.onnx",
+            "$SHERPA_MODEL_DIR/paraformer/tokens.txt",
+        )
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())    // 回调切主线程
+    private val pass2Backend = BuildConfig.ASR_BACKEND.lowercase()
+    private val useQnnPass2 = pass2Backend == "npu"
+    private val pass2BackendLabel = if (useQnnPass2) "QNN_HTP" else "CPU_ONNX"
 
     private val _isReady = MutableStateFlow(false)               // 模型是否加载完成
     override val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    override val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     private var onlineRecognizer: OnlineRecognizer? = null       // Pass 1：流式识别器
     private var onlineStream: OnlineStream? = null               // 流式识别的 Stream
@@ -64,6 +95,13 @@ class SherpaASRService @Inject constructor(
     private var audioRecord: AudioRecord? = null                 // Android 录音器
     @Volatile
     private var isRunning = false                                // 是否正在识别
+    @Volatile
+    private var isRecognitionSessionActive = false
+    @Volatile
+    private var isWarmingUp = false
+    @Volatile
+    private var releaseRequested = false
+    private val warmUpLock = Any()
 
     /**
      * @DESC: 预热模型（在后台线程加载模型，避免首次使用时卡顿）
@@ -72,16 +110,39 @@ class SherpaASRService @Inject constructor(
      * 3. 首次长按时 start() 会跳过已初始化的模型，直接开始录音
      */
     override fun warmUp() {
+        synchronized(warmUpLock) {
+            releaseRequested = false
+        }
+        val missingAssets = findMissingRequiredAssets()
+        if (missingAssets.isNotEmpty()) {
+            _isReady.value = false
+            _errorMessage.value = RESOURCE_MISSING_MESSAGE
+            Timber.tag(TAG).w("ASR 资源缺失: ${missingAssets.joinToString()}")
+            return
+        }
+
         if (onlineRecognizer != null && offlineRecognizer != null) {
             Timber.tag(TAG).d("模型已初始化，跳过预热")
             _isReady.value = true
+            _errorMessage.value = null
             return
         }
-        Timber.tag(TAG).d("warmUp() 被调用，开始预热...")
+        synchronized(warmUpLock) {
+            if (isWarmingUp) {
+                Timber.tag(TAG).d("模型正在预热，合并本次重复请求")
+                return
+            }
+            isWarmingUp = true
+        }
+        Timber.tag(TAG).d("warmUp() 被调用，开始预热，Pass 2 backend=$pass2BackendLabel")
         scope.launch {
+            var initializationSucceeded = false
+            var initializationError: Throwable? = null
             try {
+                logMemorySnapshot("warmup_before")
                 if (onlineRecognizer == null) {
-                    val t1 = System.currentTimeMillis()
+                    val wallStartedNs = SystemClock.elapsedRealtimeNanos()
+                    val processCpuStartedMs = Process.getElapsedCpuTime()
                     Timber.tag(TAG).d("预热：开始初始化 OnlineRecognizer...")
                     val onlineConfig = OnlineRecognizerConfig(
                         modelConfig = OnlineModelConfig(
@@ -98,34 +159,49 @@ class SherpaASRService @Inject constructor(
                         assetManager = context.assets,
                         config = onlineConfig
                     )
-                    val t2 = System.currentTimeMillis()
-                    Timber.tag(TAG).d("预热：OnlineRecognizer 完成，耗时 ${t2 - t1}ms")
+                    logInitializationMetrics(
+                        stage = "online_ready",
+                        wallStartedNs = wallStartedNs,
+                        processCpuStartedMs = processCpuStartedMs,
+                    )
+                    logMemorySnapshot("online_ready")
                 }
                 if (offlineRecognizer == null) {
-                    val t3 = System.currentTimeMillis()
-                    Timber.tag(TAG).d("预热：开始初始化 OfflineRecognizer...")
-                    val offlineConfig = OfflineRecognizerConfig(
-                        modelConfig = OfflineModelConfig(
-                            senseVoice = OfflineSenseVoiceModelConfig(
-                                model = "$SHERPA_MODEL_DIR/sense-voice/model.int8.onnx",
-                                language = "zh",
-                                useInverseTextNormalization = true,
-                            ),
-                            tokens = "$SHERPA_MODEL_DIR/sense-voice/tokens.txt",
-                            numThreads = 4,
-                        )
+                    val wallStartedNs = SystemClock.elapsedRealtimeNanos()
+                    val processCpuStartedMs = Process.getElapsedCpuTime()
+                    Timber.tag(TAG).d("预热：开始初始化 $pass2BackendLabel OfflineRecognizer...")
+                    offlineRecognizer = createOfflineRecognizer()
+                    logInitializationMetrics(
+                        stage = "offline_ready",
+                        wallStartedNs = wallStartedNs,
+                        processCpuStartedMs = processCpuStartedMs,
                     )
-                    offlineRecognizer = OfflineRecognizer(
-                        assetManager = context.assets,
-                        config = offlineConfig
-                    )
-                    val t4 = System.currentTimeMillis()
-                    Timber.tag(TAG).d("预热：OfflineRecognizer 完成，耗时 ${t4 - t3}ms")
+                    logMemorySnapshot("offline_ready")
                 }
-                _isReady.value = true
-                Timber.tag(TAG).d("预热完成，模型就绪")
-            } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "预热失败")
+                initializationSucceeded = true
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                initializationError = t
+            }
+
+            synchronized(warmUpLock) {
+                isWarmingUp = false
+                when {
+                    releaseRequested -> {
+                        releaseLoadedResources()
+                        Timber.tag(TAG).d("预热结束时页面已退出，立即释放模型")
+                    }
+                    initializationSucceeded -> {
+                        _isReady.value = true
+                        _errorMessage.value = null
+                        Timber.tag(TAG).d("预热完成，模型就绪，Pass 2 backend=$pass2BackendLabel")
+                    }
+                    else -> {
+                        _isReady.value = false
+                        _errorMessage.value = initializationError?.let(::toUserFacingInitError)
+                        Timber.tag(TAG).e(initializationError, "预热失败")
+                    }
+                }
             }
         }
     }
@@ -135,7 +211,7 @@ class SherpaASRService @Inject constructor(
      * 1. 模型打包在 assets 中，始终可用
      * @return true
      */
-    override suspend fun isConfigured(): Boolean = true          // 端侧模型始终可用
+    override suspend fun isConfigured(): Boolean = findMissingRequiredAssets().isEmpty()
 
     /**
      * @DESC: 开始语音识别（Two-pass）
@@ -154,9 +230,24 @@ class SherpaASRService @Inject constructor(
     override fun start(
         onPartial: (String) -> Unit,
         onFinal: (String) -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onAudioCaptured: (samples: ShortArray, sampleRate: Int) -> Unit
     ) {
         try {
+            val missingAssets = findMissingRequiredAssets()
+            if (missingAssets.isNotEmpty()) {
+                _isReady.value = false
+                _errorMessage.value = RESOURCE_MISSING_MESSAGE
+                Timber.tag(TAG).w("ASR 资源缺失，无法启动: ${missingAssets.joinToString()}")
+                mainHandler.post { onError(RESOURCE_MISSING_MESSAGE) }
+                return
+            }
+            if (!_isReady.value) {
+                warmUp()
+                mainHandler.post { onError("端侧语音模型正在初始化，请稍后再试") }
+                return
+            }
+
             // 1. 初始化 Pass 1（流式 Paraformer）
             if (onlineRecognizer == null) {
                 val onlineConfig = OnlineRecognizerConfig(
@@ -179,28 +270,15 @@ class SherpaASRService @Inject constructor(
 
             // 2. 初始化 Pass 2（整段 SenseVoice）
             if (offlineRecognizer == null) {
-                val offlineConfig = OfflineRecognizerConfig(
-                    modelConfig = OfflineModelConfig(
-                        senseVoice = OfflineSenseVoiceModelConfig(
-                            model = "$SHERPA_MODEL_DIR/sense-voice/model.int8.onnx",
-                            language = "zh",
-                            useInverseTextNormalization = true,
-                        ),
-                        tokens = "$SHERPA_MODEL_DIR/sense-voice/tokens.txt",
-                        numThreads = 4,
-                    )
-                )
-                offlineRecognizer = OfflineRecognizer(
-                    assetManager = context.assets,
-                    config = offlineConfig
-                )
-                Timber.tag(TAG).d("OfflineRecognizer 初始化完成")
+                offlineRecognizer = createOfflineRecognizer()
+                Timber.tag(TAG).d("$pass2BackendLabel OfflineRecognizer 初始化完成")
             }
 
             // 3. 创建新的 Stream
             onlineStream = onlineRecognizer!!.createStream()
             pendingAudio.clear()
             isRunning = true
+            isRecognitionSessionActive = true
 
             // 4. 初始化 AudioRecord
             val channelConfig = AudioFormat.CHANNEL_IN_MONO
@@ -234,16 +312,21 @@ class SherpaASRService @Inject constructor(
                     ar.stop()
                     ar.release()
                     audioRecord = null
+                    completeRecognitionSession()
                     mainHandler.post { onFinal("") }
                     return@launch
                 }
-                recordingLoop(ar, frameSize, onPartial, onFinal, onError)
+                recordingLoop(ar, frameSize, onPartial, onFinal, onError, onAudioCaptured)
             }
 
             Timber.tag(TAG).d("ASR 识别已启动")
-        } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "初始化失败")
-            mainHandler.post { onError("端侧 ASR 初始化失败: ${e.message}") }
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            val message = toUserFacingInitError(t)
+            _isReady.value = false
+            _errorMessage.value = message
+            Timber.tag(TAG).e(t, "初始化失败")
+            mainHandler.post { onError(message) }
         }
     }
 
@@ -278,7 +361,8 @@ class SherpaASRService @Inject constructor(
         frameSize: Int,
         onPartial: (String) -> Unit,
         onFinal: (String) -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onAudioCaptured: (samples: ShortArray, sampleRate: Int) -> Unit
     ) {
         val buf = ShortArray(frameSize / 2)                      // 1280字节 / 2 = 640个Short
 
@@ -312,17 +396,54 @@ class SherpaASRService @Inject constructor(
             ar.release()
             audioRecord = null
 
+            if (releaseRequested) return
+
             // Pass 2：整段识别
             if (pendingAudio.isNotEmpty()) {
-                Timber.tag(TAG).d("开始 Pass 2，音频长度: ${pendingAudio.size} 采样点")
+                val audioDurationMs = pendingAudio.size * 1000L / SAMPLE_RATE
+                Timber.tag(TAG).d("开始 Pass 2 $pass2BackendLabel，音频长度: ${audioDurationMs}ms")
+                if (useQnnPass2 && audioDurationMs > QNN_FIXED_AUDIO_SECONDS * 1000L) {
+                    Timber.tag(TAG).w(
+                        "Pass 2 QNN 模型最长支持 ${QNN_FIXED_AUDIO_SECONDS}s，超出部分会被截断"
+                    )
+                }
                 val offlineStream = offlineRecognizer!!.createStream()
                 offlineStream.acceptWaveform(pendingAudio.toFloatArray(), SAMPLE_RATE)
+                logMemorySnapshot("pass2_before")
+                val decodeStartedNs = SystemClock.elapsedRealtimeNanos()
+                val processCpuStartedMs = Process.getElapsedCpuTime()
+                val threadCpuStartedNs = Debug.threadCpuTimeNanos()
                 offlineRecognizer!!.decode(offlineStream)
+                val decodeElapsedMs =
+                    (SystemClock.elapsedRealtimeNanos() - decodeStartedNs) / 1_000_000.0
+                val processCpuElapsedMs = Process.getElapsedCpuTime() - processCpuStartedMs
+                val threadCpuElapsedMs =
+                    (Debug.threadCpuTimeNanos() - threadCpuStartedNs) / 1_000_000.0
                 val finalResult = offlineRecognizer!!.getResult(offlineStream)
                 offlineStream.release()
 
+                Timber.tag(TAG).i(
+                    "Pass 2 backend requested=%s actual=%s, decode=%.2fms, audio=%dms",
+                    pass2BackendLabel,
+                    pass2BackendLabel,
+                    decodeElapsedMs,
+                    audioDurationMs
+                )
+                Timber.tag(BENCHMARK_TAG).w(
+                    "pass2 backend=%s wallMs=%.2f processCpuMs=%d threadCpuMs=%.2f audioMs=%d",
+                    pass2BackendLabel,
+                    decodeElapsedMs,
+                    processCpuElapsedMs,
+                    threadCpuElapsedMs,
+                    audioDurationMs,
+                )
+                logMemorySnapshot("pass2_after")
                 Timber.tag(TAG).d("Pass 2 结果: ${finalResult.text}")
-                mainHandler.post { onFinal(finalResult.text) }
+                val capturedSamples = pendingAudio.toShortPcmArray()
+                mainHandler.post {
+                    onAudioCaptured(capturedSamples, SAMPLE_RATE)
+                    onFinal(finalResult.text)
+                }
             } else {
                 mainHandler.post { onFinal("") }
             }
@@ -335,6 +456,8 @@ class SherpaASRService @Inject constructor(
             ar.release()
             audioRecord = null
             mainHandler.post { onError("端侧 ASR 录音异常: ${e.message}") }
+        } finally {
+            completeRecognitionSession()
         }
     }
 
@@ -346,8 +469,21 @@ class SherpaASRService @Inject constructor(
      * 4. 释放 OfflineRecognizer
      * 5. 释放 Stream
      */
-    fun release() {
-        isRunning = false
+    override fun release() {
+        synchronized(warmUpLock) {
+            releaseRequested = true
+            _isReady.value = false
+            isRunning = false
+            if (isWarmingUp || isRecognitionSessionActive) {
+                Timber.tag(TAG).d("ASR 正在初始化或识别，结束后再释放")
+                return
+            }
+            releaseLoadedResources()
+        }
+    }
+
+    private fun releaseLoadedResources() {
+        logMemorySnapshot("release_before")
         audioRecord?.let {
             try { it.stop() } catch (_: Exception) {}
             it.release()
@@ -361,6 +497,182 @@ class SherpaASRService @Inject constructor(
         onlineRecognizer = null
         offlineRecognizer = null
         onlineStream = null
-        Timber.tag(TAG).d("资源已释放")
+        pendingAudio.clear()
+        _isReady.value = false
+        logMemorySnapshot("release_after")
+        Timber.tag(TAG).d("ASR 资源已释放")
+    }
+
+    private fun completeRecognitionSession() {
+        synchronized(warmUpLock) {
+            isRecognitionSessionActive = false
+            if (releaseRequested && !isWarmingUp) {
+                releaseLoadedResources()
+            }
+        }
+    }
+
+    private fun findMissingRequiredAssets(): List<String> {
+        val backendAssets = if (useQnnPass2) {
+            listOf("$QNN_SENSE_VOICE_DIR/tokens.txt", QNN_CONTEXT_ASSET)
+        } else {
+            listOf(CPU_SENSE_VOICE_MODEL, CPU_SENSE_VOICE_TOKENS)
+        }
+        val missingAssets = (COMMON_ASR_ASSETS + backendAssets).filter { path ->
+            try {
+                context.assets.open(path).use { }
+                false
+            } catch (_: Exception) {
+                true
+            }
+        }
+        val nativeLibraryDir = File(context.applicationInfo.nativeLibraryDir)
+        val requiredNativeLibraries = if (useQnnPass2) {
+            listOf(QNN_BACKEND_LIBRARY, QNN_SYSTEM_LIBRARY)
+        } else {
+            emptyList()
+        }
+        val missingNativeLibraries = requiredNativeLibraries.filter { library ->
+            !File(nativeLibraryDir, library).isFile
+        }
+        return missingAssets + missingNativeLibraries
+    }
+
+    private fun createOfflineRecognizer(): OfflineRecognizer {
+        return if (useQnnPass2) createQnnOfflineRecognizer() else createCpuOfflineRecognizer()
+    }
+
+    private fun createCpuOfflineRecognizer(): OfflineRecognizer {
+        val config = OfflineRecognizerConfig(
+            modelConfig = OfflineModelConfig(
+                senseVoice = OfflineSenseVoiceModelConfig(
+                    model = CPU_SENSE_VOICE_MODEL,
+                    language = "zh",
+                    useInverseTextNormalization = true,
+                ),
+                tokens = CPU_SENSE_VOICE_TOKENS,
+                numThreads = 4,
+                debug = true,
+            )
+        )
+        Timber.tag(TAG).i("Initializing Pass 2 backend=CPU_ONNX")
+        return OfflineRecognizer(assetManager = context.assets, config = config)
+    }
+
+    private fun createQnnOfflineRecognizer(): OfflineRecognizer {
+        val nativeLibraryDir = File(context.applicationInfo.nativeLibraryDir)
+        val backendFile = File(nativeLibraryDir, QNN_BACKEND_LIBRARY)
+        val systemFile = File(nativeLibraryDir, QNN_SYSTEM_LIBRARY)
+        val runtimeDir = File(context.filesDir, "asr/qnn-sensevoice-10s").apply { mkdirs() }
+        val tokensFile = File(runtimeDir, "tokens.txt")
+        val contextFile = File(runtimeDir, QNN_CONTEXT_FILE)
+        copyAssetAtomically(
+            assetPath = "$QNN_SENSE_VOICE_DIR/tokens.txt",
+            target = tokensFile,
+            expectedSize = QNN_TOKENS_SIZE_BYTES,
+        )
+        copyAssetAtomically(
+            assetPath = QNN_CONTEXT_ASSET,
+            target = contextFile,
+            expectedSize = QNN_CONTEXT_SIZE_BYTES,
+        )
+
+        OfflineRecognizer.prependAdspLibraryPath(nativeLibraryDir.absolutePath)
+        val config = OfflineRecognizerConfig(
+            modelConfig = OfflineModelConfig(
+                provider = "qnn",
+                senseVoice = OfflineSenseVoiceModelConfig(
+                    language = "zh",
+                    useInverseTextNormalization = true,
+                    qnnConfig = QnnConfig(
+                        backendLib = backendFile.absolutePath,
+                        systemLib = systemFile.absolutePath,
+                        contextBinary = contextFile.absolutePath,
+                    ),
+                ),
+                tokens = tokensFile.absolutePath,
+                numThreads = 1,
+                debug = true,
+            )
+        )
+        Timber.tag(TAG).i(
+            "Initializing Pass 2 backend=QNN_HTP mode=LOAD_CONTEXT context=%s",
+            contextFile.absolutePath,
+        )
+        return OfflineRecognizer(config = config)
+    }
+
+    private fun copyAssetAtomically(assetPath: String, target: File, expectedSize: Long) {
+        if (target.isFile && target.length() == expectedSize) return
+
+        val temporary = File(target.parentFile, "${target.name}.tmp")
+        temporary.delete()
+        context.assets.open(assetPath).use { input ->
+            temporary.outputStream().buffered().use(input::copyTo)
+        }
+        check(temporary.length() == expectedSize) {
+            "ASR resource size mismatch: $assetPath, expected=$expectedSize, actual=${temporary.length()}"
+        }
+        target.delete()
+        check(temporary.renameTo(target)) { "Unable to install ASR resource: ${target.absolutePath}" }
+    }
+
+    private fun logInitializationMetrics(
+        stage: String,
+        wallStartedNs: Long,
+        processCpuStartedMs: Long,
+    ) {
+        val wallMs = (SystemClock.elapsedRealtimeNanos() - wallStartedNs) / 1_000_000.0
+        val processCpuMs = Process.getElapsedCpuTime() - processCpuStartedMs
+        Timber.tag(BENCHMARK_TAG).w(
+            "init stage=%s backend=%s wallMs=%.2f processCpuMs=%d",
+            stage,
+            pass2BackendLabel,
+            wallMs,
+            processCpuMs,
+        )
+    }
+
+    private fun logMemorySnapshot(stage: String) {
+        val memoryInfo = Debug.MemoryInfo()
+        Debug.getMemoryInfo(memoryInfo)
+        val nativeHeapMb = Debug.getNativeHeapAllocatedSize().toDouble() / (1024.0 * 1024.0)
+        val pssMb = memoryInfo.totalPss.toDouble() / 1024.0
+        val rssMb = readVmRssKb().toDouble() / 1024.0
+        Timber.tag(BENCHMARK_TAG).w(
+            "memory stage=%s backend=%s nativeHeapMb=%.1f pssMb=%.1f rssMb=%.1f",
+            stage,
+            pass2BackendLabel,
+            nativeHeapMb,
+            pssMb,
+            rssMb,
+        )
+    }
+
+    private fun readVmRssKb(): Long {
+        return runCatching {
+            File("/proc/self/status").useLines { lines ->
+                lines.firstOrNull { it.startsWith("VmRSS:") }
+                    ?.substringAfter("VmRSS:")
+                    ?.trim()
+                    ?.substringBefore(' ')
+                    ?.toLongOrNull()
+                    ?: 0L
+            }
+        }.getOrDefault(0L)
+    }
+
+    private fun toUserFacingInitError(t: Throwable): String {
+        return if (t is UnsatisfiedLinkError) {
+            "端侧语音 Runtime 未安装，请按 README 放置 app/src/main/jniLibs 资源"
+        } else {
+            "端侧 ASR 初始化失败: ${t.message ?: "请检查模型资源包"}"
+        }
+    }
+
+    private fun List<Float>.toShortPcmArray(): ShortArray {
+        return ShortArray(size) { index ->
+            (this[index].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+        }
     }
 }

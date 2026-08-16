@@ -12,10 +12,12 @@ import com.nextthing.app.domain.service.AIBriefingGenerator.BriefingType
 import com.nextthing.app.util.NotificationHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 @HiltWorker
@@ -28,40 +30,50 @@ class DailyBriefingWorker @AssistedInject constructor(
     private val notificationHelper: NotificationHelper
 ) : CoroutineWorker(context, params) {
 
+    companion object {
+        const val KEY_BRIEFING_TYPE = "briefing_type"
+        private const val TAG = "AI-Briefing"
+    }
+
     override suspend fun doWork(): Result {
         return try {
             if (!briefingPreferences.isEnabledOnce()) {
-                Timber.tag("AI-Briefing").d("早晚报未启用，跳过")
+                Timber.tag(TAG).d("早晚报未启用，跳过")
                 return Result.success()
             }
 
             val now = LocalDateTime.now()
-            val currentHour = now.hour
             val morningHour = briefingPreferences.getMorningHourOnce()
+            val morningMinute = briefingPreferences.getMorningMinuteOnce()
             val eveningHour = briefingPreferences.getEveningHourOnce()
+            val eveningMinute = briefingPreferences.getEveningMinuteOnce()
 
-            val type = if (Math.abs(currentHour - morningHour) <= 1) {
-                BriefingType.MORNING
-            } else {
-                BriefingType.EVENING
-            }
+            val type = BriefingTypeResolver.resolve(
+                scheduledType = inputData.getString(KEY_BRIEFING_TYPE),
+                now = now.toLocalTime(),
+                morningTime = LocalTime.of(morningHour, morningMinute),
+                eveningTime = LocalTime.of(eveningHour, eveningMinute)
+            )
 
-            Timber.tag("AI-Briefing").d("开始生成${if (type == BriefingType.MORNING) "早报" else "晚报"}")
+            Timber.tag(TAG).d("开始生成${if (type == BriefingType.MORNING) "早报" else "晚报"}")
 
             val taskData = buildTaskData(type)
             val title = if (type == BriefingType.MORNING) "☀️ 早安简报" else "🌙 晚安简报"
 
             val content = briefingGenerator.generateBriefing(type, taskData)
                 .getOrElse { error ->
-                    Timber.tag("AI-Briefing").w(error, "AI 简报失败，使用本地 fallback")
+                    if (error is CancellationException) throw error
+                    Timber.tag(TAG).w(error, "AI 简报失败，使用本地 fallback")
                     buildFallbackBriefing(type, taskData)
                 }
 
             notificationHelper.showBriefingNotification(title, content)
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Timber.tag("AI-Briefing").e(e, "DailyBriefingWorker 异常")
-            Result.retry()
+            Timber.tag(TAG).e(e, "DailyBriefingWorker 异常")
+            WorkerFailurePolicy.result(TAG, runAttemptCount)
         }
     }
 

@@ -8,7 +8,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,10 +37,15 @@ fun AddGeofenceLocationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("添加地理围栏地点") },
+                title = { Text("添加地理围栏地点", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Text("←", fontSize = 24.sp)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier.size(24.dp),
+                            tint = Color(0xFF0F1726)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -61,8 +69,10 @@ fun AddGeofenceLocationScreen(
                     enabled = uiState.selectedLocation != null && !uiState.isSaving,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     if (uiState.isSaving) {
                         CircularProgressIndicator(
@@ -82,28 +92,34 @@ fun AddGeofenceLocationScreen(
                 .fillMaxSize()
                 .background(BgPrimary)
                 .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 选择地点提示
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.1f))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "ℹ️", fontSize = 24.sp)
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = Primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "从现有地点中选择一个添加为地理围栏",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Primary
+                            color = Primary,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
                         )
                     }
                 }
@@ -115,7 +131,7 @@ fun AddGeofenceLocationScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(32.dp),
+                        .padding(24.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator()
@@ -151,7 +167,7 @@ fun AddGeofenceLocationScreen(
                             contentColor = Primary
                         ),
                         border = BorderStroke(1.5.dp, Primary),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
@@ -328,18 +344,17 @@ private fun LocationSelectionItem(
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Primary.copy(alpha = 0.12f) else BgCard
+            containerColor = if (isSelected) Color(0xFFE8F5FF) else BgCard
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 4.dp else 1.dp
-        )
+        border = BorderStroke(1.dp, if (isSelected) Primary.copy(alpha = 0.45f) else Color(0xFFD6E0ED)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(14.dp)
         ) {
             // 顶部：地点名称和选中标记
             Row(
@@ -353,21 +368,21 @@ private fun LocationSelectionItem(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (isSelected) Primary else TextPrimary,
-                    fontSize = 17.sp,
+                    fontSize = 15.sp,
                     modifier = Modifier.weight(1f)
                 )
 
                 // 选中指示器 - 改进的圆形勾选标记
                 if (isSelected) {
                     Surface(
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = Primary,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(24.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "✓",
-                                fontSize = 18.sp,
+                                fontSize = 14.sp,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
                             )
@@ -375,10 +390,10 @@ private fun LocationSelectionItem(
                     }
                 } else {
                     Surface(
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = Color.Transparent,
                         border = androidx.compose.foundation.BorderStroke(2.dp, Border),
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(24.dp)
                     ) {
                         Box {}
                     }
@@ -642,28 +657,34 @@ private fun RadiusAdjustmentDialog(
 private fun EmptyLocationsCard(onCreateLocation: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = BgCard),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = BorderStroke(1.dp, Color(0xFFD6E0ED)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(40.dp),
+                .padding(horizontal = 20.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // 大图标
             Surface(
-                shape = RoundedCornerShape(32.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = Primary.copy(alpha = 0.1f),
-                modifier = Modifier.size(96.dp)
+                modifier = Modifier.size(56.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(text = "📍", fontSize = 48.sp)
+                    Icon(
+                        imageVector = Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // 标题
             Text(
@@ -671,42 +692,40 @@ private fun EmptyLocationsCard(onCreateLocation: () -> Unit) {
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold,
-                fontSize = 20.sp
+                fontSize = 17.sp
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // 描述
             Text(
                 text = "所有地点都已添加为地理围栏",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
-                fontSize = 14.sp
+                fontSize = 13.sp
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "或者您还没有创建任何地点",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
-                fontSize = 14.sp
+                fontSize = 13.sp
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // 按钮
             Button(
                 onClick = onCreateLocation,
                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .height(44.dp)
             ) {
-                Text(
-                    "➕ 创建新地点",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("创建新地点", fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
         }
     }

@@ -134,9 +134,9 @@ class AudioPreprocessorImpl @Inject constructor() : AudioPreprocessor {
     private fun computeMFCCForFrame(frame: FloatArray, sampleRate: Int): FloatArray {
         val format = TarsosDSPAudioFormat(sampleRate.toFloat(), 16, 1, true, false)   // 16bit 单声道
         val mfccProcessor = MFCC(FRAME_SIZE_SAMPLES, sampleRate.toFloat(), MFCC_DIM, 26, 133.33f, 6855.5f)   // 13 维 MFCC，26 个梅尔滤波器
-        val audioEvent = AudioEvent(format)                                         // AudioEvent 只接受 format 一个参数
-        val buffer = audioEvent.floatBuffer                                         // floatBuffer 是 FloatArray
-        for (i in frame.indices) { buffer[i] = frame[i] }                          // 手动复制帧数据
+        val audioEvent = AudioEvent(format).apply {
+            setFloatBuffer(frame.copyOf())
+        }
         mfccProcessor.process(audioEvent)
         return mfccProcessor.mfcc.clone()
     }

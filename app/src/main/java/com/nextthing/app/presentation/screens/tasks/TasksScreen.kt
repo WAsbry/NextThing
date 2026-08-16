@@ -4,7 +4,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,7 +29,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,9 +58,15 @@ fun TasksScreen(
     initialView: TaskView? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(initialView) {
         initialView?.let(viewModel::selectView)
+    }
+
+    // 分类和优先级暂未在一级页提供入口，进入页面时不能让历史条件继续隐性生效。
+    LaunchedEffect(Unit) {
+        viewModel.clearHiddenFilters()
     }
 
     // 下拉菜单展开状态
@@ -70,50 +81,72 @@ fun TasksScreen(
         TasksTopBar(
             isSearchActive = uiState.isSearchActive,
             searchQuery = uiState.searchQuery,
-            activeFilterCount = uiState.activeFilterCount,
-            isAISearching = uiState.isAISearching,
-            aiSearchUsed = uiState.aiSearchUsed,
+            aiSearchState = uiState.aiSearchState,
             onSearchToggle = {
                 viewModel.setSearchActive(!uiState.isSearchActive)
             },
             onSearchQueryChange = { viewModel.setSearchQuery(it) },
-            onClearFilters = { viewModel.clearAllFilters() },
-            onAISearch = { viewModel.searchWithAI() },
-            onClearAISearch = { viewModel.clearAISearch() }
+            onAISearch = {
+                keyboardController?.hide()
+                viewModel.searchWithAI()
+            }
         )
 
         // ── 筛选栏 ──
-        TasksFilterBar(
-            selectedView = uiState.selectedView,
-            currentWeekOffset = uiState.currentWeekOffset,
-            statusFilter = uiState.statusFilter,
-            selectedCategoryId = uiState.selectedCategoryId,
-            priorityFilter = uiState.priorityFilter,
-            availableCategories = uiState.availableCategories,
-            weekLabel = viewModel.getWeekLabel(uiState.currentWeekOffset),
-            onViewSelected = { viewModel.selectView(it) },
-            onWeekPrev = { viewModel.changeWeek(uiState.currentWeekOffset - 1) },
-            onWeekNext = { viewModel.changeWeek(uiState.currentWeekOffset + 1) },
-            openDropdown = openDropdown,
-            onOpenDropdown = { openDropdown = it },
-            onStatusFilterSelected = {
-                viewModel.setStatusFilter(it)
-                openDropdown = null
-            },
-            onCategoryFilterSelected = {
-                viewModel.setCategoryFilter(it)
-                openDropdown = null
-            },
-            onPriorityFilterSelected = {
-                viewModel.setPriorityFilter(it)
-                openDropdown = null
-            },
-            onDismissDropdown = { openDropdown = null }
-        )
+        if (uiState.aiSearchState != AISearchState.LOADING) {
+            TasksFilterBar(
+                selectedView = uiState.selectedView,
+                statusFilter = uiState.statusFilter,
+                rangeLabel = if (uiState.selectedView == TaskView.LIST) {
+                    viewModel.getWeekLabel(uiState.currentWeekOffset)
+                } else {
+                    viewModel.getMonthLabel()
+                },
+                onViewSelected = { viewModel.selectView(it) },
+                onRangePrev = {
+                    if (uiState.selectedView == TaskView.LIST) {
+                        viewModel.changeWeek(uiState.currentWeekOffset - 1)
+                    } else {
+                        viewModel.previousMonth()
+                    }
+                },
+                onRangeNext = {
+                    if (uiState.selectedView == TaskView.LIST) {
+                        viewModel.changeWeek(uiState.currentWeekOffset + 1)
+                    } else {
+                        viewModel.nextMonth()
+                    }
+                },
+                onRangeReset = {
+                    if (uiState.selectedView == TaskView.LIST) {
+                        viewModel.resetWeek()
+                    } else {
+                        viewModel.resetMonth()
+                    }
+                },
+                openDropdown = openDropdown,
+                onOpenDropdown = { openDropdown = it },
+                onStatusFilterSelected = {
+                    viewModel.setStatusFilter(it)
+                    openDropdown = null
+                },
+                onDismissDropdown = { openDropdown = null }
+            )
+        }
 
-        // ── 每日名句 ──
-        if (!uiState.isSearchActive) {
-            DailyQuoteBanner(quote = uiState.dailyQuote)
+        if (
+            uiState.isSearchActive &&
+            uiState.searchQuery.isNotBlank() &&
+            uiState.aiSearchState != AISearchState.IDLE &&
+            uiState.aiSearchState != AISearchState.LOADING
+        ) {
+            AISearchFeedbackBar(
+                state = uiState.aiSearchState,
+                query = uiState.searchQuery,
+                resultCount = uiState.searchResults.size,
+                onExit = { viewModel.clearAISearch() },
+                onRetry = { viewModel.searchWithAI() }
+            )
         }
 
         // ── 内容区域 ──
@@ -124,6 +157,8 @@ fun TasksScreen(
             ) {
                 CircularProgressIndicator(color = Primary)
             }
+        } else if (uiState.aiSearchState == AISearchState.LOADING) {
+            AISearchLoadingContent(query = uiState.searchQuery)
         } else {
             AnimatedContent(
                 targetState = when {
@@ -138,6 +173,8 @@ fun TasksScreen(
                     "search" -> TasksSearchResults(
                         results = uiState.searchResults,
                         query = uiState.searchQuery,
+                        isAIResult = uiState.aiSearchState == AISearchState.ACTIVE ||
+                            uiState.aiSearchState == AISearchState.EMPTY,
                         onTaskClick = { onNavigateToTaskDetail(it.id) },
                         onToggleStatus = { viewModel.toggleTaskStatus(it) },
                         onDefer = { viewModel.deferTask(it) },
@@ -155,7 +192,6 @@ fun TasksScreen(
                     )
                     "calendar" -> TasksCalendarContent(
                         calendarDays = uiState.calendarDays,
-                        currentMonth = uiState.currentMonth,
                         selectedDate = uiState.selectedDate,
                         selectedDateTasks = uiState.selectedDateTasks,
                         selectedDateCompletedCount = uiState.selectedDateCompletedCount,
@@ -163,8 +199,6 @@ fun TasksScreen(
                         selectedDateOverdueCount = uiState.selectedDateOverdueCount,
                         selectedDateCancelledCount = uiState.selectedDateCancelledCount,
                         onDateSelected = { viewModel.selectDate(it) },
-                        onPreviousMonth = { viewModel.previousMonth() },
-                        onNextMonth = { viewModel.nextMonth() },
                         onNavigateToTaskDetail = onNavigateToTaskDetail
                     )
                 }
@@ -181,31 +215,55 @@ fun TasksScreen(
 private fun TasksTopBar(
     isSearchActive: Boolean,
     searchQuery: String,
-    activeFilterCount: Int,
-    isAISearching: Boolean = false,
-    aiSearchUsed: Boolean = false,
+    aiSearchState: AISearchState = AISearchState.IDLE,
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onClearFilters: () -> Unit,
-    onAISearch: () -> Unit = {},
-    onClearAISearch: () -> Unit = {}
+    onAISearch: () -> Unit = {}
 ) {
     val focusRequester = remember { FocusRequester() }
+    var searchFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = searchQuery,
+                selection = TextRange(searchQuery.length)
+            )
+        )
+    }
+
+    // 外部恢复关键词时同步内容；用户仅移动光标时不覆盖其选区。
+    LaunchedEffect(searchQuery) {
+        if (searchFieldValue.text != searchQuery) {
+            searchFieldValue = TextFieldValue(
+                text = searchQuery,
+                selection = TextRange(searchQuery.length)
+            )
+        }
+    }
+
+    // 每次进入搜索态都从关键词末尾继续输入。
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) {
+            searchFieldValue = searchFieldValue.copy(
+                selection = TextRange(searchFieldValue.text.length)
+            )
+            focusRequester.requestFocus()
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = BgCard,
-        shadowElevation = 1.dp
+        shadowElevation = 0.dp
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (!isSearchActive) {
-                Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!isSearchActive) {
                 Text(
                     text = "任务",
                     fontSize = 20.sp,
@@ -223,16 +281,6 @@ private fun TasksTopBar(
                     )
                 }
 
-                // 筛选状态 badge
-                if (activeFilterCount > 0) {
-                    TextButton(onClick = onClearFilters) {
-                        Text(
-                            text = "清除筛选($activeFilterCount)",
-                            fontSize = 12.sp,
-                            color = Primary
-                        )
-                    }
-                }
             } else {
                 // 搜索模式
                 IconButton(onClick = onSearchToggle) {
@@ -244,8 +292,11 @@ private fun TasksTopBar(
                 }
 
                 TextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
+                    value = searchFieldValue,
+                    onValueChange = { value ->
+                        searchFieldValue = value
+                        onSearchQueryChange(value.text)
+                    },
                     placeholder = {
                         Text("搜索任务...", color = TextMuted, fontSize = 15.sp)
                     },
@@ -262,8 +313,13 @@ private fun TasksTopBar(
                     textStyle = LocalTextStyle.current.copy(fontSize = 15.sp)
                 )
 
-                if (searchQuery.isNotBlank()) {
-                    IconButton(onClick = { onSearchQueryChange("") }) {
+                if (searchFieldValue.text.isNotBlank()) {
+                    IconButton(
+                        onClick = {
+                            searchFieldValue = TextFieldValue("")
+                            onSearchQueryChange("")
+                        }
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Clear,
                             contentDescription = "清除",
@@ -272,33 +328,146 @@ private fun TasksTopBar(
                     }
                 }
 
-                // AI 搜索按钮
-                if (searchQuery.isNotBlank()) {
-                    if (isAISearching) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp).padding(end = 4.dp),
-                            strokeWidth = 2.dp,
-                            color = Primary
+                // AI 搜索属于任务查找能力，保留为文字操作，避免使用 Emoji。
+                if (searchFieldValue.text.isNotBlank()) {
+                    val isAIActive = aiSearchState == AISearchState.ACTIVE ||
+                        aiSearchState == AISearchState.EMPTY
+                    val isAILoading = aiSearchState == AISearchState.LOADING
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = when {
+                            isAIActive -> Primary
+                            isAILoading -> BgSecondary
+                            else -> Primary.copy(alpha = 0.08f)
+                        },
+                        border = BorderStroke(
+                            1.dp,
+                            when {
+                                isAIActive -> Primary
+                                isAILoading -> Border
+                                else -> Primary.copy(alpha = 0.28f)
+                            }
+                        ),
+                        modifier = Modifier.clickable(
+                            enabled = !isAILoading,
+                            onClick = onAISearch
                         )
-                    } else {
-                        IconButton(onClick = onAISearch) {
-                            Text("✨", fontSize = 16.sp)
+                    ) {
+                        Text(
+                            text = "智能",
+                            color = when {
+                                isAIActive -> Color.White
+                                isAILoading -> TextMuted
+                                else -> Primary
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                        )
                         }
-                    }
                 }
 
-                // AI 搜索结果标识
-                if (aiSearchUsed) {
-                    TextButton(onClick = onClearAISearch) {
-                        Text("AI结果✕", fontSize = 11.sp, color = Primary)
-                    }
-                }
+            }
+            }
+            HorizontalDivider(thickness = 0.5.dp, color = Border)
+        }
+    }
+}
 
-                LaunchedEffect(isSearchActive) {
-                    if (isSearchActive) {
-                        focusRequester.requestFocus()
-                    }
+@Composable
+private fun AISearchLoadingContent(query: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(32.dp),
+                strokeWidth = 3.dp,
+                color = Primary
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = "正在智能筛选",
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "正在理解“$query”",
+                color = TextSecondary,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AISearchFeedbackBar(
+    state: AISearchState,
+    query: String,
+    resultCount: Int,
+    onExit: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val isError = state == AISearchState.ERROR
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = if (isError) Danger.copy(alpha = 0.06f) else Primary.copy(alpha = 0.06f),
+        border = BorderStroke(
+            1.dp,
+            if (isError) Danger.copy(alpha = 0.24f) else Primary.copy(alpha = 0.22f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (state == AISearchState.LOADING) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = Primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = when (state) {
+                    AISearchState.LOADING -> "正在理解“$query”…"
+                    AISearchState.ACTIVE -> "智能筛选 · 找到 $resultCount 项"
+                    AISearchState.EMPTY -> "智能筛选未找到匹配任务"
+                    AISearchState.ERROR -> "智能筛选失败，已保留普通结果"
+                    AISearchState.IDLE -> ""
+                },
+                color = if (isError) Danger else TextSecondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            when (state) {
+                AISearchState.ACTIVE,
+                AISearchState.EMPTY -> TextButton(onClick = onExit) {
+                    Text("退出", color = Primary, fontSize = 12.sp)
                 }
+                AISearchState.ERROR -> TextButton(onClick = onRetry) {
+                    Text("重试", color = Danger, fontSize = 12.sp)
+                }
+                else -> Unit
             }
         }
     }
@@ -311,27 +480,22 @@ private fun TasksTopBar(
 @Composable
 private fun TasksFilterBar(
     selectedView: TaskView,
-    currentWeekOffset: Int,
     statusFilter: StatusFilter,
-    selectedCategoryId: String?,
-    priorityFilter: PriorityFilter,
-    availableCategories: List<Category>,
-    weekLabel: String,
+    rangeLabel: String,
     onViewSelected: (TaskView) -> Unit,
-    onWeekPrev: () -> Unit,
-    onWeekNext: () -> Unit,
+    onRangePrev: () -> Unit,
+    onRangeNext: () -> Unit,
+    onRangeReset: () -> Unit,
     openDropdown: String?,
     onOpenDropdown: (String) -> Unit,
     onStatusFilterSelected: (StatusFilter) -> Unit,
-    onCategoryFilterSelected: (String?) -> Unit,
-    onPriorityFilterSelected: (PriorityFilter) -> Unit,
     onDismissDropdown: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(BgCard)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 周/月切换
@@ -342,74 +506,29 @@ private fun TasksFilterBar(
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        // 周导航（仅周视图）
-        if (selectedView == TaskView.LIST) {
-            WeekNavRow(
-                weekLabel = weekLabel,
-                onPrev = onWeekPrev,
-                onNext = onWeekNext
+        // 周/月视图共享同一时间导航位置，避免切换视图时布局跳动。
+        TimeRangeNavRow(
+            rangeLabel = rangeLabel,
+            onPrev = onRangePrev,
+            onNext = onRangeNext,
+            onReset = onRangeReset
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Box {
+            FilterChipButton(
+                label = statusFilter.label,
+                isActive = statusFilter != StatusFilter.ALL,
+                onClick = { onOpenDropdown("status") }
             )
-            Spacer(modifier = Modifier.width(6.dp))
-        }
-
-        // 筛选chips（横向滚动）
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            // 状态筛选
-            item {
-                Box {
-                    FilterChipButton(
-                        label = statusFilter.label,
-                        isActive = statusFilter != StatusFilter.ALL,
-                        onClick = { onOpenDropdown("status") }
-                    )
-                    StatusFilterDropdown(
-                        expanded = openDropdown == "status",
-                        current = statusFilter,
-                        onSelect = onStatusFilterSelected,
-                        onDismiss = onDismissDropdown
-                    )
-                }
-            }
-
-            // 分类筛选
-            item {
-                val categoryLabel = if (selectedCategoryId == null) "分类"
-                else availableCategories.find { it.id == selectedCategoryId }?.name ?: "分类"
-                Box {
-                    FilterChipButton(
-                        label = categoryLabel,
-                        isActive = selectedCategoryId != null,
-                        onClick = { onOpenDropdown("category") }
-                    )
-                    CategoryFilterDropdown(
-                        expanded = openDropdown == "category",
-                        categories = availableCategories,
-                        selectedId = selectedCategoryId,
-                        onSelect = onCategoryFilterSelected,
-                        onDismiss = onDismissDropdown
-                    )
-                }
-            }
-
-            // 优先级筛选
-            item {
-                Box {
-                    FilterChipButton(
-                        label = if (priorityFilter == PriorityFilter.ALL) "优先级" else priorityFilter.label,
-                        isActive = priorityFilter != PriorityFilter.ALL,
-                        onClick = { onOpenDropdown("priority") }
-                    )
-                    PriorityFilterDropdown(
-                        expanded = openDropdown == "priority",
-                        current = priorityFilter,
-                        onSelect = onPriorityFilterSelected,
-                        onDismiss = onDismissDropdown
-                    )
-                }
-            }
+            StatusFilterDropdown(
+                expanded = openDropdown == "status",
+                current = statusFilter,
+                onSelect = onStatusFilterSelected,
+                onDismiss = onDismissDropdown
+            )
         }
     }
 }
@@ -421,16 +540,17 @@ private fun ViewSwitchPills(
 ) {
     Row(
         modifier = Modifier
-            .background(BgSecondary, RoundedCornerShape(20.dp))
-            .padding(3.dp)
+            .background(BgSecondary, RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFF29293A).copy(alpha = 0.23f), RoundedCornerShape(8.dp))
+            .padding(2.dp)
     ) {
         TaskView.entries.forEach { view ->
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(17.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(if (selectedView == view) Primary else Color.Transparent)
                     .clickable { onViewSelected(view) }
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                    .padding(horizontal = 13.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -445,10 +565,11 @@ private fun ViewSwitchPills(
 }
 
 @Composable
-private fun WeekNavRow(
-    weekLabel: String,
+private fun TimeRangeNavRow(
+    rangeLabel: String,
     onPrev: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    onReset: () -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
@@ -461,11 +582,18 @@ private fun WeekNavRow(
                 .clickable { onPrev() }
         )
         Text(
-            text = weekLabel,
+            text = rangeLabel,
             fontSize = 12.sp,
             color = TextPrimary,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 2.dp)
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .widthIn(min = 42.dp, max = 72.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onReset)
+                .padding(horizontal = 2.dp, vertical = 4.dp)
         )
         Icon(
             imageVector = Icons.Default.KeyboardArrowRight,
@@ -486,8 +614,13 @@ private fun FilterChipButton(
     onClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (isActive) Primary.copy(alpha = 0.12f) else BgSecondary,
+        shape = RoundedCornerShape(8.dp),
+        color = if (isActive) Primary.copy(alpha = 0.08f) else BgCard,
+        border = BorderStroke(
+            1.dp,
+            if (isActive) Primary.copy(alpha = 0.32f)
+            else Color(0xFF29293A).copy(alpha = 0.23f)
+        ),
         modifier = Modifier.clickable { onClick() }
     ) {
         Row(
@@ -522,9 +655,25 @@ private fun StatusFilterDropdown(
     onSelect: (StatusFilter) -> Unit,
     onDismiss: () -> Unit
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(8.dp),
+        containerColor = BgCard,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, Border),
+        modifier = Modifier.width(168.dp)
+    ) {
         StatusFilter.entries.forEach { filter ->
             DropdownMenuItem(
+                modifier = Modifier
+                    .padding(horizontal = 4.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        if (filter == current) Primary.copy(alpha = 0.10f)
+                        else Color.Transparent
+                    ),
                 text = {
                     Text(
                         text = filter.label,
@@ -620,31 +769,6 @@ private fun PriorityFilterDropdown(
 }
 
 // ══════════════════════════════════════════
-//  每日名句横幅
-// ══════════════════════════════════════════
-
-@Composable
-private fun DailyQuoteBanner(quote: String) {
-    if (quote.isBlank()) return
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Primary.copy(alpha = 0.06f))
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-    ) {
-        Text(
-            text = "💬 $quote",
-            fontSize = 12.sp,
-            color = TextSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-// ══════════════════════════════════════════
 //  周视图 — 列表内容
 // ══════════════════════════════════════════
 
@@ -719,7 +843,7 @@ private fun OverdueSectionHeader(
             .fillMaxWidth()
             .background(Danger.copy(alpha = 0.08f))
             .clickable { onToggle() }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -743,7 +867,7 @@ private fun TaskGroupHeader(group: TaskGroup) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -776,7 +900,7 @@ private fun TaskListItem(
     onDefer: () -> Unit,
     onCancel: () -> Unit
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp)) {
         TaskItemCard(
             task = task,
             onClick = onClick,
@@ -797,13 +921,14 @@ private fun TaskListItem(
 private fun TasksSearchResults(
     results: List<Task>,
     query: String,
+    isAIResult: Boolean,
     onTaskClick: (Task) -> Unit,
     onToggleStatus: (String) -> Unit,
     onDefer: (String) -> Unit,
     onCancel: (String) -> Unit
 ) {
     if (results.isEmpty()) {
-        SearchEmptyState(query = query)
+        SearchEmptyState(query = query, isAIResult = isAIResult)
         return
     }
 
@@ -813,10 +938,14 @@ private fun TasksSearchResults(
     ) {
         item {
             Text(
-                text = "找到 ${results.size} 个结果",
+                text = if (isAIResult) {
+                    "智能筛选结果 · ${results.size} 项"
+                } else {
+                    "找到 ${results.size} 个结果"
+                },
                 fontSize = 13.sp,
                 color = TextSecondary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
             )
         }
         items(results, key = { "search_${it.id}" }) { task ->
@@ -838,7 +967,6 @@ private fun TasksSearchResults(
 @Composable
 private fun TasksCalendarContent(
     calendarDays: List<CalendarDay>,
-    currentMonth: String,
     selectedDate: String?,
     selectedDateTasks: List<Task>,
     selectedDateCompletedCount: Int,
@@ -846,71 +974,44 @@ private fun TasksCalendarContent(
     selectedDateOverdueCount: Int,
     selectedDateCancelledCount: Int,
     onDateSelected: (String) -> Unit,
-    onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit,
     onNavigateToTaskDetail: (String) -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        // 月份导航
+        // 星期标题与日期网格使用统一卡片边框，和项目内其他信息卡保持一致。
         item {
-            Row(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 10.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = BgCard,
+                border = BorderStroke(1.dp, Border)
             ) {
-                IconButton(onClick = onPreviousMonth, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowLeft,
-                        contentDescription = "上月",
-                        tint = TextSecondary
-                    )
-                }
-                Text(
-                    text = currentMonth,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
-                IconButton(onClick = onNextMonth, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = "下月",
-                        tint = TextSecondary
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        listOf("一", "二", "三", "四", "五", "六", "日").forEach { day ->
+                            Text(
+                                text = day,
+                                fontSize = 12.sp,
+                                color = TextMuted,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    CalendarGrid(
+                        calendarDays = calendarDays,
+                        selectedDate = selectedDate,
+                        onDateSelected = onDateSelected
                     )
                 }
             }
-        }
-
-        // 星期标题
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                listOf("一", "二", "三", "四", "五", "六", "日").forEach { day ->
-                    Text(
-                        text = day,
-                        fontSize = 12.sp,
-                        color = TextMuted,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-
-        // 日历网格
-        item {
-            CalendarGrid(
-                calendarDays = calendarDays,
-                selectedDate = selectedDate,
-                onDateSelected = onDateSelected
-            )
         }
 
         // 选中日期详情
@@ -939,7 +1040,7 @@ private fun CalendarGrid(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
     ) {
         calendarDays.chunked(7).forEach { weekDays ->
             Row(
@@ -1039,9 +1140,10 @@ private fun SelectedDateDetailCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = BgCard)
+            .padding(horizontal = 10.dp, vertical = 12.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // 顶部概览
@@ -1149,15 +1251,13 @@ private fun TasksEmptyState() {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "📋", fontSize = 48.sp)
-            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = "暂无任务",
-                fontSize = 16.sp,
-                color = TextSecondary,
-                fontWeight = FontWeight.Medium
+                fontSize = 18.sp,
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "调整筛选条件或切换周试试",
                 fontSize = 13.sp,
@@ -1168,7 +1268,7 @@ private fun TasksEmptyState() {
 }
 
 @Composable
-private fun SearchEmptyState(query: String) {
+private fun SearchEmptyState(query: String, isAIResult: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1176,13 +1276,21 @@ private fun SearchEmptyState(query: String) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "🔍", fontSize = 48.sp)
-            Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "没有找到\"$query\"",
-                fontSize = 15.sp,
-                color = TextSecondary,
-                fontWeight = FontWeight.Medium
+                text = if (isAIResult) "智能筛选没有找到匹配任务" else "没有找到\"$query\"",
+                fontSize = 16.sp,
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = if (isAIResult) {
+                    "尝试补充时间、状态或分类条件"
+                } else {
+                    "换一个关键词重新搜索"
+                },
+                fontSize = 13.sp,
+                color = TextMuted
             )
         }
     }

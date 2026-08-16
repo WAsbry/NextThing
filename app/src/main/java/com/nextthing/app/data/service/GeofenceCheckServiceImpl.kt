@@ -8,6 +8,7 @@ import com.nextthing.app.domain.repository.GeofenceLocationRepository
 import com.nextthing.app.domain.repository.TaskGeofenceRepository
 import com.nextthing.app.domain.service.GeofenceCheckService
 import com.nextthing.app.domain.service.LocationService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import timber.log.Timber
@@ -47,6 +48,11 @@ class GeofenceCheckServiceImpl @Inject constructor(
     @Volatile
     private var cacheTimestamp: Long = 0L
 
+    private data class LocationResolution(
+        val location: LocationInfo?,
+        val failureResult: GeofenceCheckResult = GeofenceCheckResult.LOCATION_UNAVAILABLE
+    )
+
     // ========== 主要检查方法 ==========
 
     override suspend fun checkTaskGeofence(taskId: String): GeofenceStatus {
@@ -55,172 +61,153 @@ class GeofenceCheckServiceImpl @Inject constructor(
         Timber.tag(TAG).d("  任务ID: $taskId")
 
         return try {
-            // 1. 获取全局配置
-            val config = configRepository.getConfigOrDefault()
-
-            // 2. 检查全局开关
-            if (!config.isGlobalEnabled) {
-                Timber.tag(TAG).d("⏭️ 全局地理围栏未启用，跳过检查")
-                return createDisabledStatus()
-            }
-
-            // 3. 获取任务的地理围栏关联
-            val taskGeofence = taskGeofenceRepository.getByTaskIdOnce(taskId)
-
-            if (taskGeofence == null) {
-                Timber.tag(TAG).d("⏭️ 任务未设置地理围栏")
-                return createDisabledStatus()
-            }
-
-            // 4. 检查任务级别的启用状态
-            if (!taskGeofence.isEnabled) {
-                Timber.tag(TAG).d("⏭️ 任务地理围栏已禁用")
-                return createDisabledStatus()
-            }
-
-            // 5. 获取地理围栏地点信息
-            val geofenceLocation = geofenceLocationRepository.getLocationByIdOnce(
-                taskGeofence.geofenceLocationId
-            )
-
-            if (geofenceLocation == null) {
-                Timber.tag(TAG).e("❌ 地理围栏地点不存在: ${taskGeofence.geofenceLocationId}")
-                return GeofenceStatus(
-                    lastCheckTime = LocalDateTime.now(),
-                    isInsideGeofence = false,
-                    distance = 0.0,
-                    userLatitude = 0.0,
-                    userLongitude = 0.0,
-                    checkResult = GeofenceCheckResult.GEOFENCE_DISABLED,
-                    targetLocationName = "",
-                    geofenceRadius = taskGeofence.snapshotRadius
-                )
-            }
-
-            val targetLocation = geofenceLocation.locationInfo
-
-            // 6. 获取用户当前位置（带超时和降级）
-            val userLocation = getUserLocationWithFallback(config.locationAccuracyThreshold)
-
-            if (userLocation == null) {
-                Timber.tag(TAG).w("⚠️ 无法获取用户位置，降级为普通通知")
-                return GeofenceStatus(
-                    lastCheckTime = LocalDateTime.now(),
-                    isInsideGeofence = false,
-                    distance = 0.0,
-                    userLatitude = 0.0,
-                    userLongitude = 0.0,
-                    checkResult = GeofenceCheckResult.LOCATION_UNAVAILABLE,
-                    targetLocationName = targetLocation.locationName,
-                    geofenceRadius = taskGeofence.snapshotRadius
-                )
-            }
-
-            // 7. 检查位置精度
-            if (userLocation.accuracy != null && userLocation.accuracy > config.locationAccuracyThreshold) {
-                Timber.tag(TAG).w("⚠️ 位置精度不足: ${userLocation.accuracy}m > ${config.locationAccuracyThreshold}m")
-                // 精度不足时仍然尝试检查，但记录警告
-            }
-
-            // 8. 计算距离
-            val distance = calculateDistance(
-                userLocation.latitude,
-                userLocation.longitude,
-                targetLocation.latitude,
-                targetLocation.longitude
-            )
-
-            Timber.tag(TAG).d("📍 距离计算结果: ${String.format("%.2f", distance)}m")
-            Timber.tag(TAG).d("  围栏半径: ${taskGeofence.snapshotRadius}m")
-            Timber.tag(TAG).d("  用户坐标: (${userLocation.latitude}, ${userLocation.longitude})")
-            Timber.tag(TAG).d("  目标坐标: (${targetLocation.latitude}, ${targetLocation.longitude})")
-
-            // 9. 判断是否在围栏内
-            val isInside = distance <= taskGeofence.snapshotRadius
-            val result = if (isInside) {
-                GeofenceCheckResult.INSIDE_GEOFENCE
-            } else {
-                GeofenceCheckResult.OUTSIDE_GEOFENCE
-            }
-
-            // 10. 创建状态对象
-            val status = GeofenceStatus(
-                lastCheckTime = LocalDateTime.now(),
-                isInsideGeofence = isInside,
-                distance = distance,
-                userLatitude = userLocation.latitude,
-                userLongitude = userLocation.longitude,
-                checkResult = result,
-                targetLocationName = targetLocation.locationName,
-                geofenceRadius = taskGeofence.snapshotRadius
-            )
-
-            // 11. 更新检查结果到数据库
-            taskGeofenceRepository.updateLastCheckResult(
+            checkTaskGeofence(
                 taskId = taskId,
-                result = result,
-                distance = distance,
-                userLatitude = userLocation.latitude,
-                userLongitude = userLocation.longitude
+                config = configRepository.getConfigOrDefault()
             )
-
-            Timber.tag(TAG).d("✅ 检查完成: ${result.name}")
-            Timber.tag(TAG).d("  距离: ${String.format("%.2f", distance)}m")
-            Timber.tag(TAG).d("  是否通知: ${result.shouldNotify()}")
-            Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-            status
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 检查地理围栏时发生异常")
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            createUnavailableStatus()
+        }
+    }
 
-            // 异常时降级为位置不可用
-            GeofenceStatus(
-                lastCheckTime = LocalDateTime.now(),
-                isInsideGeofence = false,
-                distance = 0.0,
-                userLatitude = 0.0,
-                userLongitude = 0.0,
-                checkResult = GeofenceCheckResult.LOCATION_UNAVAILABLE,
-                targetLocationName = "",
-                geofenceRadius = 200
+    private suspend fun checkTaskGeofence(
+        taskId: String,
+        config: com.nextthing.app.domain.model.GeofenceConfig,
+        prefetchedLocation: LocationResolution? = null
+    ): GeofenceStatus {
+        // 1. 检查全局开关
+        if (!config.isGlobalEnabled) {
+            Timber.tag(TAG).d("⏭️ 全局地理围栏未启用，跳过检查")
+            return createDisabledStatus()
+        }
+
+        // 2. 获取任务的地理围栏关联
+        val taskGeofence = taskGeofenceRepository.getByTaskIdOnce(taskId)
+
+        if (taskGeofence == null) {
+            Timber.tag(TAG).d("⏭️ 任务未设置地理围栏")
+            return createDisabledStatus()
+        }
+
+        // 3. 检查任务级别的启用状态
+        if (!taskGeofence.isEnabled) {
+            Timber.tag(TAG).d("⏭️ 任务地理围栏已禁用")
+            return createDisabledStatus()
+        }
+
+        // 4. 获取地理围栏地点信息
+        val geofenceLocation = geofenceLocationRepository.getLocationByIdOnce(
+            taskGeofence.geofenceLocationId
+        )
+
+        if (geofenceLocation == null) {
+            Timber.tag(TAG).e("❌ 地理围栏地点不存在: ${taskGeofence.geofenceLocationId}")
+            return createDisabledStatus(taskGeofence.snapshotRadius)
+        }
+
+        val targetLocation = geofenceLocation.locationInfo
+
+        // 5. 获取用户当前位置（带超时和降级）
+        val locationResolution = prefetchedLocation
+            ?: getUserLocationWithFallback(config.locationAccuracyThreshold)
+        val userLocation = locationResolution.location
+
+        if (userLocation == null) {
+            Timber.tag(TAG).w("⚠️ 无法获取用户位置，降级为普通通知")
+            return createUnavailableStatus(
+                result = locationResolution.failureResult,
+                targetLocationName = targetLocation.locationName,
+                radius = taskGeofence.snapshotRadius
             )
         }
+
+        // 6. 检查位置精度
+        if (userLocation.accuracy != null && userLocation.accuracy > config.locationAccuracyThreshold) {
+            Timber.tag(TAG).w("⚠️ 位置精度不足: ${userLocation.accuracy}m > ${config.locationAccuracyThreshold}m")
+            // 精度不足时仍然尝试检查，但记录警告
+        }
+
+        // 7. 计算距离
+        val distance = calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            targetLocation.latitude,
+            targetLocation.longitude
+        )
+
+        Timber.tag(TAG).d("📍 距离计算结果: ${String.format("%.2f", distance)}m")
+        Timber.tag(TAG).d("  围栏半径: ${taskGeofence.snapshotRadius}m")
+        Timber.tag(TAG).d("  用户坐标: (${userLocation.latitude}, ${userLocation.longitude})")
+        Timber.tag(TAG).d("  目标坐标: (${targetLocation.latitude}, ${targetLocation.longitude})")
+
+        // 8. 判断是否在围栏内
+        val isInside = distance <= taskGeofence.snapshotRadius
+        val result = if (isInside) {
+            GeofenceCheckResult.INSIDE_GEOFENCE
+        } else {
+            GeofenceCheckResult.OUTSIDE_GEOFENCE
+        }
+
+        // 9. 创建状态对象
+        val status = GeofenceStatus(
+            lastCheckTime = LocalDateTime.now(),
+            isInsideGeofence = isInside,
+            distance = distance,
+            userLatitude = userLocation.latitude,
+            userLongitude = userLocation.longitude,
+            checkResult = result,
+            targetLocationName = targetLocation.locationName,
+            geofenceRadius = taskGeofence.snapshotRadius
+        )
+
+        // 10. 更新检查结果到数据库
+        taskGeofenceRepository.updateLastCheckResult(
+            taskId = taskId,
+            result = result,
+            distance = distance,
+            userLatitude = userLocation.latitude,
+            userLongitude = userLocation.longitude
+        )
+
+        Timber.tag(TAG).d("✅ 检查完成: ${result.name}")
+        Timber.tag(TAG).d("  距离: ${String.format("%.2f", distance)}m")
+        Timber.tag(TAG).d("  是否通知: ${result.shouldNotify()}")
+        Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        return status
     }
 
     override suspend fun checkMultipleTaskGeofences(taskIds: List<String>): Map<String, GeofenceStatus> {
         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Timber.tag(TAG).d("批量检查 ${taskIds.size} 个任务的地理围栏")
 
-        val results = mutableMapOf<String, GeofenceStatus>()
-
-        // 预先获取一次用户位置，避免重复获取
-        val config = configRepository.getConfigOrDefault()
-        val userLocation = getUserLocationWithFallback(config.locationAccuracyThreshold)
-
-        if (userLocation != null) {
-            // 更新缓存，供后续检查使用
-            cachedLocation = userLocation
-            cacheTimestamp = System.currentTimeMillis()
+        if (taskIds.isEmpty()) {
+            return emptyMap()
         }
+
+        val config = configRepository.getConfigOrDefault()
+        if (!config.isGlobalEnabled) {
+            return taskIds.associateWith { createDisabledStatus() }
+        }
+
+        val results = mutableMapOf<String, GeofenceStatus>()
+        // Worker 已先筛选出启用围栏的任务；这里一次定位供整批复用。
+        val locationResolution = getUserLocationWithFallback(config.locationAccuracyThreshold)
 
         // 逐个检查任务
         taskIds.forEach { taskId ->
             try {
-                val status = checkTaskGeofence(taskId)
+                val status = checkTaskGeofence(taskId, config, locationResolution)
                 results[taskId] = status
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "检查任务 $taskId 失败")
-                results[taskId] = GeofenceStatus(
-                    lastCheckTime = LocalDateTime.now(),
-                    isInsideGeofence = false,
-                    distance = 0.0,
-                    userLatitude = 0.0,
-                    userLongitude = 0.0,
-                    checkResult = GeofenceCheckResult.LOCATION_UNAVAILABLE,
-                    targetLocationName = "",
-                    geofenceRadius = 200
-                )
+                results[taskId] = createUnavailableStatus()
             }
         }
 
@@ -270,13 +257,13 @@ class GeofenceCheckServiceImpl @Inject constructor(
      * 4. 超时则使用缓存位置
      * 5. 缓存也没有则返回 null
      */
-    private suspend fun getUserLocationWithFallback(accuracyThreshold: Int): LocationInfo? {
+    private suspend fun getUserLocationWithFallback(accuracyThreshold: Int): LocationResolution {
         return try {
             // 1. 检查缓存是否有效
             val now = System.currentTimeMillis()
             if (cachedLocation != null && (now - cacheTimestamp) < CACHE_VALIDITY_MS) {
                 Timber.tag(TAG).d("🔄 使用缓存位置（${(now - cacheTimestamp) / 1000}秒前）")
-                return cachedLocation
+                return LocationResolution(cachedLocation)
             }
 
             // 2. 检查位置服务状态（包括权限、启用状态、高德地图初始化）
@@ -290,7 +277,14 @@ class GeofenceCheckServiceImpl @Inject constructor(
                     Timber.tag(TAG).d("📡 高德地图未初始化，降级使用Google定位服务")
                 } else {
                     // 权限或位置服务问题，无法继续
-                    return null
+                    return LocationResolution(
+                        location = null,
+                        failureResult = if (!serviceStatus.hasPermission) {
+                            GeofenceCheckResult.PERMISSION_DENIED
+                        } else {
+                            GeofenceCheckResult.LOCATION_UNAVAILABLE
+                        }
+                    )
                 }
             } else {
                 // 服务可用，记录初始化状态
@@ -330,20 +324,22 @@ class GeofenceCheckServiceImpl @Inject constructor(
                     Timber.tag(TAG).w("  建议：移至室外空旷处以获得更好的GPS信号")
                 }
 
-                location
+                LocationResolution(location)
             } else {
                 Timber.tag(TAG).w("⚠️ 获取实时位置失败，尝试使用缓存")
                 // 尝试使用过期缓存
-                cachedLocation
+                LocationResolution(cachedLocation)
             }
         } catch (e: TimeoutCancellationException) {
             Timber.tag(TAG).w("⏱️ 获取位置超时，使用缓存降级")
             // 超时时使用缓存（即使过期）
-            cachedLocation
+            LocationResolution(cachedLocation)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 获取位置异常")
             // 异常时尝试使用缓存
-            cachedLocation
+            LocationResolution(cachedLocation)
         }
     }
 
@@ -352,7 +348,7 @@ class GeofenceCheckServiceImpl @Inject constructor(
     /**
      * 创建未启用状态
      */
-    private fun createDisabledStatus(): GeofenceStatus {
+    private fun createDisabledStatus(radius: Int = 200): GeofenceStatus {
         return GeofenceStatus(
             lastCheckTime = LocalDateTime.now(),
             isInsideGeofence = false,
@@ -361,7 +357,24 @@ class GeofenceCheckServiceImpl @Inject constructor(
             userLongitude = 0.0,
             checkResult = GeofenceCheckResult.GEOFENCE_DISABLED,
             targetLocationName = "",
-            geofenceRadius = 200
+            geofenceRadius = radius
+        )
+    }
+
+    private fun createUnavailableStatus(
+        result: GeofenceCheckResult = GeofenceCheckResult.LOCATION_UNAVAILABLE,
+        targetLocationName: String = "",
+        radius: Int = 200
+    ): GeofenceStatus {
+        return GeofenceStatus(
+            lastCheckTime = LocalDateTime.now(),
+            isInsideGeofence = false,
+            distance = 0.0,
+            userLatitude = 0.0,
+            userLongitude = 0.0,
+            checkResult = result,
+            targetLocationName = targetLocationName,
+            geofenceRadius = radius
         )
     }
 

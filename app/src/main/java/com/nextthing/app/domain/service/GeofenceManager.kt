@@ -7,10 +7,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.nextthing.app.receiver.GeofenceBroadcastReceiver
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingClient
 import com.google.android.gms.location.GeofencingRequest
 import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import timber.log.Timber
 import kotlin.coroutines.resume
@@ -88,6 +91,32 @@ interface GeofenceManager {
 }
 
 /**
+ * 围栏提醒统一由本地任务检查（高德定位 + Worker）驱动。
+ * 保留此适配器是为了兼容既有调用点，并确保不会再向 Google Play Services 注册围栏。
+ */
+class WorkerOnlyGeofenceManager @javax.inject.Inject constructor() : GeofenceManager {
+    override suspend fun registerGeofence(
+        locationId: String,
+        latitude: Double,
+        longitude: Double,
+        radius: Float
+    ): Result<Unit> = Result.success(Unit)
+
+    override suspend fun registerGeofences(geofences: List<GeofenceData>): Result<Int> =
+        Result.success(0)
+
+    override suspend fun removeGeofence(locationId: String): Result<Unit> = Result.success(Unit)
+
+    override suspend fun removeGeofences(locationIds: List<String>): Result<Unit> = Result.success(Unit)
+
+    override suspend fun removeAllGeofences(): Result<Unit> = Result.success(Unit)
+
+    override fun hasLocationPermission(): Boolean = false
+
+    override fun hasBackgroundLocationPermission(): Boolean = false
+}
+
+/**
  * 地理围栏数据类
  */
 data class GeofenceData(
@@ -152,6 +181,11 @@ class GeofenceManagerImpl(
             return Result.failure(SecurityException("缺少位置权限"))
         }
 
+        if (!isGooglePlayServicesAvailable()) {
+            Timber.tag(TAG).w("Google Play Services is unavailable; skip geofence registration.")
+            return Result.failure(IllegalStateException("当前设备暂不支持系统地理围栏"))
+        }
+
         return try {
             val geofence = buildGeofence(locationId, latitude, longitude, radius)
             val geofencingRequest = buildGeofencingRequest(listOf(geofence))
@@ -161,17 +195,23 @@ class GeofenceManagerImpl(
                     .addOnSuccessListener {
                         Timber.tag(TAG).d("✅ 地理围栏注册成功")
                         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        continuation.resume(Result.success(Unit))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.success(Unit))
+                        }
                     }
                     .addOnFailureListener { e ->
                         Timber.tag(TAG).e(e, "❌ 地理围栏注册失败")
                         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        continuation.resume(Result.failure(e))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.failure(e))
+                        }
                     }
             }
         } catch (e: SecurityException) {
             Timber.tag(TAG).e(e, "❌ 权限异常")
             Result.failure(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 注册地理围栏异常")
             Result.failure(e)
@@ -192,6 +232,11 @@ class GeofenceManagerImpl(
             return Result.success(0)
         }
 
+        if (!isGooglePlayServicesAvailable()) {
+            Timber.tag(TAG).w("Google Play Services is unavailable; skip batch geofence registration.")
+            return Result.failure(IllegalStateException("当前设备暂不支持系统地理围栏"))
+        }
+
         return try {
             val geofenceList = geofences.map { data ->
                 buildGeofence(data.locationId, data.latitude, data.longitude, data.radius)
@@ -203,14 +248,23 @@ class GeofenceManagerImpl(
                     .addOnSuccessListener {
                         Timber.tag(TAG).d("✅ 批量注册成功: ${geofences.size} 个")
                         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        continuation.resume(Result.success(geofences.size))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.success(geofences.size))
+                        }
                     }
                     .addOnFailureListener { e ->
                         Timber.tag(TAG).e(e, "❌ 批量注册失败")
                         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        continuation.resume(Result.failure(e))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.failure(e))
+                        }
                     }
             }
+        } catch (e: SecurityException) {
+            Timber.tag(TAG).e(e, "❌ 批量注册权限异常")
+            Result.failure(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 批量注册异常")
             Result.failure(e)
@@ -226,20 +280,31 @@ class GeofenceManagerImpl(
         Timber.tag(TAG).d("移除 ${locationIds.size} 个地理围栏")
         Timber.tag(TAG).d("  IDs: $locationIds")
 
+        if (!isGooglePlayServicesAvailable()) {
+            Timber.tag(TAG).w("Google Play Services is unavailable; skip geofence removal.")
+            return Result.success(Unit)
+        }
+
         return try {
             suspendCancellableCoroutine { continuation ->
                 geofencingClient.removeGeofences(locationIds)
                     .addOnSuccessListener {
                         Timber.tag(TAG).d("✅ 移除成功")
                         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        continuation.resume(Result.success(Unit))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.success(Unit))
+                        }
                     }
                     .addOnFailureListener { e ->
                         Timber.tag(TAG).e(e, "❌ 移除失败")
                         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        continuation.resume(Result.failure(e))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.failure(e))
+                        }
                     }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 移除地理围栏异常")
             Result.failure(e)
@@ -256,14 +321,20 @@ class GeofenceManagerImpl(
                     .addOnSuccessListener {
                         Timber.tag(TAG).d("✅ 所有地理围栏已移除")
                         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        continuation.resume(Result.success(Unit))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.success(Unit))
+                        }
                     }
                     .addOnFailureListener { e ->
                         Timber.tag(TAG).e(e, "❌ 移除所有地理围栏失败")
                         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        continuation.resume(Result.failure(e))
+                        if (continuation.isActive) {
+                            continuation.resume(Result.failure(e))
+                        }
                     }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 移除所有地理围栏异常")
             Result.failure(e)
@@ -294,6 +365,11 @@ class GeofenceManagerImpl(
     /**
      * 构建 Geofence 对象
      */
+    private fun isGooglePlayServicesAvailable(): Boolean {
+        return GoogleApiAvailability.getInstance()
+            .isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+    }
+
     private fun buildGeofence(
         locationId: String,
         latitude: Double,

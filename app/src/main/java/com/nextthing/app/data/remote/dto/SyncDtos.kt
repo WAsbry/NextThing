@@ -17,7 +17,8 @@ data class TaskSyncRequest(
 data class TaskSyncResponse(
     val tasks: List<TaskSyncDto>,
     val serverTimestamp: Long,
-    val conflicts: List<SyncConflictDto>?
+    val conflicts: List<SyncConflictDto>?,
+    val deduplicatedTaskIds: List<String>? = null
 )
 
 /**

@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,16 +53,16 @@ fun GeofenceLocationDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (uiState.isEditMode) "编辑地点" else "地点详情") },
+                title = { Text(if (uiState.isEditMode) "编辑地点" else "地点详情", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Text("←", fontSize = 24.sp)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.size(24.dp), tint = Color(0xFF0F1726))
                     }
                 },
                 actions = {
                     if (!uiState.isEditMode && location != null) {
                         IconButton(onClick = { viewModel.enterEditMode() }) {
-                            Text("✏️", fontSize = 20.sp)
+                            Icon(Icons.Outlined.Edit, "编辑", Modifier.size(22.dp), tint = Color(0xFF1A7DFA))
                         }
                     }
                 },
@@ -79,8 +82,8 @@ fun GeofenceLocationDetailScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         OutlinedButton(
                             onClick = { viewModel.exitEditMode() },
@@ -133,8 +136,8 @@ fun GeofenceLocationDetailScreen(
                     .fillMaxSize()
                     .background(BgPrimary)
                     .padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 位置信息卡片
                 item {

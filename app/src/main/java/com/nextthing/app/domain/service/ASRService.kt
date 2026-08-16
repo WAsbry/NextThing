@@ -12,6 +12,11 @@ interface ASRService {
     val isReady: StateFlow<Boolean>
 
     /**
+     * 模型或 native runtime 缺失时的状态说明。
+     */
+    val errorMessage: StateFlow<String?>
+
+    /**
      * 预热模型（后台加载，不阻塞 UI）
      * 云端 ASR 无需操作，端侧 ASR 在后台初始化模型
      */
@@ -28,9 +33,13 @@ interface ASRService {
     fun start(
         onPartial: (String) -> Unit,
         onFinal: (String) -> Unit,
-        onError: (String) -> Unit
+        onError: (String) -> Unit,
+        onAudioCaptured: (samples: ShortArray, sampleRate: Int) -> Unit = { _, _ -> }
     )
 
     /** 手动停止录音（发送最终帧，等待最终结果回调） */
     fun stop()
+
+    /** 页面不再使用 ASR 时释放模型、Stream 与录音资源。 */
+    fun release() {}
 }

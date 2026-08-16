@@ -53,7 +53,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextthing.app.domain.model.AITaskParseResult
+import com.nextthing.app.domain.model.TaskImportanceUrgency
 import com.nextthing.app.R
+import com.nextthing.app.data.service.AIRouteMode
 import com.nextthing.app.presentation.theme.BgCard
 import com.nextthing.app.presentation.theme.BgPrimary
 import com.nextthing.app.presentation.theme.Border
@@ -78,10 +80,13 @@ internal fun ModernCreateTaskContent(
     uiState: CreateTaskUiState,
     isRecording: Boolean,
     isModelReady: Boolean,
+    asrErrorMessage: String?,
     onBack: () -> Unit,
     onTitleChange: (String) -> Unit,
     onStartRecording: () -> Boolean,
     onStopRecording: () -> Unit,
+    onParseWithAI: () -> Unit,
+    onNavigateToAIConfig: () -> Unit,
     onSaveManualTask: () -> Unit,
     onApplyAIResult: () -> Unit,
     onSaveAIResult: () -> Unit,
@@ -100,15 +105,25 @@ internal fun ModernCreateTaskContent(
             .background(BgPrimary)
     ) {
         ModernTopBar(onBack = onBack)
+        AIAutoParseStatusBar(
+            mode = uiState.aiRouteMode,
+            status = uiState.aiRouteStatusText,
+            detail = uiState.aiRouteDetailText,
+            onConfigure = onNavigateToAIConfig
+        )
 
         Box(modifier = Modifier.weight(1f)) {
             when {
                 isRecording -> RecordingState(transcript = uiState.title)
-                uiState.isAIParsing -> ParsingState(sourceText = uiState.title)
+                uiState.isAIParsing -> ParsingState(
+                    sourceText = uiState.title,
+                    voiceEmotionHint = uiState.voiceEmotionHint
+                )
                 uiState.showAIResult && uiState.aiParseResults.size > 1 -> {
                     MultiTaskConfirmation(
                         results = uiState.aiParseResults,
                         selectedIndexes = uiState.aiSelectedIndexes,
+                        voiceEmotionHint = uiState.voiceEmotionHint,
                         showAdvanced = showAdvanced,
                         onToggleAdvanced = { showAdvanced = !showAdvanced },
                         onToggleSelection = onToggleAISelection,
@@ -118,6 +133,7 @@ internal fun ModernCreateTaskContent(
                 uiState.showAIResult && uiState.aiParseResult != null -> {
                     SingleTaskConfirmation(
                         result = uiState.aiParseResult,
+                        voiceEmotionHint = uiState.voiceEmotionHint,
                         showAdvanced = showAdvanced,
                         onToggleAdvanced = { showAdvanced = !showAdvanced },
                         onEdit = onApplyAIResult,
@@ -130,6 +146,7 @@ internal fun ModernCreateTaskContent(
                         inputMode = inputMode,
                         selectedDate = uiState.selectedDate,
                         preciseTime = uiState.preciseTime,
+                        voiceEmotionHint = uiState.voiceEmotionHint,
                         onModeChange = { inputMode = it },
                         onTitleChange = onTitleChange
                     )
@@ -140,6 +157,7 @@ internal fun ModernCreateTaskContent(
                 ErrorBanner(
                     message = error,
                     onDismiss = onDismissError,
+                    onConfigure = onNavigateToAIConfig,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -170,9 +188,11 @@ internal fun ModernCreateTaskContent(
                 VoiceInputBottomBar(
                     isRecording = isRecording,
                     isModelReady = isModelReady,
+                    asrErrorMessage = asrErrorMessage,
                     canSave = uiState.title.isNotBlank(),
                     onStartRecording = onStartRecording,
                     onStopRecording = onStopRecording,
+                    onParseWithAI = onParseWithAI,
                     onSave = onSaveManualTask
                 )
             }
@@ -221,11 +241,110 @@ private fun ModernTopBar(onBack: () -> Unit) {
 }
 
 @Composable
+private fun AIAutoParseStatusBar(
+    mode: AIRouteMode,
+    status: String,
+    detail: String,
+    onConfigure: () -> Unit
+) {
+    val cardShape = RoundedCornerShape(16.dp)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clip(cardShape)
+            .clickable(onClick = onConfigure),
+        shape = cardShape,
+        color = BgCard,
+        border = BorderStroke(1.dp, ModernLine)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "AI 自动解析",
+                    color = ModernInk,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(text = detail, color = ModernMuted, fontSize = 11.sp, lineHeight = 15.sp)
+            }
+
+            Column(
+                modifier = Modifier.padding(start = 12.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                StatusBadge(mode = mode, status = status)
+                Text(
+                    text = when (mode) {
+                        AIRouteMode.ExternalProvider -> "管理  ›"
+                        AIRouteMode.BackendFallback -> "AI 设置  ›"
+                        AIRouteMode.Unavailable -> "去配置  ›"
+                    },
+                    color = ModernBlue,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusBadge(mode: AIRouteMode, status: String) {
+    val isAvailable = mode != AIRouteMode.Unavailable
+    val statusColor = if (isAvailable) Success else Danger
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = status,
+            color = statusColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Surface(
+            modifier = Modifier.size(18.dp),
+            shape = CircleShape,
+            color = if (isAvailable) Success else Danger.copy(alpha = 0.12f),
+            border = if (isAvailable) null else BorderStroke(1.dp, Danger)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (isAvailable) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "AI 已启用",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
+                    )
+                } else {
+                    Text(
+                        text = "!",
+                        color = Danger,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun InitialInputState(
     title: String,
     inputMode: CreateInputMode,
     selectedDate: LocalDate?,
     preciseTime: Pair<Int, Int>?,
+    voiceEmotionHint: String?,
     onModeChange: (CreateInputMode) -> Unit,
     onTitleChange: (String) -> Unit
 ) {
@@ -300,6 +419,9 @@ private fun InitialInputState(
                         color = ModernBlue,
                         fontSize = 12.sp
                     )
+                } else if (!voiceEmotionHint.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    VoiceEmotionHint(text = voiceEmotionHint)
                 }
             }
         }
@@ -454,7 +576,10 @@ private fun VoiceBars() {
 }
 
 @Composable
-private fun ParsingState(sourceText: String) {
+private fun ParsingState(
+    sourceText: String,
+    voiceEmotionHint: String?
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -474,12 +599,38 @@ private fun ParsingState(sourceText: String) {
                 overflow = TextOverflow.Ellipsis
             )
         }
+        if (!voiceEmotionHint.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            VoiceEmotionHint(text = voiceEmotionHint)
+        }
+    }
+}
+
+@Composable
+private fun VoiceEmotionHint(text: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = ModernBlue.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, ModernBlue.copy(alpha = 0.16f))
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            color = ModernBlueDark,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 17.sp,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
 @Composable
 private fun SingleTaskConfirmation(
     result: AITaskParseResult,
+    voiceEmotionHint: String?,
     showAdvanced: Boolean,
     onToggleAdvanced: () -> Unit,
     onEdit: () -> Unit,
@@ -509,6 +660,10 @@ private fun SingleTaskConfirmation(
                     )
                     StatusPill("检查后保存")
                 }
+                if (!voiceEmotionHint.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    VoiceEmotionHint(text = voiceEmotionHint)
+                }
                 Spacer(modifier = Modifier.height(14.dp))
                 ConfirmationField("任务标题", result.title)
                 ConfirmationField(
@@ -516,7 +671,12 @@ private fun SingleTaskConfirmation(
                     result.dueDate?.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm")) ?: "未设置"
                 )
                 ConfirmationField("分类", result.categoryName ?: "默认")
-                ConfirmationField("重要程度", result.importance?.displayName ?: "未设置", showDivider = false)
+                ConfirmationField(
+                    label = "重要程度",
+                    value = result.importance?.displayName ?: "未设置",
+                    valueColor = if (result.importance == TaskImportanceUrgency.IMPORTANT_URGENT) Danger else ModernInk,
+                    showDivider = false
+                )
 
                 MoreSettingsRow(
                     expanded = showAdvanced,
@@ -539,6 +699,7 @@ private fun SingleTaskConfirmation(
 private fun MultiTaskConfirmation(
     results: List<AITaskParseResult>,
     selectedIndexes: Set<Int>,
+    voiceEmotionHint: String?,
     showAdvanced: Boolean,
     onToggleAdvanced: () -> Unit,
     onToggleSelection: (Int) -> Unit,
@@ -569,6 +730,10 @@ private fun MultiTaskConfirmation(
                     StatusPill("已选择 ${selectedIndexes.size} 个")
                 }
 
+                if (!voiceEmotionHint.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    VoiceEmotionHint(text = voiceEmotionHint)
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 results.forEachIndexed { index, result ->
                     MultiTaskRow(
@@ -596,11 +761,16 @@ private fun MultiTaskConfirmation(
 }
 
 @Composable
-private fun ConfirmationField(label: String, value: String, showDivider: Boolean = true) {
+private fun ConfirmationField(
+    label: String,
+    value: String,
+    valueColor: Color = ModernInk,
+    showDivider: Boolean = true
+) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(label, color = ModernMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(value, color = ModernInk, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(value, color = valueColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         if (showDivider) {
             Spacer(modifier = Modifier.height(12.dp))
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(ModernBlue.copy(alpha = 0.08f)))
@@ -687,19 +857,33 @@ private fun MultiTaskRow(
                     MiniTag(it.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm")))
                 }
                 result.categoryName?.let { MiniTag(it) }
-                result.importance?.let { MiniTag(it.displayName) }
+                result.importance?.let {
+                    MiniTag(
+                        text = it.displayName,
+                        color = if (it == TaskImportanceUrgency.IMPORTANT_URGENT) Danger else ModernBlueDark,
+                        backgroundColor = if (it == TaskImportanceUrgency.IMPORTANT_URGENT) {
+                            Danger.copy(alpha = 0.10f)
+                        } else {
+                            ModernBlue.copy(alpha = 0.08f)
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MiniTag(text: String) {
-    Surface(shape = CircleShape, color = ModernBlue.copy(alpha = 0.08f)) {
+private fun MiniTag(
+    text: String,
+    color: Color = ModernBlueDark,
+    backgroundColor: Color = ModernBlue.copy(alpha = 0.08f)
+) {
+    Surface(shape = CircleShape, color = backgroundColor) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-            color = ModernBlueDark,
+            color = color,
             fontSize = 10.sp,
             maxLines = 1
         )
@@ -710,15 +894,20 @@ private fun MiniTag(text: String) {
 private fun VoiceInputBottomBar(
     isRecording: Boolean,
     isModelReady: Boolean,
+    asrErrorMessage: String?,
     canSave: Boolean,
     onStartRecording: () -> Boolean,
     onStopRecording: () -> Unit,
+    onParseWithAI: () -> Unit,
     onSave: () -> Unit
 ) {
     BottomSurface {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (isRecording) {
                 Text("松开结束 · 上滑取消", color = ModernMuted, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+            } else if (asrErrorMessage != null) {
+                Text(asrErrorMessage, color = Danger, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(modifier = Modifier.height(8.dp))
             }
             Row(
@@ -730,11 +919,17 @@ private fun VoiceInputBottomBar(
                     .weight(1f)
                     .height(56.dp)
                     .clip(CircleShape)
-                    .background(if (isRecording) Danger else ModernBlue)
-                    .pointerInput(isModelReady) {
+                    .background(
+                        when {
+                            asrErrorMessage != null -> Color(0xFF9AA1AD)
+                            isRecording -> Danger
+                            else -> ModernBlue
+                        }
+                    )
+                    .pointerInput(isModelReady, asrErrorMessage) {
                         detectTapGestures(
                             onPress = {
-                                if (isModelReady && onStartRecording()) {
+                                if (asrErrorMessage == null && isModelReady && onStartRecording()) {
                                     try {
                                         awaitRelease()
                                     } finally {
@@ -747,13 +942,13 @@ private fun VoiceInputBottomBar(
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!isModelReady && !isRecording) {
+                    if (asrErrorMessage == null && !isModelReady && !isRecording) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             color = Color.White,
                             strokeWidth = 2.dp
                         )
-                    } else if (!isRecording) {
+                    } else if (asrErrorMessage == null && !isRecording) {
                         Icon(
                             painter = painterResource(R.drawable.mic_on),
                             contentDescription = null,
@@ -763,6 +958,7 @@ private fun VoiceInputBottomBar(
                     }
                     Text(
                         when {
+                            asrErrorMessage != null -> "语音资源未安装"
                             isRecording -> "正在转写"
                             isModelReady -> "长按说话"
                             else -> "语音模型加载中"
@@ -773,22 +969,37 @@ private fun VoiceInputBottomBar(
                     )
                 }
             }
+                Button(
+                    onClick = onParseWithAI,
+                    enabled = canSave && !isRecording,
+                    modifier = Modifier
+                        .width(86.dp)
+                        .height(56.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ModernBlueDark,
+                        disabledContainerColor = Color(0xFFB8BECA)
+                    ),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("AI", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
 
-            Button(
-                onClick = onSave,
-                enabled = canSave && !isRecording,
-                modifier = Modifier
-                    .width(94.dp)
-                    .height(56.dp),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ModernInk,
-                    disabledContainerColor = Color(0xFFB8BECA)
-                ),
-                contentPadding = PaddingValues(0.dp)
-            ) {
-                Text("创建", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
+                Button(
+                    onClick = onSave,
+                    enabled = canSave && !isRecording,
+                    modifier = Modifier
+                        .width(86.dp)
+                        .height(56.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ModernInk,
+                        disabledContainerColor = Color(0xFFB8BECA)
+                    ),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("创建", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
         }
         }
     }
@@ -853,7 +1064,13 @@ private fun BottomSurface(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ErrorBanner(message: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+private fun ErrorBanner(
+    message: String,
+    onDismiss: () -> Unit,
+    onConfigure: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val canConfigureAI = message.contains("DeepSeek") || message.contains("API Key") || message.contains("AI")
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -861,25 +1078,44 @@ private fun ErrorBanner(message: String, onDismiss: () -> Unit, modifier: Modifi
         border = BorderStroke(1.dp, Danger.copy(alpha = 0.18f)),
         shadowElevation = 6.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
                 text = message,
-                modifier = Modifier.weight(1f),
                 color = Danger,
                 fontSize = 13.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                lineHeight = 18.sp
             )
-            Text(
-                text = "关闭",
-                modifier = Modifier.clickable(onClick = onDismiss).padding(8.dp),
-                color = Danger,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (canConfigureAI) {
+                    Text(
+                        text = "去 AI 设置",
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable(onClick = onConfigure)
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        color = ModernBlue,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = "关闭",
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = onDismiss)
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    color = Danger,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }

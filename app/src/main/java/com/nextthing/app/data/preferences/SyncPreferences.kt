@@ -18,12 +18,20 @@ class SyncPreferences @Inject constructor(
 ) {
     companion object {
         private val LAST_SYNC_TIMESTAMP = longPreferencesKey("last_sync_timestamp")
+        private val BOUND_SERVER_USER_ID = longPreferencesKey("bound_server_user_id")
     }
 
     val lastSyncTimestamp: Flow<Long?> = context.syncDataStore.data.map { it[LAST_SYNC_TIMESTAMP] }
+    val boundServerUserId: Flow<Long?> = context.syncDataStore.data.map {
+        it[BOUND_SERVER_USER_ID]
+    }
 
     suspend fun saveLastSyncTimestamp(timestamp: Long) {
         context.syncDataStore.edit { it[LAST_SYNC_TIMESTAMP] = timestamp }
+    }
+
+    suspend fun bindServerUserId(userId: Long) {
+        context.syncDataStore.edit { it[BOUND_SERVER_USER_ID] = userId }
     }
 
     suspend fun clear() {

@@ -50,7 +50,7 @@ import java.time.LocalDateTime
         AchievementEntity::class,
         StartupTraceEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -73,6 +73,30 @@ abstract class TaskDatabase : RoomDatabase() {
 
         @Volatile
         private var INSTANCE: TaskDatabase? = null
+
+        // 数据库迁移：Version 12 -> Version 13
+        // 补齐重复任务实例唯一索引，避免并发 Worker 为同一模板、同一时刻生成重复实例。
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                timber.log.Timber.tag("Migration").d("开始数据库迁移：Version 12 -> 13")
+                database.execSQL("""
+                    DELETE FROM tasks
+                    WHERE templateTaskId IS NOT NULL
+                      AND instanceDate IS NOT NULL
+                      AND rowid NOT IN (
+                          SELECT MIN(rowid)
+                          FROM tasks
+                          WHERE templateTaskId IS NOT NULL AND instanceDate IS NOT NULL
+                          GROUP BY templateTaskId, instanceDate
+                      )
+                """)
+                database.execSQL("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS index_tasks_templateTaskId_instanceDate
+                    ON tasks(templateTaskId, instanceDate)
+                """)
+                timber.log.Timber.tag("Migration").d("数据库迁移完成：Version 12 -> 13")
+            }
+        }
 
         // 数据库迁移：Version 11 -> Version 12
         // 添加启动打点表
@@ -536,7 +560,7 @@ abstract class TaskDatabase : RoomDatabase() {
                     TaskDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
@@ -601,4 +625,4 @@ abstract class TaskDatabase : RoomDatabase() {
             }
         }
     }
-} 
+}

@@ -17,10 +17,8 @@ import javax.inject.Inject
 
 enum class StatsTab(val title: String) {
     OVERVIEW("概览"),
-    CATEGORY("分类"),
-    TREND("趋势"),
-    EFFICIENCY("效率"),
-    AI_INSIGHT("AI洞察")
+    CATEGORY("结构"),
+    EFFICIENCY("效率")
 }
 
 // 概览页面时间维度
@@ -57,13 +55,16 @@ data class StatsUiState(
     val notImportantNotUrgentCount: Int = 0,
     // 智能洞察
     val insights: List<InsightData> = emptyList(),
-    val selectedOverviewTimeRange: OverviewTimeRange = OverviewTimeRange.TODAY, // 概览时间维度
+    val selectedOverviewTimeRange: OverviewTimeRange = OverviewTimeRange.THIS_WEEK, // 概览时间维度
     // 核心指标（根据时间维度动态计算）
     val coreMetricPending: Int = 0,           // 待办任务数
     val coreMetricImportantUrgent: Int = 0,   // 重要紧急任务数
     val coreMetricOverdue: Int = 0,           // 逾期任务数
     val coreMetricProgress: String = "0",     // 进度指标（今日显示数量，其他显示百分比）
     val coreMetricProgressType: String = "count", // "count" 或 "rate"
+    val overviewTotalTasks: Int = 0,
+    val overviewCompletedTasks: Int = 0,
+    val overviewCompletionRate: Float = 0f,
     // 任务列表弹窗相关
     val showTaskListSheet: Boolean = false,   // 是否显示任务列表弹窗
     val taskListType: TaskListType? = null,   // 任务列表类型
@@ -86,6 +87,7 @@ data class StatsUiState(
     // 趋势数据
     val weeklyTrend: List<DailyTrendData> = emptyList(),
     val allWeeklyTrend: List<DailyTrendData> = emptyList(), // 新增：保存完整未过滤的趋势数据
+    val overviewTrend: List<DailyTrendData> = emptyList(),
     val monthlyTrend: List<WeeklyTrendData> = emptyList(),
     val trendViewMode: TrendViewMode = TrendViewMode.WEEK,
     // 新增：时间范围选择器
@@ -269,9 +271,9 @@ data class CategoryEfficiencyData(
     val category: Category,
     val efficiencyScore: Int,
     val rank: Int,
-    val completionRate: Float,
+    val completionRate: Float, // 0..1，供进度条和百分比文案统一使用
     val avgDuration: Double,
-    val overdueRate: Float
+    val overdueRate: Float // 0..1
 )
 
 // 任务状态分布数据（基于时间维度）
@@ -408,7 +410,7 @@ class StatsViewModel @Inject constructor(
     private var currentMonthDate = currentDate
 
     // 创建单独的时间维度 Flow，用于监听变化
-    private val _selectedTimeRange = MutableStateFlow(OverviewTimeRange.TODAY)
+    private val _selectedTimeRange = MutableStateFlow(OverviewTimeRange.THIS_WEEK)
 
     // 创建分类页面时间维度 Flow
     private val _selectedCategoryTimeRange = MutableStateFlow(OverviewTimeRange.ALL)
@@ -457,40 +459,21 @@ class StatsViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(isLoading = true)
 
                     try {
-                        // 基础统计 - 5种状态
+                        val overviewStats = calculateOverviewBasicStats(
+                            tasks = tasks,
+                            timeRange = timeRange
+                        )
+
+                        // 健康度仍使用全量完成率，基础概览则使用当前时间范围。
                         val total = tasks.size
-                        val pending = tasks.count { it.status == TaskStatus.PENDING }
                         val completed = tasks.count { it.status == TaskStatus.COMPLETED }
-                        val deferred = tasks.count { it.status == TaskStatus.DELAYED }
-                        val overdue = tasks.count { it.status == TaskStatus.OVERDUE }
-                        val cancelled = tasks.count { it.status == TaskStatus.CANCELLED }
+                        val completionRate = safePercentage(completed, total)
 
-                        val completionRate = if (total > 0) (completed.toFloat() / total) * 100f else 0f
-
-                        // 重要程度分布（按当前时间维度过滤，与概览统计保持一致）
-                        val todayForImportance = LocalDate.now()
-                        val (impStart, impEnd) = when (timeRange) {
-                            OverviewTimeRange.TODAY -> todayForImportance to todayForImportance
-                            OverviewTimeRange.THIS_WEEK -> {
-                                val ws = todayForImportance.with(java.time.DayOfWeek.MONDAY)
-                                ws to todayForImportance.with(java.time.DayOfWeek.SUNDAY)
-                            }
-                            OverviewTimeRange.THIS_MONTH -> {
-                                val ms = todayForImportance.withDayOfMonth(1)
-                                ms to todayForImportance.withDayOfMonth(todayForImportance.lengthOfMonth())
-                            }
-                            OverviewTimeRange.ALL -> {
-                                val earliest = tasks.minByOrNull { it.createdAt }?.createdAt?.toLocalDate() ?: todayForImportance
-                                earliest to todayForImportance
-                            }
-                        }
-                        val importanceFilteredTasks = tasks.filter { task ->
-                            task.createdAt.toLocalDate() in impStart..impEnd
-                        }
-                        val importantUrgent = importanceFilteredTasks.count { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT }
-                        val importantNotUrgent = importanceFilteredTasks.count { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_NOT_URGENT }
-                        val notImportantUrgent = importanceFilteredTasks.count { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_URGENT }
-                        val notImportantNotUrgent = importanceFilteredTasks.count { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT }
+                        // 重要程度分布与基础概览共用同一时间范围。
+                        val importantUrgent = overviewStats.importantUrgent
+                        val importantNotUrgent = overviewStats.importantNotUrgent
+                        val notImportantUrgent = overviewStats.notImportantUrgent
+                        val notImportantNotUrgent = overviewStats.notImportantNotUrgent
 
                         // 分类统计（根据分类时间维度过滤）
                         val categoryStatsMap = calculateCategoryStats(tasks, categoryTimeRange)
@@ -507,12 +490,10 @@ class StatsViewModel @Inject constructor(
                         val weekComparison = calculateWeekComparison(tasks, timeRange)
 
                         // 新增：重要紧急任务统计
-                        val importantUrgentCompleted = tasks.count {
-                            it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT &&
-                                    it.status == TaskStatus.COMPLETED
-                        }
-                        val importantUrgentCompletionRate = if (importantUrgent > 0)
-                            (importantUrgentCompleted.toFloat() / importantUrgent) * 100f else 0f
+                        val importantUrgentCompletionRate = safePercentage(
+                            overviewStats.importantUrgentCompleted,
+                            importantUrgent
+                        )
 
                         // 新增：健康度计算
                         val (healthScore, healthLevel) = calculateHealthScore(
@@ -523,18 +504,6 @@ class StatsViewModel @Inject constructor(
 
                         // 新增：智能洞察生成（使用传入的 timeRange）
                         val insights = generateInsights(
-                            tasks = tasks,
-                            timeRange = timeRange
-                        )
-
-                        // 新增：核心指标计算（根据时间维度动态计算）
-                        val coreMetrics = calculateCoreMetrics(
-                            tasks = tasks,
-                            timeRange = timeRange
-                        )
-
-                        // 新增：任务状态分布计算（根据时间维度）
-                        val statusDistribution = calculateStatusDistribution(
                             tasks = tasks,
                             timeRange = timeRange
                         )
@@ -557,6 +526,7 @@ class StatsViewModel @Inject constructor(
                             weeklyTrend,
                             trendTimeRange
                         )
+                        val overviewTrend = filterTrendByOverviewTimeRange(weeklyTrend, timeRange)
 
                         val filteredBacklogTrend = filterBacklogByOverviewTimeRange(
                             backlogTrend,
@@ -592,13 +562,13 @@ class StatsViewModel @Inject constructor(
                         val delayAnalysis = calculateDelayAnalysis(tasks)
 
                         _uiState.value = _uiState.value.copy(
-                            totalTasks = statusDistribution.total,
-                            pendingTasks = statusDistribution.pending,
-                            completedTasks = statusDistribution.completed,
-                            deferredTasks = statusDistribution.deferred,
-                            overdueTasks = statusDistribution.overdue,
-                            cancelledTasks = statusDistribution.cancelled,
-                            completionRate = statusDistribution.completionRate,
+                            totalTasks = overviewStats.total,
+                            pendingTasks = overviewStats.pending,
+                            completedTasks = overviewStats.completed,
+                            deferredTasks = overviewStats.deferred,
+                            overdueTasks = overviewStats.overdue,
+                            cancelledTasks = overviewStats.cancelled,
+                            completionRate = overviewStats.completionRate,
                             importantUrgentCount = importantUrgent,
                             importantNotUrgentCount = importantNotUrgent,
                             notImportantUrgentCount = notImportantUrgent,
@@ -609,6 +579,7 @@ class StatsViewModel @Inject constructor(
                             selectedCategoryTimeRange = categoryTimeRange,
                             weeklyTrend = filteredWeeklyTrend,
                             allWeeklyTrend = weeklyTrend, // 保存完整未过滤的数据
+                            overviewTrend = overviewTrend,
                             calendarHeatmap = threeMonthsHeatmap,
                             allCalendarHeatmap = calendarHeatmap, // 保存完整未过滤的热力图数据
                             calendarStats = calendarStats,
@@ -637,11 +608,14 @@ class StatsViewModel @Inject constructor(
                             weekComparison = weekComparison,
                             selectedOverviewTimeRange = timeRange,
                             // 核心指标
-                            coreMetricPending = coreMetrics.pending,
-                            coreMetricImportantUrgent = coreMetrics.importantUrgent,
-                            coreMetricOverdue = coreMetrics.overdue,
-                            coreMetricProgress = coreMetrics.progress,
-                            coreMetricProgressType = coreMetrics.progressType,
+                            coreMetricPending = overviewStats.corePending,
+                            coreMetricImportantUrgent = overviewStats.coreImportantUrgent,
+                            coreMetricOverdue = overviewStats.coreOverdue,
+                            coreMetricProgress = overviewStats.coreProgress,
+                            coreMetricProgressType = overviewStats.coreProgressType,
+                            overviewTotalTasks = overviewStats.total,
+                            overviewCompletedTasks = overviewStats.completed,
+                            overviewCompletionRate = overviewStats.completionRate,
                             selectedEfficiencyTimeRange = efficiencyTimeRange,
                             isLoading = false,
                             lastUpdateTime = LocalDateTime.now()
@@ -950,10 +924,7 @@ class StatsViewModel @Inject constructor(
             TaskListType.OVERDUE -> {
                 // 逾期任务：截止日期在该时间范围内且未完成
                 tasks.filter { task ->
-                    task.dueDate != null &&
-                    task.dueDate!!.toLocalDate() in rangeStart..rangeEnd &&
-                    task.status != TaskStatus.COMPLETED &&
-                    task.status != TaskStatus.CANCELLED
+                    isStatsTaskOverdueInRange(task, rangeStart, rangeEnd, LocalDateTime.now())
                 }
             }
             TaskListType.COMPLETED -> {
@@ -1106,16 +1077,12 @@ class StatsViewModel @Inject constructor(
 
         // 3. 完成率 = 完成的任务 / 创建的任务
         val createdTotal = createdTasks.size
-        val completionRate = if (createdTotal > 0) {
-            (completedInRange.toFloat() / createdTotal) * 100f
-        } else 0f
+        val completionRate = safePercentage(completedInRange, createdTotal)
 
         // 4. 在该时间范围内变成逾期状态的任务（截止日期在范围内且未完成）
+        val insightNow = LocalDateTime.now()
         val overdueInRange = tasks.count { task ->
-            task.dueDate != null &&
-            task.dueDate!!.toLocalDate() in rangeStart..rangeEnd &&
-            task.status != TaskStatus.COMPLETED &&
-            task.status != TaskStatus.CANCELLED
+            isStatsTaskOverdueInRange(task, rangeStart, rangeEnd, insightNow)
         }
 
         // 5. 该时间范围内创建的重要紧急任务
@@ -1124,9 +1091,7 @@ class StatsViewModel @Inject constructor(
         }
         val importantUrgentTotal = importantUrgentTasks.size
         val importantUrgentCompleted = importantUrgentTasks.count { it.status == TaskStatus.COMPLETED }
-        val importantUrgentRate = if (importantUrgentTotal > 0) {
-            (importantUrgentCompleted.toFloat() / importantUrgentTotal) * 100f
-        } else 0f
+        val importantUrgentRate = safePercentage(importantUrgentCompleted, importantUrgentTotal)
 
         // ==================== 维度1：完成率洞察（6档）====================
         if (createdTotal > 0) {
@@ -1406,7 +1371,11 @@ class StatsViewModel @Inject constructor(
         importantUrgentCompletionRate: Float
     ): Pair<Int, HealthLevel> {
         // 三维度加权计算：完成率40%，准时率35%，重要任务完成率25%
-        val score = (completionRate * 0.4f + onTimeRate * 0.35f + importantUrgentCompletionRate * 0.25f).toInt()
+        val score = (
+            completionRate.coerceIn(0f, 100f) * 0.4f +
+                onTimeRate.coerceIn(0f, 100f) * 0.35f +
+                importantUrgentCompletionRate.coerceIn(0f, 100f) * 0.25f
+            ).toInt().coerceIn(0, 100)
 
         val level = when {
             score >= HealthLevel.EXCELLENT.minScore -> HealthLevel.EXCELLENT
@@ -1635,10 +1604,11 @@ class StatsViewModel @Inject constructor(
                     category = stats.category,
                     efficiencyScore = stats.efficiencyScore,
                     rank = index + 1,
-                    completionRate = stats.completionRate,
+                    completionRate = percentageToRatio(stats.completionRate),
                     avgDuration = stats.averageDuration,
-                    overdueRate = if (stats.totalCount > 0)
-                        (stats.overdueCount.toFloat() / stats.totalCount) * 100f else 0f
+                    overdueRate = if (stats.totalCount > 0) {
+                        (stats.overdueCount.toFloat() / stats.totalCount).coerceIn(0f, 1f)
+                    } else 0f
                 )
             }
     }

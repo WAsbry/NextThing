@@ -1,15 +1,9 @@
 package com.nextthing.app.data.service
 
 import com.google.gson.Gson
-import com.nextthing.app.data.preferences.TokenManager
-import com.nextthing.app.data.remote.api.AIChatApi
-import com.nextthing.app.data.remote.dto.AIChatRequest
 import com.nextthing.app.domain.model.Task
 import com.nextthing.app.domain.service.AIBehaviorAnalyzer
 import com.nextthing.app.domain.service.BehaviorInsight
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -17,8 +11,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AIBehaviorAnalyzerService @Inject constructor(
-    private val aiChatApi: AIChatApi,
-    private val tokenManager: TokenManager,
+    private val aiCompletionClient: AICompletionClient,
     private val gson: Gson
 ) : AIBehaviorAnalyzer {
 
@@ -26,46 +19,55 @@ class AIBehaviorAnalyzerService @Inject constructor(
         completedTasks: List<Task>,
         allTasks: List<Task>
     ): Result<BehaviorInsight> {
-        val userId = tokenManager.serverUserId.first()
-        if (userId == null) return Result.failure(IllegalStateException("请先登录"))
-
         if (completedTasks.size < 3) {
-            return Result.success(BehaviorInsight(
-                patterns = listOf("已完成任务不足3个，暂无法分析行为模式"),
-                suggestions = listOf("继续完成任务以积累更多数据")
-            ))
+            return Result.success(
+                BehaviorInsight(
+                    patterns = listOf("已完成任务不足 3 个，暂时无法稳定分析行为模式"),
+                    suggestions = listOf("继续完成任务，积累更多数据后再生成行为洞察")
+                )
+            )
         }
 
         return try {
-            val timeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-            val sb = StringBuilder()
-            sb.appendLine("分析用户的行为模式和习惯规律（时间偏好、分类偏好、工作日vs周末频率、优先级倾向）。")
-            sb.appendLine("请返回JSON：{\"patterns\":[\"...\"],\"suggestions\":[\"...\"]}")
-
-            val completedCount = completedTasks.size
-            val totalCount = allTasks.size
-            sb.appendLine("\n统计：总任务$totalCount，已完成$completedCount，完成率${"%.0f".format(completedCount.toDouble() / totalCount * 100)}%")
-
-            sb.appendLine("\n=== 已完成任务（最近30个） ===")
-            completedTasks.take(30).forEach { t ->
-                sb.appendLine("- ${t.title} | 分类:${t.category.name} | 完成:${t.updatedAt?.format(timeFmt) ?: "未知"}")
-            }
-
-            val response = withContext(Dispatchers.IO) {
-                aiChatApi.chat(AIChatRequest(sb.toString()))
-            }
-            if (!response.success || response.reply.isNullOrBlank()) {
-                return Result.failure(Exception(response.reply ?: "AI 返回内容为空"))
-            }
-
-            val obj = AIJsonHelper.parseAIJson(gson, response.reply)
-            Result.success(BehaviorInsight(
-                patterns = obj.getAsJsonArray("patterns")?.mapNotNull { runCatching { it.asString }.getOrNull() } ?: emptyList(),
-                suggestions = obj.getAsJsonArray("suggestions")?.mapNotNull { runCatching { it.asString }.getOrNull() } ?: emptyList()
-            ))
+            val reply = aiCompletionClient.complete(buildPrompt(completedTasks, allTasks)).getOrThrow()
+            val obj = AIJsonHelper.parseAIJson(gson, reply)
+            Result.success(
+                BehaviorInsight(
+                    patterns = obj.getAsJsonArray("patterns")
+                        ?.mapNotNull { runCatching { it.asString }.getOrNull() }
+                        ?: emptyList(),
+                    suggestions = obj.getAsJsonArray("suggestions")
+                        ?.mapNotNull { runCatching { it.asString }.getOrNull() }
+                        ?: emptyList()
+                )
+            )
         } catch (e: Exception) {
-            Timber.tag("AI").e(e, "行为分析失败")
-            Result.failure(Exception("AI 行为分析失败: ${e.message}"))
+            Timber.tag("AI").e(e, "Behavior analysis failed")
+            Result.failure(Exception("AI behavior analysis failed: ${e.message}"))
+        }
+    }
+
+    private fun buildPrompt(completedTasks: List<Task>, allTasks: List<Task>): String {
+        val timeFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        val totalCount = allTasks.size
+        val completedCount = completedTasks.size
+        val completionRate = if (totalCount > 0) {
+            "%.0f%%".format(completedCount.toDouble() / totalCount * 100)
+        } else {
+            "N/A"
+        }
+
+        return buildString {
+            appendLine("Analyze the user's task behavior patterns in Chinese.")
+            appendLine("Focus on time preference, category preference, weekday/weekend rhythm, and priority tendency.")
+            appendLine("Return only JSON: {\"patterns\":[\"...\"],\"suggestions\":[\"...\"]}")
+            appendLine()
+            appendLine("Stats: total=$totalCount, completed=$completedCount, completionRate=$completionRate")
+            appendLine()
+            appendLine("Recent completed tasks:")
+            completedTasks.take(30).forEach { task ->
+                appendLine("- ${task.title} | category=${task.category.name} | completed=${task.updatedAt?.format(timeFmt) ?: "unknown"}")
+            }
         }
     }
 }

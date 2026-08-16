@@ -13,7 +13,6 @@ import com.nextthing.app.domain.model.Category
 import com.nextthing.app.domain.model.TaskStatistics
 import com.nextthing.app.domain.model.TaskStatus
 import com.nextthing.app.domain.repository.TaskRepository
-import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.LocalDate
@@ -37,6 +36,13 @@ class TaskRepositoryImpl @Inject constructor(
         taskDao.insertTask(task.toEntity().copy(syncStatus = SyncStatus.PENDING))
         timber.log.Timber.tag(TAG).d("✅ 任务已插入数据库")
         return task.id
+    }
+
+    override suspend fun insertTaskIfAbsent(task: Task): Boolean {
+        val rowId = taskDao.insertTaskIfAbsent(
+            task.toEntity().copy(syncStatus = SyncStatus.PENDING)
+        )
+        return rowId != -1L
     }
 
     override suspend fun updateTask(task: Task) {
@@ -63,14 +69,13 @@ class TaskRepositoryImpl @Inject constructor(
     override suspend fun deleteTask(taskId: String) {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.deleteTask ━━━━━━")
         timber.log.Timber.tag(TAG).d("软删除任务: $taskId")
-        taskDao.updateSyncStatus(taskId, SyncStatus.PENDING, null)
-        taskDao.deleteTaskById(taskId)
+        taskDao.softDeleteTask(taskId, LocalDateTime.now())
         timber.log.Timber.tag(TAG).d("✅ 任务已删除")
     }
 
     override suspend fun deleteAllTasks() {
         timber.log.Timber.tag(TAG).d("━━━━━━ Repository.deleteAllTasks ━━━━━━")
-        taskDao.deleteAllTasks()
+        taskDao.softDeleteAllTasks(LocalDateTime.now())
         timber.log.Timber.tag(TAG).d("✅ 所有任务已删除")
     }
 
@@ -166,7 +171,9 @@ class TaskRepositoryImpl @Inject constructor(
         val completedTasks = taskDao.getCompletedTasksCount()
         val pendingTasks = taskDao.getPendingTasksCount()
         val overdueTasks = taskDao.getOverdueTasksCount()
-        val completionRate = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f
+        val completionRate = if (totalTasks > 0) {
+            (completedTasks.toFloat() / totalTasks).coerceIn(0f, 1f)
+        } else 0f
         val averageCompletionTime = taskDao.getAverageCompletionTime()?.toInt() ?: 0
 
         // Get category statistics
@@ -199,7 +206,9 @@ class TaskRepositoryImpl @Inject constructor(
         val completedTasks = tasksInRange.count { it.task.status == TaskStatus.COMPLETED }
         val pendingTasks = tasksInRange.count { it.task.status == TaskStatus.PENDING }
         val overdueTasks = tasksInRange.count { it.task.status == TaskStatus.OVERDUE }
-        val completionRate = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f
+        val completionRate = if (totalTasks > 0) {
+            (completedTasks.toFloat() / totalTasks).coerceIn(0f, 1f)
+        } else 0f
 
         val allCategoriesEntities = categoryDao.getAllCategoriesList()
         val categoryStats = tasksInRange
@@ -240,37 +249,19 @@ class TaskRepositoryImpl @Inject constructor(
     }
     
     override suspend fun deleteCompletedTasks() {
-        taskDao.deleteCompletedTasks()
+        taskDao.softDeleteCompletedTasks(LocalDateTime.now())
     }
-    
+
     override suspend fun bulkUpdateTaskCategory(taskIds: List<String>, category: Category) {
-        taskDao.bulkUpdateTaskCategory(taskIds, category.id)
+        taskDao.bulkUpdateTaskCategory(taskIds, category.id, LocalDateTime.now())
     }
     
-    override suspend fun syncTasks(): Result<Unit> {
-        // 网络同步功能需要后端API支持,当前仅使用本地数据库
-        // 可扩展:实现增量同步、冲突解决、离线队列等机制
-        return Result.success(Unit)
-    }
-
-    override suspend fun exportTasks(): Result<String> {
-        // 任务导出功能为可选增强,可导出为JSON/CSV格式
-        // 可扩展:支持导出到云盘、分享给其他用户等
-        return Result.success("")
-    }
-
-    override suspend fun importTasks(filePath: String): Result<Int> {
-        // 任务导入功能为可选增强,支持从备份文件恢复数据
-        // 可扩展:数据校验、去重、合并策略等
-        return Result.success(0)
-    }
-
     override suspend fun getEarliestTaskDate(): LocalDate? {
-        Log.d("weekCount", "Repository: 开始查询数据库最早任务日期...")
+        timber.log.Timber.tag("weekCount").d("Repository: 开始查询数据库最早任务日期...")
         val earliestDateTime = taskDao.getEarliestTaskDate()
-        Log.d("weekCount", "Repository: 数据库返回的最早任务DateTime: $earliestDateTime")
+        timber.log.Timber.tag("weekCount").d("Repository: 数据库返回的最早任务DateTime: $earliestDateTime")
         val earliestDate = earliestDateTime?.toLocalDate()
-        Log.d("weekCount", "Repository: 转换后的最早任务LocalDate: $earliestDate")
+        timber.log.Timber.tag("weekCount").d("Repository: 转换后的最早任务LocalDate: $earliestDate")
         return earliestDate
     }
 
@@ -294,12 +285,12 @@ class TaskRepositoryImpl @Inject constructor(
 
     override suspend fun deleteInstancesByTemplateId(templateId: String) {
         timber.log.Timber.tag(TAG).d("删除模板任务 $templateId 的所有实例")
-        taskDao.deleteInstancesByTemplateId(templateId)
+        taskDao.softDeleteInstancesByTemplateId(templateId, LocalDateTime.now())
     }
 
     override suspend fun deleteTemplateAndAllInstances(templateId: String) {
         timber.log.Timber.tag(TAG).d("删除模板任务 $templateId 及其所有实例")
-        taskDao.deleteTemplateAndAllInstances(templateId)
+        taskDao.softDeleteTemplateAndAllInstances(templateId, LocalDateTime.now())
     }
 
     // ========== 日历视图 ==========
@@ -319,4 +310,4 @@ class TaskRepositoryImpl @Inject constructor(
             try { LocalDate.parse(it) } catch (_: Exception) { null }
         }
     }
-} 
+}

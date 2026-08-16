@@ -5,6 +5,7 @@ import com.nextthing.app.data.mapper.CategoryMapper.toDomain
 import com.nextthing.app.data.mapper.CategoryMapper.toEntity
 import com.nextthing.app.data.mapper.CategoryMapper.toDomainList
 import com.nextthing.app.data.mapper.CategoryMapper.toEntityList
+import com.nextthing.app.data.mapper.CategoryMapper.toSyncDto
 import com.nextthing.app.domain.model.Category
 import com.nextthing.app.domain.model.CategoryType
 import org.junit.Assert.*
@@ -78,6 +79,12 @@ class CategoryMapperTest {
         val category = testCategory.copy(type = CategoryType.CUSTOM)
         val entity = category.toEntity()
         assertEquals(1, entity.type)
+    }
+
+    @Test
+    fun `deleted CategoryEntity maps to a sync tombstone`() {
+        val dto = testCategoryEntity.copy(deleted = true).toSyncDto()
+        assertTrue(dto.deleted)
     }
 
     // ===== Round-trip =====

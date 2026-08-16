@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextThing - 创建任务 Codex 重构方案</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html {
+    font-family: "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+    letter-spacing: 0;
+  }
+  :root {
+    --ink: #171A20;
+    --muted: #737A86;
+    --soft: #F5F6F9;
+    --card: #FFFFFF;
+    --line: #E9ECF2;
+    --primary: #3478F6;
+    --primary-deep: #185CCF;
+    --cyan: #12A7A7;
+    --green: #22A36A;
+    --amber: #C88412;
+    --red: #E64E4E;
+    --shadow: 0 12px 34px rgba(25, 31, 46, .07);
+    --shadow-strong: 0 22px 60px rgba(25, 31, 46, .14);
+  }
+  body {
+    min-height: 100vh;
+    background: #ECEFF4;
+    font-family: inherit;
+    color: var(--ink);
+  }
+  .board {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 28px;
+  }
+  .title {
+    margin-bottom: 22px;
+    text-align: center;
+  }
+  .title h1 {
+    font-size: 25px;
+    line-height: 1.25;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .title p {
+    margin-top: 8px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .screens {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 28px;
+    align-items: start;
+  }
+  .case-title {
+    margin-bottom: 10px;
+    text-align: center;
+    color: var(--primary-deep);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .phone {
+    width: 370px;
+    height: 760px;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 38px;
+    border: 1px solid rgba(255,255,255,.75);
+    background: #F7F8FB;
+    box-shadow: var(--shadow-strong);
+    display: flex;
+    flex-direction: column;
+  }
+  .status {
+    height: 34px;
+    padding: 0 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--card);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .nav {
+    height: 52px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--card);
+    border-bottom: 1px solid rgba(233,236,242,.72);
+  }
+  .nav button {
+    width: 40px;
+    height: 40px;
+    border: 1px solid rgba(233,236,242,.9);
+    border-radius: 20px;
+    background: #FAFBFD;
+    color: var(--ink);
+    display: grid;
+    place-items: center;
+    padding: 0;
+  }
+  .back-icon {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .nav button:empty {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .nav .name {
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .content {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+  }
+  .input-panel {
+    background: var(--card);
+    border: 1px solid rgba(233,236,242,.8);
+    border-radius: 22px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .input-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .ai-badge {
+    border-radius: 999px;
+    padding: 4px 8px;
+    background: rgba(91,103,241,.1);
+    color: var(--primary);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mode-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 999px;
+    background: #F1F3F7;
+    border: 1px solid rgba(233,236,242,.9);
+  }
+  .mode-switch span {
+    padding: 4px 8px;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mode-switch .active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(52,120,246,.24);
+  }
+  .prompt {
+    min-height: 92px;
+    font-size: 24px;
+    line-height: 1.34;
+    font-weight: 600;
+    color: #A4ABB6;
+  }
+  .prompt.filled {
+    color: var(--ink);
+  }
+  .hint-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .hint-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--cyan);
+  }
+  .transcribe-box {
+    margin-top: 14px;
+    padding: 13px;
+    border-radius: 20px;
+    background: #FAFBFD;
+    border: 1px dashed #DDE2EA;
+  }
+  .transcribe-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .transcribe-text {
+    margin-top: 8px;
+    color: #9AA1AE;
+    font-size: 13px;
+    line-height: 1.45;
+    font-weight: 650;
+  }
+  .transcribe-box.idle {
+    padding: 8px 0 0;
+    background: transparent;
+    border-color: transparent;
+  }
+  .transcribe-box.idle .transcribe-title {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .transcribe-box.idle .transcribe-text {
+    display: block;
+    margin-top: 6px;
+    color: var(--primary);
+    font-size: 12px;
+  }
+  .quick-row {
+    margin-top: 14px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    overflow: hidden;
+  }
+  .quick {
+    min-height: 40px;
+    flex: 0 0 auto;
+    border: 1px solid rgba(233,236,242,.86);
+    border-radius: 999px;
+    background: var(--card);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 14px;
+    box-shadow: 0 6px 16px rgba(25,31,46,.04);
+  }
+  .quick .label {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .quick .value {
+    max-width: 92px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .section {
+    margin-top: 14px;
+    background: var(--card);
+    border: 1px solid rgba(233,236,242,.82);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 8px 20px rgba(25,31,46,.04);
+  }
+  .section-head {
+    height: 48px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .section-head span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding: 0 12px 12px;
+  }
+  .adv {
+    min-height: 68px;
+    border-radius: 14px;
+    background: #F7F8FB;
+    padding: 10px;
+  }
+  .adv .top {
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  .adv .bottom {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .ai-card {
+    background: linear-gradient(180deg, rgba(52,120,246,.075), rgba(18,167,167,.045));
+    border: 1px solid rgba(52,120,246,.18);
+    border-radius: 24px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .ai-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    font-weight: 700;
+  }
+  .confidence {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(34,163,106,.12);
+    color: var(--green);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .field {
+    padding: 12px;
+    border-radius: 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(52,120,246,.1);
+    font-size: 14px;
+    margin-top: 0;
+  }
+  .field:last-of-type {
+    border-bottom: 0;
+  }
+  .field .k {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 5px;
+  }
+  .field .v {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .field.compact {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .field.compact .cell {
+    min-width: 0;
+  }
+  .tasks {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .task {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 12px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid rgba(52,120,246,.14);
+  }
+  .check {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--primary);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .check.empty {
+    background: transparent;
+    border: 2px solid var(--line);
+  }
+  .task-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .task-meta {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .task-fields {
+    margin-top: 7px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .mini-field {
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(52,120,246,.08);
+    color: var(--primary-deep);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .listening {
+    min-height: 450px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .orb {
+    width: 120px;
+    height: 120px;
+    border-radius: 60px;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 18px 40px rgba(52,120,246,.25);
+    position: relative;
+  }
+  .orb::after {
+    content: "";
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--red);
+    border: 3px solid var(--card);
+  }
+  .bars {
+    height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .bar {
+    width: 5px;
+    border-radius: 4px;
+    background: white;
+  }
+  .bar:nth-child(1) { height: 16px; }
+  .bar:nth-child(2) { height: 28px; }
+  .bar:nth-child(3) { height: 38px; }
+  .bar:nth-child(4) { height: 24px; }
+  .bar:nth-child(5) { height: 18px; }
+  .listen-title {
+    margin-top: 22px;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .transcript {
+    margin-top: 12px;
+    width: 100%;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid rgba(233,236,242,.86);
+    font-size: 16px;
+    font-weight: 400;
+    box-shadow: var(--shadow);
+  }
+  .bottom {
+    padding: 10px 16px 16px;
+    background: rgba(247,248,251,.88);
+    backdrop-filter: blur(18px);
+    border-top: 1px solid rgba(233,236,242,.72);
+  }
+  .gesture-tip {
+    margin-bottom: 8px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .action {
+    height: 56px;
+    display: grid;
+    grid-template-columns: 1fr 94px;
+    gap: 10px;
+  }
+  .action.single {
+    grid-template-columns: 1fr;
+  }
+  .action.confirm {
+    grid-template-columns: 108px 1fr;
+  }
+  .mic {
+    border: 0;
+    border-radius: 28px;
+    background: var(--primary);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    box-shadow: 0 10px 24px rgba(52,120,246,.28);
+  }
+  .mic.record {
+    background: var(--red);
+    box-shadow: 0 8px 20px rgba(228,88,88,.28);
+  }
+  .create {
+    border: 0;
+    border-radius: 28px;
+    background: #171A20;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .create.disabled {
+    background: #B8BECA;
+  }
+  .utility {
+    border: 1px solid rgba(52,120,246,.22);
+    border-radius: 28px;
+    background: var(--card);
+    color: var(--primary);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .more-row {
+    margin-top: 12px;
+    min-height: 50px;
+    padding: 0 14px;
+    border-radius: 16px;
+    background: rgba(255,255,255,.7);
+    border: 1px solid rgba(52,120,246,.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .more-row strong {
+    color: var(--ink);
+    font-size: 14px;
+  }
+  .two-actions {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .edit-panel {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid rgba(233,236,242,.82);
+    box-shadow: 0 8px 20px rgba(25,31,46,.04);
+  }
+  .edit-panel-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .edit-panel-title span {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .edit-cell {
+    min-height: 54px;
+    padding: 9px;
+    border-radius: 14px;
+    background: #F7F8FB;
+  }
+  .edit-cell .k {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    margin-bottom: 5px;
+  }
+  .edit-cell .v {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .secondary,
+  .primary {
+    height: 46px;
+    border-radius: 16px;
+    font-weight: 600;
+    border: 0;
+  }
+  .secondary {
+    background: var(--card);
+    color: var(--primary);
+    border: 1px solid rgba(52,120,246,.25);
+  }
+  .primary {
+    background: var(--primary);
+    color: white;
+  }
+  .note {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<main class="board">
+  <section class="title">
+    <h1>创建任务页 - Codex 重构方案</h1>
+    <p>把页面主线从“配置表单”调整为“语音/文字输入 → AI 结构化 → 用户确认”。</p>
+  </section>
+
+  <section class="screens">
+    <div>
+      <div class="case-title">状态 A：初始 / 手动输入优先</div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>5G 100%</span></div>
+        <div class="nav"><button aria-label="返回"><svg class="back-icon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><div class="name">创建任务</div><button></button></div>
+        <div class="content">
+          <div class="input-panel">
+            <div class="input-label">
+              <span>说一句话创建任务</span>
+              <span class="mode-switch"><span class="active">语音</span><span>键盘</span></span>
+            </div>
+            <div class="prompt">长按说话，实时转成文字。</div>
+            <div class="transcribe-box idle">
+              <div class="transcribe-title"><span>转写内容会显示在这里</span></div>
+              <div class="transcribe-text">试试说：“明天下午三点提醒我开会”</div>
+            </div>
+          </div>
+
+          <div class="quick-row">
+            <div class="quick"><div class="label">日期</div><div class="value">今天</div></div>
+            <div class="quick"><div class="label">提醒</div><div class="value">无</div></div>
+          </div>
+        </div>
+        <div class="bottom">
+          <div class="action">
+            <button class="mic">长按说话</button>
+            <button class="create disabled">创建</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="case-title">状态 B：语音识别中</div>
+      <div class="phone">
+        <div class="status"><span>9:42</span><span>5G 100%</span></div>
+        <div class="nav"><button aria-label="返回"><svg class="back-icon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><div class="name">创建任务</div><button></button></div>
+        <div class="content">
+          <div class="listening">
+            <div class="orb">
+              <div class="bars"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></div>
+            </div>
+            <div class="listen-title">正在实时转写</div>
+            <div class="transcript">明天下午三点提醒我开...</div>
+            <p class="note">正在识别你的任务</p>
+          </div>
+        </div>
+        <div class="bottom">
+          <div class="gesture-tip">松开结束 · 上滑取消</div>
+          <div class="action single">
+            <button class="mic record">正在转写</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="case-title">状态 C：AI 单任务确认</div>
+      <div class="phone">
+        <div class="status"><span>9:43</span><span>5G 100%</span></div>
+        <div class="nav"><button aria-label="返回"><svg class="back-icon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><div class="name">创建任务</div><button></button></div>
+        <div class="content">
+          <div class="ai-card">
+            <div class="ai-title">
+              <span>AI 已整理任务</span>
+              <span class="confidence">检查后保存</span>
+            </div>
+            <div class="field"><div class="k">任务标题</div><div class="v">开会</div></div>
+            <div class="field compact">
+              <div class="cell"><div class="k">日期</div><div class="v">明天</div></div>
+              <div class="cell"><div class="k">时间</div><div class="v">15:00</div></div>
+            </div>
+            <div class="field compact">
+              <div class="cell"><div class="k">分类</div><div class="v">工作</div></div>
+              <div class="cell"><div class="k">提醒</div><div class="v">默认</div></div>
+            </div>
+            <div class="more-row">
+              <strong>更多设置</strong>
+              <span>重要程度、重复、地点 ›</span>
+            </div>
+          </div>
+        </div>
+        <div class="bottom">
+          <div class="action confirm">
+            <button class="utility">修改</button>
+            <button class="create">保存任务</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="case-title">状态 D：多任务批量确认 / 高级配置</div>
+      <div class="phone">
+        <div class="status"><span>9:44</span><span>5G 100%</span></div>
+        <div class="nav"><button aria-label="返回"><svg class="back-icon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><div class="name">创建任务</div><button></button></div>
+        <div class="content">
+          <div class="ai-card">
+            <div class="ai-title">
+              <span>AI 整理出 3 个任务</span>
+              <span class="confidence">已选择 2 个</span>
+            </div>
+            <div class="tasks">
+              <div class="task">
+                <div class="check">✓</div>
+                <div>
+                  <div class="task-name">完成项目报告</div>
+                  <div class="task-fields"><span class="mini-field">今天</span><span class="mini-field">工作</span><span class="mini-field">重要</span></div>
+                </div>
+              </div>
+              <div class="task">
+                <div class="check">✓</div>
+                <div>
+                  <div class="task-name">给张经理发邮件</div>
+                  <div class="task-fields"><span class="mini-field">今天</span><span class="mini-field">工作</span><span class="mini-field">默认提醒</span></div>
+                </div>
+              </div>
+              <div class="task">
+                <div class="check empty"></div>
+                <div>
+                  <div class="task-name">预约下周会议室</div>
+                  <div class="task-fields"><span class="mini-field">明天</span><span class="mini-field">行政</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="more-row"><strong>批量设置</strong><span>分类、提醒、重复 ›</span></div>
+          </div>
+        </div>
+        <div class="bottom">
+          <div class="action confirm">
+            <button class="utility">修改</button>
+            <button class="create">保存 2 个任务</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

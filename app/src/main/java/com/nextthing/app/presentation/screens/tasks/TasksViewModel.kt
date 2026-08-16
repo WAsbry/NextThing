@@ -32,10 +32,21 @@ enum class TaskView(val title: String) {
     CALENDAR("月视图")
 }
 
+enum class AISearchState {
+    IDLE,
+    LOADING,
+    ACTIVE,
+    EMPTY,
+    ERROR
+}
+
+internal fun aiSearchStateForResultCount(resultCount: Int): AISearchState =
+    if (resultCount > 0) AISearchState.ACTIVE else AISearchState.EMPTY
+
 // ── 筛选枚举 ──
 
 enum class StatusFilter(val label: String) {
-    ALL("全部"),
+    ALL("全部任务"),
     PENDING("待办"),
     COMPLETED("已完成"),
     OVERDUE("逾期"),
@@ -48,6 +59,35 @@ enum class PriorityFilter(val label: String) {
     IMPORTANT_NOT_URGENT("重要但不紧急"),
     NOT_IMPORTANT_URGENT("不重要但紧急"),
     NOT_IMPORTANT_NOT_URGENT("不重要且不紧急")
+}
+
+/** 所有展示路径共用的任务筛选规则。 */
+internal object TaskFilterPolicy {
+    fun apply(
+        tasks: List<Task>,
+        statusFilter: StatusFilter,
+        categoryId: String?,
+        priorityFilter: PriorityFilter
+    ): List<Task> = tasks
+        .let { list ->
+            when (statusFilter) {
+                StatusFilter.ALL -> list
+                StatusFilter.PENDING -> list.filter { it.status.isPendingLike() }
+                StatusFilter.COMPLETED -> list.filter { it.status == TaskStatus.COMPLETED }
+                StatusFilter.OVERDUE -> list.filter { it.status == TaskStatus.OVERDUE }
+                StatusFilter.CANCELLED -> list.filter { it.status == TaskStatus.CANCELLED }
+            }
+        }
+        .let { list -> if (categoryId == null) list else list.filter { it.category.id == categoryId } }
+        .let { list ->
+            when (priorityFilter) {
+                PriorityFilter.ALL -> list
+                PriorityFilter.IMPORTANT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT }
+                PriorityFilter.IMPORTANT_NOT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_NOT_URGENT }
+                PriorityFilter.NOT_IMPORTANT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_URGENT }
+                PriorityFilter.NOT_IMPORTANT_NOT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT }
+            }
+        }
 }
 
 // ── 数据模型 ──
@@ -84,8 +124,7 @@ data class TasksUiState(
     // 搜索
     val isSearchActive: Boolean = false,
     val searchQuery: String = "",
-    val isAISearching: Boolean = false,
-    val aiSearchUsed: Boolean = false,
+    val aiSearchState: AISearchState = AISearchState.IDLE,
     // 筛选
     val statusFilter: StatusFilter = StatusFilter.ALL,
     val selectedCategoryId: String? = null,
@@ -181,10 +220,19 @@ class TasksViewModel @Inject constructor(
 
         if (state.isSearchActive && state.searchQuery.isNotBlank()) {
             // 搜索模式
-            val query = state.searchQuery.lowercase()
-            val matched = tasks.filter { task ->
-                task.title.lowercase().contains(query) ||
-                        task.description.lowercase().contains(query)
+            val matched = if (
+                state.aiSearchState == AISearchState.ACTIVE ||
+                state.aiSearchState == AISearchState.EMPTY
+            ) {
+                // 数据刷新时保留当前 AI 候选集合，并换成数据库中的最新任务对象。
+                val aiResultIds = state.searchResults.map(Task::id).toSet()
+                tasks.filter { it.id in aiResultIds }
+            } else {
+                val query = state.searchQuery.lowercase()
+                tasks.filter { task ->
+                    task.title.lowercase().contains(query) ||
+                            task.description.lowercase().contains(query)
+                }
             }
             val filtered = applyFilters(matched, state.statusFilter, state.selectedCategoryId, state.priorityFilter)
             _uiState.value = state.copy(
@@ -206,9 +254,8 @@ class TasksViewModel @Inject constructor(
                 filtered.filter { it.status == TaskStatus.OVERDUE }
             } else emptyList()
 
-            val nonOverdueTasks = if (state.statusFilter == StatusFilter.ALL) {
-                filtered.filter { it.status != TaskStatus.OVERDUE }
-            } else filtered
+            // 已进入“逾期”分组的任务不能再进入日期分组，否则逾期筛选会重复展示同一任务。
+            val nonOverdueTasks = filtered.filter { it.status != TaskStatus.OVERDUE }
 
             val taskGroups = createTaskGroups(nonOverdueTasks)
 
@@ -224,7 +271,7 @@ class TasksViewModel @Inject constructor(
         }
 
         // 更新日历统计
-        updateCalendarDaysStats(tasks)
+        updateCalendarDaysStats(tasks, _uiState.value)
 
         // 更新选中日期数据
         val currentState = _uiState.value
@@ -247,31 +294,7 @@ class TasksViewModel @Inject constructor(
         statusFilter: StatusFilter,
         categoryId: String?,
         priorityFilter: PriorityFilter
-    ): List<Task> {
-        return tasks
-            .let { list ->
-                when (statusFilter) {
-                    StatusFilter.ALL -> list
-                    StatusFilter.PENDING -> list.filter { it.status.isPendingLike() }
-                    StatusFilter.COMPLETED -> list.filter { it.status == TaskStatus.COMPLETED }
-                    StatusFilter.OVERDUE -> list.filter { it.status == TaskStatus.OVERDUE }
-                    StatusFilter.CANCELLED -> list.filter { it.status == TaskStatus.CANCELLED }
-                }
-            }
-            .let { list ->
-                if (categoryId == null) list
-                else list.filter { it.category.id == categoryId }
-            }
-            .let { list ->
-                when (priorityFilter) {
-                    PriorityFilter.ALL -> list
-                    PriorityFilter.IMPORTANT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT }
-                    PriorityFilter.IMPORTANT_NOT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_NOT_URGENT }
-                    PriorityFilter.NOT_IMPORTANT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_URGENT }
-                    PriorityFilter.NOT_IMPORTANT_NOT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT }
-                }
-            }
-    }
+    ): List<Task> = TaskFilterPolicy.apply(tasks, statusFilter, categoryId, priorityFilter)
 
     private fun filterTasksByWeek(tasks: List<Task>, weekOffset: Int): List<Task> {
         val today = LocalDate.now()
@@ -311,6 +334,16 @@ class TasksViewModel @Inject constructor(
                 val formatter = DateTimeFormatter.ofPattern("M.d")
                 weekStart.format(formatter) + " 周"
             }
+        }
+    }
+
+    fun getMonthLabel(): String {
+        val today = LocalDate.now()
+        return when {
+            currentMonthDate.year == today.year &&
+                currentMonthDate.monthValue == today.monthValue -> "本月"
+            currentMonthDate.year == today.year -> "${currentMonthDate.monthValue}月"
+            else -> "${currentMonthDate.year}年${currentMonthDate.monthValue}月"
         }
     }
 
@@ -381,13 +414,19 @@ class TasksViewModel @Inject constructor(
 
         // 如果有已加载的任务数据，立即更新统计
         if (_uiState.value.allTasks.isNotEmpty()) {
-            updateCalendarDaysStats(_uiState.value.allTasks)
+            updateCalendarDaysStats(_uiState.value.allTasks, _uiState.value)
         }
     }
 
-    private fun updateCalendarDaysStats(allTasks: List<Task>) {
+    private fun updateCalendarDaysStats(allTasks: List<Task>, state: TasksUiState) {
+        val filteredTasks = applyFilters(
+            tasks = allTasks,
+            statusFilter = state.statusFilter,
+            categoryId = state.selectedCategoryId,
+            priorityFilter = state.priorityFilter
+        )
         val updatedDays = _uiState.value.calendarDays.map { day ->
-            val dayTasks = allTasks.filter { task ->
+            val dayTasks = filteredTasks.filter { task ->
                 val taskDate = task.dueDate?.toLocalDate() ?: task.createdAt.toLocalDate()
                 taskDate.toString() == day.date
             }
@@ -407,7 +446,12 @@ class TasksViewModel @Inject constructor(
         val dateTasks = allTasks.filter { task ->
             (task.dueDate?.toLocalDate() ?: task.createdAt.toLocalDate()).toString() == date
         }
-        val filtered = applyCalendarFilters(dateTasks, state.selectedCategoryId, state.priorityFilter)
+        val filtered = applyFilters(
+            tasks = dateTasks,
+            statusFilter = state.statusFilter,
+            categoryId = state.selectedCategoryId,
+            priorityFilter = state.priorityFilter
+        )
         _uiState.value = _uiState.value.copy(
             selectedDateTasks = filtered,
             selectedDateCompletedCount = filtered.count { it.status == TaskStatus.COMPLETED },
@@ -417,39 +461,28 @@ class TasksViewModel @Inject constructor(
         )
     }
 
-    private fun applyCalendarFilters(
-        tasks: List<Task>,
-        categoryId: String?,
-        priorityFilter: PriorityFilter
-    ): List<Task> {
-        return tasks
-            .let { list ->
-                if (categoryId == null) list
-                else list.filter { it.category.id == categoryId }
-            }
-            .let { list ->
-                when (priorityFilter) {
-                    PriorityFilter.ALL -> list
-                    PriorityFilter.IMPORTANT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_URGENT }
-                    PriorityFilter.IMPORTANT_NOT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.IMPORTANT_NOT_URGENT }
-                    PriorityFilter.NOT_IMPORTANT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_URGENT }
-                    PriorityFilter.NOT_IMPORTANT_NOT_URGENT -> list.filter { it.importanceUrgency == TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT }
-                }
-            }
-    }
-
     // ── 公开操作 ──
 
     fun setSearchActive(active: Boolean) {
         _uiState.value = _uiState.value.copy(isSearchActive = active)
         if (!active) {
+            aiSearchJob?.cancel()
             searchQueryFlow.value = ""
-            _uiState.value = _uiState.value.copy(searchQuery = "", searchResults = emptyList())
+            _uiState.value = _uiState.value.copy(
+                searchQuery = "",
+                searchResults = emptyList(),
+                aiSearchState = AISearchState.IDLE
+            )
             recomputeFromCurrent()
         }
     }
 
     fun setSearchQuery(query: String) {
+        aiSearchJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            searchQuery = query,
+            aiSearchState = AISearchState.IDLE
+        )
         searchQueryFlow.value = query
     }
 
@@ -461,33 +494,69 @@ class TasksViewModel @Inject constructor(
         val query = _uiState.value.searchQuery
         if (query.isBlank()) return
         val allTasks = _uiState.value.allTasks
-        if (allTasks.isEmpty()) return
+        if (allTasks.isEmpty()) {
+            _uiState.value = _uiState.value.copy(aiSearchState = AISearchState.EMPTY)
+            return
+        }
 
         aiSearchJob?.cancel()
         aiSearchJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isAISearching = true)
+            _uiState.value = _uiState.value.copy(aiSearchState = AISearchState.LOADING)
             aiTaskSearcher.searchByNaturalLanguage(query, allTasks)
                 .onSuccess { results ->
-                    _uiState.value = _uiState.value.copy(
-                        isAISearching = false,
-                        aiSearchUsed = true,
-                        searchResults = results
+                    val currentState = _uiState.value
+                    if (
+                        currentState.searchQuery != query ||
+                        currentState.aiSearchState != AISearchState.LOADING
+                    ) return@onSuccess
+                    val filteredResults = applyFilters(
+                        tasks = results,
+                        statusFilter = currentState.statusFilter,
+                        categoryId = currentState.selectedCategoryId,
+                        priorityFilter = currentState.priorityFilter
+                    )
+                    _uiState.value = currentState.copy(
+                        aiSearchState = aiSearchStateForResultCount(filteredResults.size),
+                        searchResults = filteredResults
                     )
                 }
                 .onFailure {
-                    _uiState.value = _uiState.value.copy(isAISearching = false)
+                    val currentState = _uiState.value
+                    if (
+                        currentState.searchQuery != query ||
+                        currentState.aiSearchState != AISearchState.LOADING
+                    ) return@onFailure
+                    // 保留点击前的普通搜索结果，仅展示可恢复、可重试的失败状态。
+                    _uiState.value = currentState.copy(aiSearchState = AISearchState.ERROR)
+                    recomputeFromCurrent()
                 }
         }
     }
 
     fun clearAISearch() {
         aiSearchJob?.cancel()
-        _uiState.value = _uiState.value.copy(aiSearchUsed = false)
+        _uiState.value = _uiState.value.copy(aiSearchState = AISearchState.IDLE)
         recomputeFromCurrent()
     }
 
     fun setStatusFilter(filter: StatusFilter) {
-        _uiState.value = _uiState.value.copy(statusFilter = filter)
+        _uiState.value = _uiState.value.copy(
+            statusFilter = filter,
+            selectedCategoryId = null,
+            priorityFilter = PriorityFilter.ALL,
+            aiSearchState = AISearchState.IDLE
+        )
+        recomputeFromCurrent()
+    }
+
+    /** 一级任务页仅展示周范围与状态筛选，清除没有入口的历史筛选条件。 */
+    fun clearHiddenFilters() {
+        val state = _uiState.value
+        if (state.selectedCategoryId == null && state.priorityFilter == PriorityFilter.ALL) return
+        _uiState.value = state.copy(
+            selectedCategoryId = null,
+            priorityFilter = PriorityFilter.ALL
+        )
         recomputeFromCurrent()
     }
 
@@ -528,6 +597,12 @@ class TasksViewModel @Inject constructor(
         recomputeFromCurrent()
     }
 
+    fun resetWeek() {
+        if (_uiState.value.currentWeekOffset != 0) {
+            changeWeek(0)
+        }
+    }
+
     fun selectDate(date: String) {
         _uiState.value = _uiState.value.copy(selectedDate = date)
         updateSelectedDateData(_uiState.value.allTasks, date, _uiState.value)
@@ -543,6 +618,18 @@ class TasksViewModel @Inject constructor(
         currentMonthDate = currentMonthDate.plusMonths(1)
         updateCurrentMonth()
         generateCalendarDays()
+    }
+
+    fun resetMonth() {
+        val today = LocalDate.now()
+        val alreadyCurrentMonth = currentMonthDate.year == today.year &&
+            currentMonthDate.monthValue == today.monthValue
+        if (!alreadyCurrentMonth) {
+            currentMonthDate = today
+            updateCurrentMonth()
+            generateCalendarDays()
+        }
+        selectDate(today.toString())
     }
 
     fun clearErrorMessage() {

@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,13 +36,13 @@ fun RelatedTasksScreen(
                 title = {
                     Text(
                         "关联任务 (${uiState.allTasks.size})",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Text("←", fontSize = 24.sp)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.size(24.dp), tint = Color(0xFF0F1726))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

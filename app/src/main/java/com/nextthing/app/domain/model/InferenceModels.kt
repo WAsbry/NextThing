@@ -5,11 +5,11 @@ package com.nextthing.app.domain.model
  */
 
 /**
- * 加速器类型，按优先级排列：NPU → GPU → CPU
+ * 推理后端类型，按优先级排列：NPU → GPU → CPU
  * 降级链逻辑通过 ordinal 遍历实现
  */
 enum class Accelerator {
-    NPU,    // 通过 NNAPI Delegate 走 NPU
+    NPU,    // 通过 Qualcomm QNN HTP Delegate 运行在 Hexagon NPU
     GPU,    // 通过 GPU Delegate 走 GPU
     CPU     // 纯 CPU 推理
 }
@@ -41,22 +41,21 @@ data class InferenceResult(
 /**
  * 单个加速器的 Benchmark（基准测试）结果
  *
- * @DESC: 记录某一种加速器（NPU/GPU/CPU）跑多次推理的耗时
- * 1. 存储属性：accelerator（加速器类型）、latencyMsList（每次推理耗时列表）
- * 2. 计算属性：medianLatencyMs（中位数延迟，由 latencyMsList 排序取中间值得出）
- *
- * @Parma: accelerator — 加速器类型（NPU/GPU/CPU）
- * @Parma: latencyMsList — 多次推理的耗时记录（毫秒）
+ * @DESC: 记录某一种推理后端跑多次推理的耗时
+ * @param requestedAccelerator 请求的推理后端
+ * @param actualAccelerator Delegate 初始化失败并降级后实际使用的后端
+ * @param latencyUsList 多次推理的耗时记录（微秒）
  *
  * 补充：用中位数不用平均值，因为平均值容易被极端值（如 GC 暂停导致的 200ms）拉偏
  *       例：49 次 5ms + 1 次 200ms → 平均 8.9ms（失真），中位数 5ms（准确）
  */
 data class SingleAcceleratorBenchmark(
-    val accelerator: Accelerator,
-    val latencyMsList: List<Long>
+    val requestedAccelerator: Accelerator,
+    val actualAccelerator: Accelerator,
+    val latencyUsList: List<Long>
 ) {
-    val medianLatencyMs: Long
-        get() = latencyMsList.sorted().let { it[it.size / 2] }                                     // 计算属性：排序后取中间值，即中位数
+    val medianLatencyUs: Long
+        get() = latencyUsList.sorted().let { it[it.size / 2] }
 }
 
 /**

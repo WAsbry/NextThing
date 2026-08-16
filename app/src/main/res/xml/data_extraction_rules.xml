@@ -5,15 +5,11 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="datastore/ai_prefs.preferences_pb" />
+        <exclude domain="file" path="datastore/auth_tokens.preferences_pb" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="datastore/ai_prefs.preferences_pb" />
+        <exclude domain="file" path="datastore/auth_tokens.preferences_pb" />
     </device-transfer>
-    -->
 </data-extraction-rules>

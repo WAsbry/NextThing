@@ -1,5 +1,6 @@
 package com.nextthing.app.data.ai
 
+import android.util.Log
 import com.nextthing.app.domain.model.Accelerator
 import com.nextthing.app.domain.model.Emotion
 import com.nextthing.app.domain.model.InferenceResult
@@ -9,6 +10,7 @@ import com.nextthing.app.domain.service.AudioPreprocessor
 import com.nextthing.app.domain.service.OnDeviceAIEngine
 import com.nextthing.app.domain.service.SERService
 import kotlin.math.exp
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,6 +32,7 @@ class SERServiceImpl @Inject constructor(
 
     companion object {
         private const val MODEL_FILE = "ser_model.tflite"   // 模型文件名（assets/models/ 下）
+        private const val MODEL_FRAME_COUNT = 80             // 轻量 CNN SER 固定输入帧数：[1,80,39]
         private val EMOTIONS = Emotion.entries.toTypedArray() // 情绪标签，与训练顺序一致
     }
 
@@ -37,14 +40,14 @@ class SERServiceImpl @Inject constructor(
 
     /**
      * @DESC: 加载 SER 模型
-     * 1. 构造 ModelConfig（NPU 优先，4 线程）
+     * 1. 构造 ModelConfig（CPU，4 线程）
      * 2. 调用 aiEngine.loadModel()
      * 3. 标记为已加载
      */
     override suspend fun loadModel() {
         val config = ModelConfig(
             modelFileName = MODEL_FILE,
-            accelerator = Accelerator.NPU,
+            accelerator = Accelerator.CPU,
             numThreads = 4
         )
         aiEngine.loadModel(config)
@@ -69,18 +72,28 @@ class SERServiceImpl @Inject constructor(
 
         // 1. 提取 MFCC 特征：[39, 帧数]
         val mfccFeatures = audioPreprocessor.extractMFCC(samples, sampleRate)
+        val modelInput = mfccFeatures.toModelInput()
+        Log.w(
+            "SER-Flow",
+            "SER input ready: pcmSamples=${samples.size}, sampleRate=$sampleRate, mfccShape=${mfccFeatures.size}x${mfccFeatures.firstOrNull()?.size ?: 0}, modelInput=${modelInput.describeShape()}"
+        )
+        Timber.tag("SER-Flow").d(
+            "SER 输入准备完成: pcmSamples=${samples.size}, sampleRate=$sampleRate, mfccShape=${mfccFeatures.size}x${mfccFeatures.firstOrNull()?.size ?: 0}, modelInput=${modelInput.describeShape()}"
+        )
 
         // 2. 模型推理，拿到 logits（原始输出）
-        val inferenceResult: InferenceResult = aiEngine.infer(mfccFeatures)
+        val inferenceResult: InferenceResult = aiEngine.infer(modelInput)
 
         // 3. 将 logits 转为概率分布
-        val logits = inferenceResult.data as FloatArray      // 模型原始输出
+        val logits = inferenceResult.data.toLogits()         // 模型原始输出
+        Timber.tag("SER-Flow").d("SER 原始输出 logits=${logits.joinToString(prefix = "[", postfix = "]")}")
         val probabilities = softmax(logits)                  // Softmax 归一化
 
         // 4. 找到最大概率对应的情绪
         val maxIndex = probabilities.indices.maxByOrNull { probabilities[it] } ?: 0
         val emotion = EMOTIONS[maxIndex]
         val confidence = probabilities[maxIndex]
+        Log.w("SER-Flow", "SER result: emotion=$emotion, confidence=$confidence, latencyMs=${inferenceResult.latencyMs}")
 
         // 5. 构建概率分布 Map
         val probMap = EMOTIONS.associateWith { probabilities[EMOTIONS.indexOf(it)] }
@@ -124,5 +137,37 @@ class SERServiceImpl @Inject constructor(
         }
         val sum = exps.sum()                                // 所有 exp 值求和
         return FloatArray(exps.size) { i -> exps[i] / sum } // 归一化为概率
+    }
+
+    private fun Any.toLogits(): FloatArray {
+        return when (this) {
+            is FloatArray -> this
+            is Array<*> -> {
+                val first = firstOrNull()
+                when (first) {
+                    is FloatArray -> first
+                    else -> error("SER 模型输出格式不支持: ${this::class.java.name}")
+                }
+            }
+            else -> error("SER 模型输出格式不支持: ${this::class.java.name}")
+        }
+    }
+
+    private fun Array<FloatArray>.toModelInput(): Array<Array<FloatArray>> {
+        require(size == 39) { "SER MFCC 维度异常: expected=39, actual=$size" }
+        val frameCount = firstOrNull()?.size ?: 0
+        require(frameCount > 0) { "SER MFCC 帧数异常: $frameCount" }
+        val sequence = Array(MODEL_FRAME_COUNT) { frame ->
+            FloatArray(39) { dim ->
+                if (frame < frameCount) this[dim][frame] else 0f
+            }
+        }
+        return arrayOf(sequence)
+    }
+
+    private fun Array<Array<FloatArray>>.describeShape(): String {
+        val frames = firstOrNull()?.size ?: 0
+        val dims = firstOrNull()?.firstOrNull()?.size ?: 0
+        return "[${size},$frames,$dims]"
     }
 }

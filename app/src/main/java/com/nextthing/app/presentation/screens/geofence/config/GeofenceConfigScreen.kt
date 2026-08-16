@@ -15,6 +15,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,15 +73,15 @@ fun GeofenceConfigScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("地理围栏") },
+                title = { Text("地理围栏", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Text("←", fontSize = 24.sp)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.size(24.dp), tint = Color(0xFF0F1726))
                     }
                 },
                 actions = {
                     IconButton(onClick = { navController.navigate("geofence_location_add") }) {
-                        Text("➕", fontSize = 20.sp)
+                        Icon(Icons.Default.Add, "添加地点", Modifier.size(24.dp), tint = Color(0xFF1A7DFA))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -93,7 +96,7 @@ fun GeofenceConfigScreen(
                 .fillMaxSize()
                 .background(BgPrimary)
                 .padding(paddingValues),
-            contentPadding = PaddingValues(vertical = 16.dp)
+            contentPadding = PaddingValues(vertical = 12.dp)
         ) {
             // 权限请求卡片（如果需要）
             if (uiState.shouldShowPermissionRequest) {
@@ -147,7 +150,7 @@ fun GeofenceConfigScreen(
                         text = "⭐ 常用地点",
                         style = MaterialTheme.typography.titleMedium,
                         color = TextPrimary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                     )
                 }
                 items(uiState.frequentLocations) { location ->
@@ -169,7 +172,7 @@ fun GeofenceConfigScreen(
                     text = "📍 所有地点 (${uiState.totalLocationsCount})",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                 )
             }
 
@@ -892,4 +895,3 @@ private fun PermissionRequestCard(
         }
     }
 }
-

@@ -6,6 +6,7 @@ interface AITaskParser {
     suspend fun parseTaskFromText(
         input: String,
         availableCategories: List<String>,
-        availableLocations: List<String> = emptyList()
+        availableLocations: List<String> = emptyList(),
+        voiceContext: String? = null
     ): Result<List<AITaskParseResult>>
 }

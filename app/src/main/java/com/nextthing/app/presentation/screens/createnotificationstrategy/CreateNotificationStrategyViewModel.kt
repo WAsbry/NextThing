@@ -25,12 +25,14 @@ import android.net.Uri
 import android.os.Build
 import com.nextthing.app.domain.model.PresetAudio
 import com.nextthing.app.util.AudioFileInfo
+import com.nextthing.app.util.NotificationHelper
 import javax.inject.Inject
 
 @HiltViewModel
 class CreateNotificationStrategyViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val notificationStrategyRepository: com.nextthing.app.domain.repository.NotificationStrategyRepository
+    private val notificationStrategyRepository: com.nextthing.app.domain.repository.NotificationStrategyRepository,
+    private val notificationHelper: NotificationHelper
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateNotificationStrategyUiState())
@@ -220,6 +222,29 @@ class CreateNotificationStrategyViewModel @Inject constructor(
                 Timber.e(e, "🎵 [Preview] 播放失败")
             }
         }
+    }
+
+    fun previewCurrentStrategy() {
+        notificationHelper.previewStrategy(currentPreviewStrategy())
+    }
+
+    fun previewCurrentSound() {
+        notificationHelper.previewStrategySound(currentPreviewStrategy())
+    }
+
+    private fun currentPreviewStrategy(): com.nextthing.app.domain.model.NotificationStrategy {
+        val state = _uiState.value
+        return com.nextthing.app.domain.model.NotificationStrategy(
+            name = state.name.ifBlank { "提醒试用" },
+            vibrationSetting = state.vibrationSetting,
+            soundSetting = state.soundSetting,
+            volume = state.volume,
+            customAudioPath = state.customAudioFileInfo?.uri?.toString(),
+            customAudioName = state.customAudioName.takeIf { it.isNotBlank() },
+            presetAudioName = state.selectedPresetAudio?.fileName,
+            systemNotificationMode = state.systemNotificationMode,
+            advanceReminderMinutes = state.advanceReminderMinutes
+        )
     }
 
     private fun getSoundUri(soundType: SoundType): Uri? {

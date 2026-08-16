@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
@@ -24,13 +25,23 @@ import androidx.navigation.navArgument
 import com.nextthing.app.presentation.theme.BgPrimary
 import com.nextthing.app.presentation.screens.today.TodayScreen
 import com.nextthing.app.presentation.screens.today.TodayViewModel
+import com.nextthing.app.presentation.screens.aiassistant.AiAssistantScreen
+import com.nextthing.app.presentation.screens.aiassistant.AiAssistantViewModel
 import com.nextthing.app.presentation.screens.tasks.TasksScreen
 import com.nextthing.app.presentation.screens.tasks.TasksViewModel
 import com.nextthing.app.presentation.screens.tasks.TaskView
 import com.nextthing.app.presentation.screens.stats.StatsScreen
+import com.nextthing.app.presentation.screens.stats.StatsAIReportScreen
+import com.nextthing.app.presentation.screens.stats.StatsEfficiencyScreen
+import com.nextthing.app.presentation.screens.stats.StatsStructureScreen
+import com.nextthing.app.presentation.screens.stats.StatsTrendScreen
 import com.nextthing.app.presentation.screens.stats.StatsViewModel
 import com.nextthing.app.presentation.screens.settings.SettingsScreen
 import com.nextthing.app.presentation.screens.settings.SettingsViewModel
+import com.nextthing.app.presentation.screens.settings.AIConfigScreen
+import com.nextthing.app.presentation.screens.settings.BriefingSettingsScreen
+import com.nextthing.app.presentation.screens.settings.ExportDataScreen
+import com.nextthing.app.presentation.screens.settings.ReminderStrategyScreen
 import com.nextthing.app.presentation.screens.settings.ThemeSettingsScreen
 import com.nextthing.app.presentation.screens.focus.FocusScreen
 import com.nextthing.app.presentation.screens.focus.FocusViewModel
@@ -60,14 +71,31 @@ import androidx.compose.runtime.LaunchedEffect
 import com.nextthing.app.domain.model.RepeatFrequency
 import com.nextthing.app.domain.model.RepeatFrequencyType
 import com.nextthing.app.domain.usecase.UserUseCases
+import com.nextthing.app.util.ToastHelper
 
 @Composable
 fun NextThingNavigation(
     navController: NavHostController,
     userUseCases: UserUseCases
 ) {
+    val context = LocalContext.current
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val isMineSubPage = currentRoute == Screen.UserInfo.route
+        || currentRoute == Screen.Achievement.route
+        || currentRoute == Screen.ViewPreferences.route
+        || currentRoute == Screen.ThemeSettings.route
+        || currentRoute == Screen.AIConfig.route
+        || currentRoute == Screen.BriefingSettings.route
+        || currentRoute == Screen.ReminderStrategy.route
+        || currentRoute == Screen.ExportData.route
+        || currentRoute == Screen.Sync.route
+        || currentRoute == "geofence_config"
+        || currentRoute == Screen.CreateLocation.route
+        || currentRoute == "map_picker"
+        || currentRoute?.startsWith("geofence_location") == true
+        || currentRoute?.startsWith("geofence_related_tasks") == true
+        || currentRoute?.startsWith("create_notification_strategy") == true
 
     Scaffold(
         bottomBar = {
@@ -75,8 +103,10 @@ fun NextThingNavigation(
                 || currentRoute == Screen.Login.route
                 || currentRoute == Screen.Splash.route
                 || currentRoute == Screen.CreateTask.route
+                || currentRoute == Screen.AIAssistant.route
                 || currentRoute == Screen.CategoryManagement.route
-                || currentRoute == Screen.ThemeSettings.route
+                || isMineSubPage
+                || currentRoute?.startsWith("task_detail") == true
                 || currentRoute?.startsWith("repeat_custom") == true
             if (!hideBottomBar) {
                 BottomNavigationBar(
@@ -92,10 +122,16 @@ fun NextThingNavigation(
             }
         }
     ) { paddingValues ->
+        val navHostModifier = if (isMineSubPage) {
+            Modifier
+        } else {
+            Modifier.padding(paddingValues)
+        }
+
         NavHost(
             navController = navController,
             startDestination = Screen.Splash.route,
-            modifier = Modifier.padding(paddingValues)
+            modifier = navHostModifier
         ) {
             // 启动页：完成权限申请后跳转
             composable(Screen.Splash.route) {
@@ -138,6 +174,19 @@ fun NextThingNavigation(
                     },
                     onNavigateToCalendar = {
                         navController.navigate(Screen.TasksCalendar.route)
+                    }
+                )
+            }
+
+            composable(Screen.AIAssistant.route) {
+                val viewModel: AiAssistantViewModel = hiltViewModel()
+                AiAssistantScreen(
+                    viewModel = viewModel,
+                    onBackPressed = {
+                        navController.popBackStack()
+                    },
+                    onNavigateToAIConfig = {
+                        navController.navigate(Screen.AIConfig.route)
                     }
                 )
             }
@@ -190,6 +239,16 @@ fun NextThingNavigation(
                         }
                 }
 
+                LaunchedEffect(Unit) {
+                    backStackEntry.savedStateHandle
+                        .getStateFlow<String?>("created_geofence_location_id", null)
+                        .collect { locationId ->
+                            if (locationId == null) return@collect
+                            viewModel.updateSelectedGeofenceLocation(locationId)
+                            backStackEntry.savedStateHandle.remove<String>("created_geofence_location_id")
+                        }
+                }
+
                 CreateTaskScreen(
                     viewModel = viewModel,
                     onBackPressed = {
@@ -202,7 +261,7 @@ fun NextThingNavigation(
                         navController.navigate(Screen.CreateNotificationStrategy.createRoute(strategyId))
                     },
                     onNavigateToGeofenceAdd = {
-                        navController.navigate("geofence_location_add")
+                        navController.navigate(Screen.CreateLocation.route)
                     },
                     onNavigateToManageCategories = {
                         navController.navigate(Screen.CategoryManagement.route)
@@ -214,6 +273,9 @@ fun NextThingNavigation(
                         val weekdaysStr = freq.weekdays.joinToString(",")
                         val monthDaysStr = freq.monthDays.joinToString(",")
                         navController.navigate("repeat_custom?type=$typeStr&weekdays=$weekdaysStr&monthDays=$monthDaysStr")
+                    },
+                    onNavigateToAIConfig = {
+                        navController.navigate(Screen.AIConfig.route)
                     }
                 )
             }
@@ -223,6 +285,10 @@ fun NextThingNavigation(
 
                 // 监听从地图选择返回的数据
                 val savedStateHandle = it.savedStateHandle
+                LaunchedEffect(Unit) {
+                    viewModel.setBindTaskId(savedStateHandle.get<String>("bind_task_id"))
+                    savedStateHandle.remove<String>("bind_task_id")
+                }
                 LaunchedEffect(Unit) {
                     // 检查是否有从地图选择返回的数据
                     savedStateHandle.get<Double>("selected_latitude")?.let { lat ->
@@ -249,8 +315,24 @@ fun NextThingNavigation(
                     onBackPressed = {
                         navController.popBackStack()
                     },
-                    onNavigateToMapPicker = {
+                    onNavigateToMapPicker = { latitude, longitude ->
+                        if (latitude != null && longitude != null) {
+                            it.savedStateHandle["initial_latitude"] = latitude
+                            it.savedStateHandle["initial_longitude"] = longitude
+                        }
                         navController.navigate("map_picker")
+                    },
+                    onLocationSaved = { result ->
+                        navController.previousBackStackEntry?.savedStateHandle?.set(
+                            "created_geofence_location_id",
+                            result.geofenceLocationId
+                        )
+                        ToastHelper.showToast(
+                            context,
+                            if (result.boundTaskId != null) "已创建并绑定「${result.locationName}」"
+                            else "已创建「${result.locationName}」"
+                        )
+                        navController.popBackStack()
                     }
                 )
             }
@@ -308,9 +390,36 @@ fun NextThingNavigation(
                 val viewModel: StatsViewModel = hiltViewModel()
                 StatsScreen(
                     viewModel = viewModel,
+                    onNavigateToStatsSection = { section ->
+                        navController.navigate("stats_$section")
+                    }
+                )
+            }
+
+            composable("stats_structure") {
+                StatsStructureScreen(
+                    onBackPressed = { navController.popBackStack() }
+                )
+            }
+
+            composable("stats_trend") {
+                StatsTrendScreen(
+                    onBackPressed = { navController.popBackStack() },
                     onNavigateToTrendDetail = { trendType ->
                         navController.navigate("trend_detail/$trendType")
                     }
+                )
+            }
+
+            composable("stats_efficiency") {
+                StatsEfficiencyScreen(
+                    onBackPressed = { navController.popBackStack() }
+                )
+            }
+
+            composable("stats_ai") {
+                StatsAIReportScreen(
+                    onBackPressed = { navController.popBackStack() }
                 )
             }
 
@@ -332,6 +441,9 @@ fun NextThingNavigation(
                     onNavigateToUserInfo = {
                         navController.navigate(Screen.UserInfo.route)
                     },
+                    onNavigateToAIConfig = {
+                        navController.navigate(Screen.AIConfig.route)
+                    },
                     onNavigateToGeofence = {
                         navController.navigate("geofence_config")
                     },
@@ -346,12 +458,51 @@ fun NextThingNavigation(
                     },
                     onNavigateToSync = {
                         navController.navigate(Screen.Sync.route)
+                    },
+                    onNavigateToBriefing = {
+                        navController.navigate(Screen.BriefingSettings.route)
+                    },
+                    onNavigateToReminderStrategy = {
+                        navController.navigate(Screen.ReminderStrategy.route)
+                    },
+                    onNavigateToExportData = {
+                        navController.navigate(Screen.ExportData.route)
                     }
                 )
             }
 
             composable(Screen.ThemeSettings.route) {
                 ThemeSettingsScreen(
+                    onBackPressed = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.AIConfig.route) {
+                AIConfigScreen(
+                    onBackPressed = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.BriefingSettings.route) {
+                BriefingSettingsScreen(
+                    onBackPressed = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.ReminderStrategy.route) {
+                ReminderStrategyScreen(
+                    onBackPressed = { navController.popBackStack() },
+                    onCreateStrategy = {
+                        navController.navigate(Screen.CreateNotificationStrategy.route)
+                    },
+                    onEditStrategy = { strategyId ->
+                        navController.navigate(Screen.CreateNotificationStrategy.createRoute(strategyId))
+                    }
+                )
+            }
+
+            composable(Screen.ExportData.route) {
+                ExportDataScreen(
                     onBackPressed = { navController.popBackStack() }
                 )
             }
@@ -444,6 +595,9 @@ fun NextThingNavigation(
                         navController.navigate(Screen.Login.route) {
                             popUpTo(0) { inclusive = true }
                         }
+                    },
+                    onNavigateToAchievement = {
+                        navController.navigate(Screen.Achievement.route)
                     }
                 )
             }
@@ -486,6 +640,16 @@ fun NextThingNavigation(
                         }
                 }
 
+                LaunchedEffect(Unit) {
+                    backStackEntry.savedStateHandle
+                        .getStateFlow<String?>("created_geofence_location_id", null)
+                        .collect { locationId ->
+                            if (locationId == null) return@collect
+                            viewModel.updateEditedGeofenceLocation(locationId)
+                            backStackEntry.savedStateHandle.remove<String>("created_geofence_location_id")
+                        }
+                }
+
                 TaskDetailScreen(
                     taskId = taskId,
                     viewModel = viewModel,
@@ -502,6 +666,16 @@ fun NextThingNavigation(
                         val weekdaysStr = freq.weekdays.joinToString(",")
                         val monthDaysStr = freq.monthDays.joinToString(",")
                         navController.navigate("repeat_custom?type=$typeStr&weekdays=$weekdaysStr&monthDays=$monthDaysStr")
+                    },
+                    onNavigateToGeofenceConfig = {
+                        navController.navigate("geofence_config")
+                    },
+                    onNavigateToGeofenceAdd = {
+                        backStackEntry.savedStateHandle["bind_task_id"] = taskId
+                        navController.navigate(Screen.CreateLocation.route)
+                    },
+                    onNavigateToNotificationStrategies = {
+                        navController.navigate(Screen.ReminderStrategy.route)
                     },
                     onEditTask = {
                         // 暂不支持编辑,可以在详情页直接编辑各个字段
@@ -553,6 +727,7 @@ sealed class Screen(val route: String, val title: String, val icon: String) {
     object Today : Screen("today", "首页", "home")
     object Tasks : Screen("tasks", "任务", "list")
     object TasksCalendar : Screen("tasks_calendar", "任务日历", "calendar")
+    object AIAssistant : Screen("ai_assistant", "AI 助手", "ai")
     object CreateTask : Screen("create_task", "创建", "add")
     object CreateLocation : Screen("create_location", "新建地点", "location")
     object CreateNotificationStrategy : Screen("create_notification_strategy", "新建通知策略", "notification") {
@@ -574,6 +749,10 @@ sealed class Screen(val route: String, val title: String, val icon: String) {
     object CategoryEdit : Screen("category_edit/{categoryId}", "编辑分类", "edit")
     object ViewPreferences : Screen("view_preferences", "视图偏好", "view")
     object ThemeSettings : Screen("theme_settings", "主题设置", "theme")
+    object AIConfig : Screen("ai_config", "AI 智能助手", "ai")
+    object BriefingSettings : Screen("briefing_settings", "智能早晚报", "briefing")
+    object ReminderStrategy : Screen("reminder_strategy", "提醒策略", "reminder")
+    object ExportData : Screen("export_data", "导出数据", "export")
     object Calendar : Screen("calendar", "日历", "calendar")
     object Sync : Screen("sync", "数据同步", "sync")
 } 

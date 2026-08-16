@@ -4,11 +4,11 @@ import android.app.Application
 import android.content.Context
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.amap.api.maps.MapsInitializer
 import com.nextthing.app.data.preferences.BriefingPreferences
 import com.nextthing.app.data.local.dao.StartupTraceDao
 import com.nextthing.app.domain.repository.TaskRepository
 import com.nextthing.app.domain.usecase.GeofenceUseCases
-import com.nextthing.app.domain.service.ASRService
 import com.nextthing.app.domain.service.GeofenceManager
 import com.nextthing.app.domain.service.GeofenceData
 import com.nextthing.app.performance.StartupTraceCollector
@@ -33,7 +33,6 @@ class NextThingApplication : Application(), Configuration.Provider {
     @Inject lateinit var geofenceUseCases: GeofenceUseCases
     @Inject lateinit var geofenceManager: GeofenceManager
     @Inject lateinit var briefingPreferences: BriefingPreferences
-    @Inject lateinit var asrService: ASRService
 
     // 应用级协程作用域
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -55,11 +54,17 @@ class NextThingApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // 3D 地图 SDK 要求在构造 MapView 前完成隐私状态初始化。
+        // 正式发布前必须将这些状态改为真实的用户隐私政策授权结果。
+        MapsInitializer.updatePrivacyShow(this, true, true)
+        MapsInitializer.updatePrivacyAgree(this, true)
         StartupTracker.record("hilt_init_end")
         StartupTracker.record("app_onCreate_start")
 
-        // 暂时总是启用调试日志
-        Timber.plant(Timber.DebugTree())
+        // Release 不安装 DebugTree，避免任务内容、位置和模型链路日志进入系统日志。
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        }
         StartupTracker.record("timber_init")
         Timber.d("✅ [Application] NextThingApplication 开始初始化...")
 
@@ -69,14 +74,6 @@ class NextThingApplication : Application(), Configuration.Provider {
         // 非关键初始化延迟到首屏渲染后执行
         deferredInitRunnable = {
             StartupTracker.record("deferred_init_start")
-
-            // 端侧 ASR 模型预热（后台加载，不阻塞 UI）
-            try {
-                asrService.warmUp()
-                StartupTracker.record("asr_warmup")
-            } catch (e: Exception) {
-                Timber.e(e, "❌ ASR 预热失败")
-            }
 
             // 定时同步调度
             try {
@@ -234,4 +231,4 @@ class NextThingApplication : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
-} 
+}

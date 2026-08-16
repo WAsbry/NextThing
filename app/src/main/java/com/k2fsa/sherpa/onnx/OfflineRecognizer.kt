@@ -18,6 +18,7 @@ data class OfflineTransducerModelConfig(
     var encoder: String = "",
     var decoder: String = "",
     var joiner: String = "",
+    var qnnConfig: QnnConfig = QnnConfig(),
 )
 
 data class OfflineParaformerModelConfig(

@@ -380,7 +380,7 @@ class NotificationHelper @Inject constructor(
             SystemNotificationMode.BANNER -> {
                 channelId = CHANNEL_ID
                 priority = NotificationCompat.PRIORITY_MAX
-                useFullScreenIntent = true
+                useFullScreenIntent = false
                 isOngoing = false
                 Timber.tag(TAG).d("模式: BANNER (高优先级，横幅弹出)")
             }
@@ -424,17 +424,22 @@ class NotificationHelper @Inject constructor(
         val notification = notificationBuilder.build()
         val notificationId = task.id.hashCode()
 
-        try {
+        val notificationPosted = try {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
-            // 记录已通知（去重）
-            markAsNotified(task.id)
+            // 只有正式到点通知参与去重。倒计时和提前提醒不能
+            // 写入这个标记，否则会在 15 分钟窗口内把正式到点通知误判为重复。
+            if (countdownText == null) {
+                markAsNotified(task.id)
+            }
             Timber.tag(TAG).d("通知已发送: ID=$notificationId, 标题=${task.title}")
+            true
         } catch (e: Exception) {
-            Timber.tag(TAG).e("显示通知失败: ${e.message}")
+            Timber.tag(TAG).e(e, "显示通知失败")
+            false
         }
 
-        // STATUS_BAR 模式不执行额外的震动和声音
-        if (strategy.systemNotificationMode != SystemNotificationMode.STATUS_BAR) {
+        // 声音、震动与通知展示方式是独立配置；通知提交成功后按策略执行。
+        if (notificationPosted) {
             executeVibration(strategy.vibrationSetting)
             playSound(strategy)
         }
@@ -571,8 +576,7 @@ class NotificationHelper @Inject constructor(
                 Timber.tag(TAG).d("✅ 震动已执行 (Legacy API)")
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).e("❌ 震动失败: ${e.message}")
-            e.printStackTrace()
+            Timber.tag(TAG).e(e, "❌ 震动失败")
         }
     }
 
@@ -628,6 +632,21 @@ class NotificationHelper @Inject constructor(
             Timber.tag(TAG).e("播放声音失败: ${e.message}")
             releaseMediaPlayer()
         }
+    }
+
+    /** Plays the configured sound and vibration without scheduling or posting a task notification. */
+    fun previewStrategy(strategy: NotificationStrategy) {
+        executeVibration(strategy.vibrationSetting)
+        playSound(strategy)
+    }
+
+    fun previewStrategySound(strategy: NotificationStrategy) {
+        playSound(strategy)
+    }
+
+    fun stopStrategyPreview() {
+        releaseMediaPlayer()
+        vibrator.cancel()
     }
 
     /**

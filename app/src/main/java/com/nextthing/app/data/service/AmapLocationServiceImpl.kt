@@ -3,6 +3,7 @@ package com.nextthing.app.data.service
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
+import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import com.amap.api.location.AMapLocation
 import com.amap.api.location.AMapLocationClient
@@ -16,6 +17,7 @@ import com.nextthing.app.domain.service.LocationServiceStatus
 import com.nextthing.app.domain.service.LocationSource
 import com.nextthing.app.domain.service.AccuracyLevel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,10 +39,44 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 
+internal enum class LocationServiceFailure(val message: String) {
+    AMAP_KEY_MISSING("高德定位 API Key 未配置"),
+    AMAP_INITIALIZATION_FAILED("高德定位初始化失败"),
+    NO_PROVIDER("无可用定位服务"),
+    TIMEOUT("定位请求超时"),
+    PROVIDER_FAILURE("定位服务请求失败")
+}
+
+internal fun hasAvailableLocationProvider(amapInitialized: Boolean): Boolean = amapInitialized
+
+internal fun locationServiceStatusError(
+    hasPermission: Boolean,
+    isEnabled: Boolean,
+    amapInitialized: Boolean,
+    amapInitializationFailure: LocationServiceFailure?,
+    lastRequestFailure: LocationServiceFailure?
+): String? = when {
+    !hasPermission -> "缺少位置权限"
+    !isEnabled -> "位置服务未启用"
+    !hasAvailableLocationProvider(amapInitialized) -> buildString {
+        append(LocationServiceFailure.NO_PROVIDER.message)
+        amapInitializationFailure?.let { append("：${it.message}") }
+    }
+    lastRequestFailure != null -> lastRequestFailure.message
+    !amapInitialized && amapInitializationFailure != null -> amapInitializationFailure.message
+    else -> null
+}
+
+private fun Throwable?.toLocationServiceFailure(): LocationServiceFailure =
+    if (this?.message?.contains("超时") == true) {
+        LocationServiceFailure.TIMEOUT
+    } else {
+        LocationServiceFailure.PROVIDER_FAILURE
+    }
+
 @Singleton
 class AmapLocationServiceImpl @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val fallbackLocationService: LocationServiceImpl, // Google服务作为回退
     private val geofenceConfigRepository: GeofenceConfigRepository // 地理围栏配置
 ) : LocationService {
 
@@ -49,6 +85,10 @@ class AmapLocationServiceImpl @Inject constructor(
 
     private var lastLocationUpdateTime: Long = 0
     private var cachedLocation: LocationInfo? = null
+    private var amapInitializationFailure: LocationServiceFailure? = null
+
+    @Volatile
+    private var lastRequestFailure: LocationServiceFailure? = null
 
     // 位置状态流
     private val _locationUpdates = MutableStateFlow<LocationInfo?>(null)
@@ -62,7 +102,6 @@ class AmapLocationServiceImpl @Inject constructor(
     companion object {
         private const val LOCATION_CACHE_DURATION = 3 * 60 * 1000L // 3分钟缓存，更频繁更新
         private const val AMAP_LOCATION_TIMEOUT = 8000L // 高德定位8秒超时，更快响应
-        private const val FALLBACK_TIMEOUT = 20000L // Google服务回退超时20秒，给内部多级串联足够时间
     }
 
     init {
@@ -90,6 +129,7 @@ class AmapLocationServiceImpl @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "❌ [AmapLocationService] 隐私合规设置失败")
                 amapLocationClient = null
+                amapInitializationFailure = LocationServiceFailure.AMAP_INITIALIZATION_FAILED
                 return
             }
             
@@ -105,6 +145,7 @@ class AmapLocationServiceImpl @Inject constructor(
             if (apiKey.isNullOrBlank()) {
                 Timber.e("❌ [AmapLocationService] 🔑 API Key未配置或为空")
                 amapLocationClient = null
+                amapInitializationFailure = LocationServiceFailure.AMAP_KEY_MISSING
                 return
             } else {
                 Timber.d("✅ [AmapLocationService] 🔑 API Key已配置: ${apiKey.take(8)}...")
@@ -113,6 +154,7 @@ class AmapLocationServiceImpl @Inject constructor(
             // 第三步：创建定位客户端
             Timber.d("🗺️ [AmapLocationService] 🚀 创建AMapLocationClient...")
             amapLocationClient = AMapLocationClient(context)
+            amapInitializationFailure = null
             Timber.d("✅ [AmapLocationService] 🎉 高德定位客户端初始化成功")
             Timber.d("🗺️ [AmapLocationService] 📱 SDK已集成")
         } catch (e: Exception) {
@@ -120,6 +162,7 @@ class AmapLocationServiceImpl @Inject constructor(
             Timber.e("❌ [AmapLocationService] 🔍 错误类型: ${e.javaClass.simpleName}")
             Timber.e("❌ [AmapLocationService] 📝 错误信息: ${e.message}")
             amapLocationClient = null
+            amapInitializationFailure = LocationServiceFailure.AMAP_INITIALIZATION_FAILED
         }
     }
 
@@ -131,7 +174,7 @@ class AmapLocationServiceImpl @Inject constructor(
         Timber.d("🔍 [AmapLocationService] ⏰ 开始时间: ${java.text.SimpleDateFormat("HH:mm:ss.SSS").format(java.util.Date())}")
         
         // 并发控制检查
-        if (isLocationInProgress.get() && !forceRefresh) {
+        if (isLocationInProgress.get()) {
             Timber.d("⏳ [AmapLocationService] 🔄 已有定位请求进行中，跳过重复请求")
             cachedLocation?.let {
                 Timber.d("⏳ [AmapLocationService] 📦 返回现有缓存位置: ${it.locationName}")
@@ -157,39 +200,12 @@ class AmapLocationServiceImpl @Inject constructor(
                 val cacheAge = (System.currentTimeMillis() - lastLocationUpdateTime) / 1000
                 Timber.d("📦 [AmapLocationService] ✅ 使用缓存位置: ${it.locationName}")
                 Timber.d("📦 [AmapLocationService] ⏰ 缓存年龄: ${cacheAge}秒")
+                lastRequestFailure = null
                 return it
             }
         }
         Timber.d("📦 [AmapLocationService] ⏭️ 缓存无效或强制刷新，继续实时定位")
         
-        // 尝试快速获取最后已知位置作为临时结果
-        if (!forceRefresh) {
-            Timber.d("⚡ [AmapLocationService] 🔍 尝试快速定位策略...")
-            tryGetQuickLocation()?.let { quickLocation ->
-                val quickTime = System.currentTimeMillis() - startTime
-                Timber.d("⚡ [AmapLocationService] ✅ 快速定位成功！耗时: ${quickTime}ms")
-                Timber.d("⚡ [AmapLocationService] 📍 快速位置: ${quickLocation.locationName}")
-                Timber.d("⚡ [AmapLocationService] 🔄 后台启动精确定位...")
-                updateLocationCache(quickLocation)
-                // 异步在后台获取更精确位置
-                serviceScope.launch {
-                    try {
-                        Timber.d("🎯 [AmapLocationService] 🚀 后台精确定位开始...")
-                        val betterResult = getAmapLocation()
-                        if (betterResult.isSuccess) {
-                            val betterLocation = betterResult.getOrNull()!!
-                            updateLocationCache(betterLocation)
-                            Timber.d("🎯 [AmapLocationService] ✅ 后台获取到更精确位置: ${betterLocation.locationName}")
-                        }
-                    } catch (e: Exception) {
-                        Timber.w(e, "🎯 [AmapLocationService] ⚠️ 后台精确定位失败")
-                    }
-                }
-                return quickLocation
-            }
-            Timber.d("⚡ [AmapLocationService] ❌ 快速定位无结果，进入正常定位流程")
-        }
-
         // 优先尝试高德定位
         if (amapLocationClient != null) {
             Timber.d("🗺️ [AmapLocationService] 🎯 开始高德定位尝试...")
@@ -210,6 +226,7 @@ class AmapLocationServiceImpl @Inject constructor(
                     Timber.d("🗺️ [AmapLocationService] ⏱️ 高德耗时: ${amapDuration}ms, 总耗时: ${totalTime}ms")
                     Timber.d("🗺️ [AmapLocationService] 📍 位置结果: ${locationInfo.locationName}")
                     updateLocationCache(locationInfo)
+                    lastRequestFailure = null
                     
                     // 重置定位状态
                     isLocationInProgress.set(false)
@@ -217,11 +234,15 @@ class AmapLocationServiceImpl @Inject constructor(
                     Timber.d("============================================================")
                     return locationInfo
                 } else {
+                    lastRequestFailure = amapResult.exceptionOrNull().toLocationServiceFailure()
                     Timber.w("⚠️ [AmapLocationService] 💔 高德定位失败")
                     Timber.w("⚠️ [AmapLocationService] ⏱️ 尝试耗时: ${amapDuration}ms")
                     Timber.w("⚠️ [AmapLocationService] 📝 失败原因: ${amapResult.exceptionOrNull()?.message}")
                 }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (e: Exception) {
+                lastRequestFailure = LocationServiceFailure.PROVIDER_FAILURE
                 Timber.e(e, "💥 [AmapLocationService] 🔥 高德定位异常")
             } finally {
                 // 确保无论如何都重置状态
@@ -231,34 +252,11 @@ class AmapLocationServiceImpl @Inject constructor(
             Timber.w("🗺️ [AmapLocationService] ⚠️ 高德客户端未初始化，跳过高德定位")
         }
 
-        // 快速回退到Google服务
-        Timber.d("🔄 [AmapLocationService] 🔀 开始回退到Google定位服务...")
-        Timber.d("🔄 [AmapLocationService] ⏱️ Google服务超时限制: ${FALLBACK_TIMEOUT/1000}秒")
-        val fallbackStartTime = System.currentTimeMillis()
-        
-        val fallbackResult = withTimeoutOrNull(FALLBACK_TIMEOUT) {
-            fallbackLocationService.getCurrentLocation(forceRefresh)
-        }
-        
-        val fallbackDuration = System.currentTimeMillis() - fallbackStartTime
-        val totalTime = System.currentTimeMillis() - startTime
-        
-        // 重置状态
-        isLocationInProgress.set(false)
-
-        return if (fallbackResult != null) {
-            Timber.d("🔄 [AmapLocationService] ✅ Google服务定位成功！")
-            Timber.d("🔄 [AmapLocationService] ⏱️ Google耗时: ${fallbackDuration}ms, 总耗时: ${totalTime}ms")
-            Timber.d("🔄 [AmapLocationService] 📍 位置结果: ${fallbackResult?.locationName}")
-            Timber.d("============================================================")
-            fallbackResult
-        } else {
-            Timber.e("🔄 [AmapLocationService] ⏰ Google服务超时")
-            Timber.e("🔄 [AmapLocationService] ⏱️ 超时耗时: ${fallbackDuration}ms, 总耗时: ${totalTime}ms")
-            Timber.e("🔄 [AmapLocationService] 💀 所有定位方案均失败")
-            Timber.d("============================================================")
-            null
-        }
+        if (amapLocationClient == null) lastRequestFailure = LocationServiceFailure.NO_PROVIDER
+        else if (lastRequestFailure == null) lastRequestFailure = LocationServiceFailure.PROVIDER_FAILURE
+        Timber.w("[AmapLocationService] 高德定位未返回有效结果，不使用 Google 定位回退。")
+        Timber.d("============================================================")
+        return null
     }
 
     private suspend fun getAmapLocation(): Result<LocationInfo> = withContext(Dispatchers.IO) {
@@ -288,13 +286,12 @@ class AmapLocationServiceImpl @Inject constructor(
                 this.locationMode = locationMode
                 isOnceLocationLatest = false // 返回第一个可用结果，不等最优（关键：避免 5s+ 延迟）
                 isOnceLocation = true        // 单次定位
-                isWifiScan = true            // 被动 WiFi 扫描（室内定位）
-                isWifiActiveScan = false     // 关闭主动 WiFi 扫描（减少延迟）
+                setWifiScan(true)            // 被动 WiFi 扫描（室内定位）
                 isNeedAddress = true         // 返回地址文字（需要网络逆地理编码）
                 httpTimeOut = 6000L          // 网络超时 6s
                 isLocationCacheEnable = true // 允许 SDK 内部缓存（重启后快速返回）
-                isMockEnable = false
-                isSensorEnable = false       // 关闭传感器融合（省电模式下无意义，还增加延迟）
+                setMockEnable(false)
+                setSensorEnable(false)       // 关闭传感器融合（省电模式下无意义，还增加延迟）
                 locationPurpose = AMapLocationClientOption.AMapLocationPurpose.Sport
             }
             locationClient.setLocationOption(option)
@@ -304,13 +301,14 @@ class AmapLocationServiceImpl @Inject constructor(
             val location = withTimeoutOrNull(AMAP_LOCATION_TIMEOUT) {
                 suspendCancellableCoroutine<AMapLocation?> { continuation ->
                     val locationListener = object : AMapLocationListener {
-                        override fun onLocationChanged(location: AMapLocation?) {
+                        override fun onLocationChanged(amapLocation: AMapLocation?) {
                             Timber.d("📍 [AmapLocationService] 📱 收到定位回调")
-                            if (location != null) {
+                            if (amapLocation != null) {
+                                val location = amapLocation
                                 Timber.d("📍 [AmapLocationService] 📊 定位结果详情:")
                                 Timber.d("📍 [AmapLocationService] - 错误码: ${location.errorCode}")
                                 Timber.d("📍 [AmapLocationService] - 错误信息: ${location.errorInfo}")
-                                if (location.errorCode == 0) {
+                                if (amapLocation.errorCode == 0) {
                                     Timber.d("📍 [AmapLocationService] - 经纬度: (${location.latitude}, ${location.longitude})")
                                     Timber.d("📍 [AmapLocationService] - 精度: ${location.accuracy}m")
                                     Timber.d("📍 [AmapLocationService] - 定位类型: ${location.locationType}")
@@ -321,7 +319,7 @@ class AmapLocationServiceImpl @Inject constructor(
                             }
                             locationClient.stopLocation()
                             locationClient.setLocationListener(null)
-                            continuation.resume(location)
+                            continuation.resume(amapLocation)
                         }
                     }
 
@@ -360,6 +358,8 @@ class AmapLocationServiceImpl @Inject constructor(
                 Timber.w("⚠️ [AmapLocationService] $errorMsg")
                 Result.failure(Exception(errorMsg))
             }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (e: Exception) {
             Timber.e(e, "💥 [AmapLocationService] 高德定位异常")
             Result.failure(e)
@@ -476,8 +476,9 @@ class AmapLocationServiceImpl @Inject constructor(
     }
 
     override suspend fun isLocationEnabled(): Boolean {
-        // 委托给Google服务检查
-        return fallbackLocationService.isLocationEnabled()
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+            manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     }
 
     override suspend fun isServiceAvailable(): Boolean {
@@ -494,10 +495,12 @@ class AmapLocationServiceImpl @Inject constructor(
                 return false
             }
 
-            // 3. 检查高德地图客户端是否初始化
-            if (amapLocationClient == null) {
-                Timber.d("🔍 [AmapLocationService] 服务降级: 高德地图未初始化，使用Google服务")
-                return true // 返回true因为有Google服务兜底
+            // 3. 高德定位客户端必须初始化成功。
+            val amapInitialized = amapLocationClient != null
+            if (!hasAvailableLocationProvider(amapInitialized)) {
+                lastRequestFailure = LocationServiceFailure.NO_PROVIDER
+                Timber.w("🔍 [AmapLocationService] 服务不可用: 高德定位未初始化")
+                return false
             }
 
             Timber.d("✅ [AmapLocationService] 服务可用")
@@ -513,18 +516,23 @@ class AmapLocationServiceImpl @Inject constructor(
             val hasPermission = hasLocationPermission()
             val isEnabled = isLocationEnabled()
             val amapInitialized = amapLocationClient != null
+            val providerAvailable = hasAvailableLocationProvider(amapInitialized)
+            if (providerAvailable && lastRequestFailure == LocationServiceFailure.NO_PROVIDER) {
+                lastRequestFailure = null
+            }
 
             LocationServiceStatus(
-                isAvailable = hasPermission && isEnabled,
+                isAvailable = hasPermission && isEnabled && providerAvailable,
                 amapInitialized = amapInitialized,
                 hasPermission = hasPermission,
                 isLocationEnabled = isEnabled,
-                lastErrorMessage = when {
-                    !hasPermission -> "缺少位置权限"
-                    !isEnabled -> "位置服务未启用"
-                    !amapInitialized -> "高德地图服务未初始化，使用Google服务"
-                    else -> null
-                }
+                lastErrorMessage = locationServiceStatusError(
+                    hasPermission = hasPermission,
+                    isEnabled = isEnabled,
+                    amapInitialized = amapInitialized,
+                    amapInitializationFailure = amapInitializationFailure,
+                    lastRequestFailure = lastRequestFailure
+                )
             )
         } catch (e: Exception) {
             Timber.e(e, "❌ [AmapLocationService] 获取服务状态异常")
@@ -583,27 +591,6 @@ class AmapLocationServiceImpl @Inject constructor(
         }
     }
 
-    /**
-     * 尝试快速获取位置（使用最后已知位置）
-     */
-    private suspend fun tryGetQuickLocation(): LocationInfo? = withContext(Dispatchers.IO) {
-        try {
-            Timber.d("⚡ [AmapLocationService] 🔍 查找Google服务缓存...")
-            val fallbackResult = fallbackLocationService.getCachedLocation()
-            if (fallbackResult != null) {
-                Timber.d("⚡ [AmapLocationService] ✅ 找到Google服务缓存位置")
-                Timber.d("⚡ [AmapLocationService] 📍 缓存位置: ${fallbackResult.locationName}")
-                return@withContext fallbackResult
-            }
-            
-            Timber.d("⚡ [AmapLocationService] ❌ 无可用缓存位置")
-            return@withContext null
-        } catch (e: Exception) {
-            Timber.w(e, "⚡ [AmapLocationService] 💥 快速定位异常")
-            null
-        }
-    }
-
     fun onDestroy() {
         try {
             serviceScope.cancel()
@@ -615,4 +602,5 @@ class AmapLocationServiceImpl @Inject constructor(
             Timber.e(e, "销毁高德定位客户端时出错")
         }
     }
-} 
+
+}

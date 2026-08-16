@@ -322,3 +322,6 @@
 
 # 允许ProGuard使用激进的优化
 -allowaccessmodification
+# LiteRT support references AutoValue source annotations that are not required at runtime.
+-dontwarn com.google.auto.value.AutoValue
+-dontwarn com.google.auto.value.AutoValue$Builder

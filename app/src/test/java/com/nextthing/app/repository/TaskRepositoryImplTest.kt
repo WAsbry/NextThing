@@ -14,7 +14,10 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import org.mockito.Mockito.*
+import org.mockito.kotlin.any
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 import java.time.LocalDateTime
 
 class TaskRepositoryImplTest {
@@ -57,8 +60,8 @@ class TaskRepositoryImplTest {
 
     @Before
     fun setup() {
-        taskDao = mock(TaskDao::class.java)
-        categoryDao = mock(CategoryDao::class.java)
+        taskDao = mock<TaskDao>()
+        categoryDao = mock<CategoryDao>()
         repository = TaskRepositoryImpl(taskDao, categoryDao)
     }
 
@@ -67,12 +70,35 @@ class TaskRepositoryImplTest {
     @Test
     fun `insertTask delegates to DAO and returns id`() = runTest {
         val task = Task(id = "task-1", title = "新任务", category = testCategory)
-        `when`(taskDao.insertTask(any())).thenReturn(1L)
+        whenever(taskDao.insertTask(any())).thenReturn(1L)
 
         val result = repository.insertTask(task)
 
         assertEquals("task-1", result)
         verify(taskDao).insertTask(any())
+    }
+
+    @Test
+    fun `insertTaskIfAbsent returns true when recurring instance is inserted`() = runTest {
+        whenever(taskDao.insertTaskIfAbsent(any())).thenReturn(42L)
+
+        val inserted = repository.insertTaskIfAbsent(
+            Task(id = "instance-1", title = "重复实例", category = testCategory)
+        )
+
+        assertTrue(inserted)
+        verify(taskDao).insertTaskIfAbsent(any())
+    }
+
+    @Test
+    fun `insertTaskIfAbsent returns false on unique conflict`() = runTest {
+        whenever(taskDao.insertTaskIfAbsent(any())).thenReturn(-1L)
+
+        val inserted = repository.insertTaskIfAbsent(
+            Task(id = "instance-2", title = "重复实例", category = testCategory)
+        )
+
+        assertFalse(inserted)
     }
 
     // ===== updateTask =====
@@ -89,24 +115,29 @@ class TaskRepositoryImplTest {
     // ===== deleteTask =====
 
     @Test
-    fun `deleteTask calls deleteTaskById`() = runTest {
+    fun `deleteTask creates a pending tombstone instead of hard deleting`() = runTest {
         repository.deleteTask("task-1")
-        verify(taskDao).deleteTaskById("task-1")
+        verify(taskDao).softDeleteTask(
+            org.mockito.kotlin.eq("task-1"),
+            any()
+        )
+        verify(taskDao, org.mockito.kotlin.never()).deleteTaskById("task-1")
     }
 
     // ===== deleteAllTasks =====
 
     @Test
-    fun `deleteAllTasks delegates to DAO`() = runTest {
+    fun `deleteAllTasks creates pending tombstones`() = runTest {
         repository.deleteAllTasks()
-        verify(taskDao).deleteAllTasks()
+        verify(taskDao).softDeleteAllTasks(any())
+        verify(taskDao, org.mockito.kotlin.never()).deleteAllTasks()
     }
 
     // ===== getTaskById =====
 
     @Test
     fun `getTaskById returns task when found`() = runTest {
-        `when`(taskDao.getTaskById("task-1")).thenReturn(createTaskWithCategory())
+        whenever(taskDao.getTaskById("task-1")).thenReturn(createTaskWithCategory())
 
         val result = repository.getTaskById("task-1")
 
@@ -118,7 +149,7 @@ class TaskRepositoryImplTest {
 
     @Test
     fun `getTaskById returns null when not found`() = runTest {
-        `when`(taskDao.getTaskById("nonexistent")).thenReturn(null)
+        whenever(taskDao.getTaskById("nonexistent")).thenReturn(null)
 
         val result = repository.getTaskById("nonexistent")
 
@@ -133,7 +164,7 @@ class TaskRepositoryImplTest {
             createTaskWithCategory(id = "t1", title = "任务1"),
             createTaskWithCategory(id = "t2", title = "任务2")
         )
-        `when`(taskDao.getAllTasks()).thenReturn(flowOf(entities))
+        whenever(taskDao.getAllTasks()).thenReturn(flowOf(entities))
 
         val result = repository.getAllTasks().first()
 
@@ -144,7 +175,7 @@ class TaskRepositoryImplTest {
 
     @Test
     fun `getAllTasks returns empty list when no tasks`() = runTest {
-        `when`(taskDao.getAllTasks()).thenReturn(flowOf(emptyList()))
+        whenever(taskDao.getAllTasks()).thenReturn(flowOf(emptyList()))
 
         val result = repository.getAllTasks().first()
 
@@ -156,7 +187,7 @@ class TaskRepositoryImplTest {
     @Test
     fun `getTodayTasks maps correctly`() = runTest {
         val entities = listOf(createTaskWithCategory(title = "今日任务"))
-        `when`(taskDao.getTodayTasks()).thenReturn(flowOf(entities))
+        whenever(taskDao.getTodayTasks()).thenReturn(flowOf(entities))
 
         val result = repository.getTodayTasks().first()
 
@@ -168,13 +199,13 @@ class TaskRepositoryImplTest {
 
     @Test
     fun `getTaskStatistics computes correct rates`() = runTest {
-        `when`(taskDao.getTotalTasksCount()).thenReturn(10)
-        `when`(taskDao.getCompletedTasksCount()).thenReturn(7)
-        `when`(taskDao.getPendingTasksCount()).thenReturn(2)
-        `when`(taskDao.getOverdueTasksCount()).thenReturn(1)
-        `when`(taskDao.getAverageCompletionTime()).thenReturn(30.0)
-        `when`(taskDao.getCategoryTaskCounts()).thenReturn(listOf(CategoryTaskCount("cat-1", 10)))
-        `when`(categoryDao.getAllCategoriesList()).thenReturn(listOf(testCategoryEntity))
+        whenever(taskDao.getTotalTasksCount()).thenReturn(10)
+        whenever(taskDao.getCompletedTasksCount()).thenReturn(7)
+        whenever(taskDao.getPendingTasksCount()).thenReturn(2)
+        whenever(taskDao.getOverdueTasksCount()).thenReturn(1)
+        whenever(taskDao.getAverageCompletionTime()).thenReturn(30.0)
+        whenever(taskDao.getCategoryTaskCounts()).thenReturn(listOf(CategoryTaskCount("cat-1", 10)))
+        whenever(categoryDao.getAllCategoriesList()).thenReturn(listOf(testCategoryEntity))
 
         val stats = repository.getTaskStatistics()
 
@@ -188,13 +219,13 @@ class TaskRepositoryImplTest {
 
     @Test
     fun `getTaskStatistics handles zero tasks`() = runTest {
-        `when`(taskDao.getTotalTasksCount()).thenReturn(0)
-        `when`(taskDao.getCompletedTasksCount()).thenReturn(0)
-        `when`(taskDao.getPendingTasksCount()).thenReturn(0)
-        `when`(taskDao.getOverdueTasksCount()).thenReturn(0)
-        `when`(taskDao.getAverageCompletionTime()).thenReturn(null)
-        `when`(taskDao.getCategoryTaskCounts()).thenReturn(emptyList())
-        `when`(categoryDao.getAllCategoriesList()).thenReturn(emptyList())
+        whenever(taskDao.getTotalTasksCount()).thenReturn(0)
+        whenever(taskDao.getCompletedTasksCount()).thenReturn(0)
+        whenever(taskDao.getPendingTasksCount()).thenReturn(0)
+        whenever(taskDao.getOverdueTasksCount()).thenReturn(0)
+        whenever(taskDao.getAverageCompletionTime()).thenReturn(null)
+        whenever(taskDao.getCategoryTaskCounts()).thenReturn(emptyList())
+        whenever(categoryDao.getAllCategoriesList()).thenReturn(emptyList())
 
         val stats = repository.getTaskStatistics()
 
@@ -203,12 +234,27 @@ class TaskRepositoryImplTest {
         assertEquals(0, stats.averageCompletionTime)
     }
 
+    @Test
+    fun `getTaskStatistics caps inconsistent completion rate at one`() = runTest {
+        whenever(taskDao.getTotalTasksCount()).thenReturn(2)
+        whenever(taskDao.getCompletedTasksCount()).thenReturn(3)
+        whenever(taskDao.getPendingTasksCount()).thenReturn(0)
+        whenever(taskDao.getOverdueTasksCount()).thenReturn(0)
+        whenever(taskDao.getAverageCompletionTime()).thenReturn(null)
+        whenever(taskDao.getCategoryTaskCounts()).thenReturn(emptyList())
+        whenever(categoryDao.getAllCategoriesList()).thenReturn(emptyList())
+
+        val stats = repository.getTaskStatistics()
+
+        assertEquals(1f, stats.completionRate, 0.01f)
+    }
+
     // ===== getEarliestTaskDate =====
 
     @Test
     fun `getEarliestTaskDate returns date when tasks exist`() = runTest {
         val earliest = LocalDateTime.of(2025, 1, 1, 0, 0)
-        `when`(taskDao.getEarliestTaskDate()).thenReturn(earliest)
+        whenever(taskDao.getEarliestTaskDate()).thenReturn(earliest)
 
         val result = repository.getEarliestTaskDate()
 
@@ -217,7 +263,7 @@ class TaskRepositoryImplTest {
 
     @Test
     fun `getEarliestTaskDate returns null when no tasks`() = runTest {
-        `when`(taskDao.getEarliestTaskDate()).thenReturn(null)
+        whenever(taskDao.getEarliestTaskDate()).thenReturn(null)
 
         val result = repository.getEarliestTaskDate()
 
@@ -231,7 +277,7 @@ class TaskRepositoryImplTest {
         val template = createTaskWithCategory(id = "tpl-1", title = "模板任务").copy(
             task = createTaskEntity(id = "tpl-1", title = "模板任务").copy(isTemplate = true)
         )
-        `when`(taskDao.getTemplateTasks()).thenReturn(listOf(template))
+        whenever(taskDao.getTemplateTasks()).thenReturn(listOf(template))
 
         val result = repository.getTemplateTasks()
 
@@ -239,32 +285,12 @@ class TaskRepositoryImplTest {
         assertEquals("模板任务", result[0].title)
     }
 
-    // ===== syncTasks / exportTasks / importTasks =====
-
-    @Test
-    fun `syncTasks returns success stub`() = runTest {
-        val result = repository.syncTasks()
-        assertTrue(result.isSuccess)
-    }
-
-    @Test
-    fun `exportTasks returns success stub`() = runTest {
-        val result = repository.exportTasks()
-        assertTrue(result.isSuccess)
-    }
-
-    @Test
-    fun `importTasks returns success stub`() = runTest {
-        val result = repository.importTasks("test.json")
-        assertTrue(result.isSuccess)
-    }
-
     // ===== deleteCompletedTasks =====
 
     @Test
-    fun `deleteCompletedTasks delegates to DAO`() = runTest {
+    fun `deleteCompletedTasks creates pending tombstones`() = runTest {
         repository.deleteCompletedTasks()
-        verify(taskDao).deleteCompletedTasks()
+        verify(taskDao).softDeleteCompletedTasks(any())
     }
 
     // ===== markTasksAsCompleted =====
@@ -272,6 +298,9 @@ class TaskRepositoryImplTest {
     @Test
     fun `markTasksAsCompleted delegates to DAO`() = runTest {
         repository.markTasksAsCompleted(listOf("t1", "t2"))
-        verify(taskDao).markTasksAsCompleted(listOf("t1", "t2"))
+        verify(taskDao).markTasksAsCompleted(
+            org.mockito.kotlin.eq(listOf("t1", "t2")),
+            any()
+        )
     }
 }

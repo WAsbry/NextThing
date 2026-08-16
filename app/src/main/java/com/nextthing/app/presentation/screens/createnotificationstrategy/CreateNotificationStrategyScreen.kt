@@ -1,6 +1,7 @@
 package com.nextthing.app.presentation.screens.createnotificationstrategy
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,8 +33,10 @@ import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.nextthing.app.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,18 +67,21 @@ fun CreateNotificationStrategyScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgPrimary)
+            .background(Color(0xFFF7F8FC))
+            .statusBarsPadding()
     ) {
         TopNavigationSection(
             onBackPressed = onBackPressed,
-            isEditMode = uiState.isEditMode
+            isEditMode = uiState.isEditMode,
+            isValid = uiState.isValid,
+            onSave = viewModel::saveStrategy
         )
 
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 10.dp)
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -140,8 +146,9 @@ fun CreateNotificationStrategyScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = BgSecondary),
-                    shape = RoundedCornerShape(12.dp)
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, Color(0xFFD6E0ED)),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         CustomAudioSelector(
@@ -161,8 +168,9 @@ fun CreateNotificationStrategyScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = BgSecondary),
-                    shape = RoundedCornerShape(12.dp)
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, Color(0xFFD6E0ED)),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -179,7 +187,7 @@ fun CreateNotificationStrategyScreen(
                         )
                         Text("${uiState.volume}%", fontSize = 12.sp, color = TextMuted, modifier = Modifier.width(36.dp))
                         IconButton(
-                            onClick = { viewModel.playSoundPreview() },
+                            onClick = { viewModel.previewCurrentSound() },
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(Icons.Default.PlayArrow, null, tint = Primary, modifier = Modifier.size(18.dp))
@@ -198,6 +206,14 @@ fun CreateNotificationStrategyScreen(
                 onSelect = { viewModel.updateSystemNotificationMode(SystemNotificationMode.entries[it]) }
             )
 
+            Spacer(modifier = Modifier.height(8.dp))
+            StrategyPreviewRow(
+                vibration = uiState.vibrationSetting.displayName,
+                sound = uiState.soundSetting.displayName,
+                notificationMode = uiState.systemNotificationMode.displayName,
+                onPreview = viewModel::previewCurrentStrategy
+            )
+
             Spacer(modifier = Modifier.height(12.dp))
 
             // 提前提醒
@@ -209,51 +225,35 @@ fun CreateNotificationStrategyScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        BottomActionSection(
-            isValid = uiState.isValid,
-            onCancel = onBackPressed,
-            onSave = { viewModel.saveStrategy() },
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-        )
     }
 }
 
 @Composable
 private fun TopNavigationSection(
     onBackPressed: () -> Unit,
-    isEditMode: Boolean = false
+    isEditMode: Boolean = false,
+    isValid: Boolean,
+    onSave: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .background(Primary)
+    Row(
+        modifier = Modifier.fillMaxWidth().height(60.dp).background(Color.White).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF5F7FC)).clickable(onClick = onBackPressed),
+            contentAlignment = Alignment.Center
         ) {
-            IconButton(
-                onClick = onBackPressed,
-                modifier = Modifier.padding(start = 8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    tint = Color.White
-                )
-            }
-
-            Text(
-                text = if (isEditMode) "编辑通知策略" else "新建通知策略",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 16.dp)
-            )
+            Image(painterResource(R.drawable.icon_detail_back), "返回", Modifier.size(36.dp))
         }
+        Text(if (isEditMode) "编辑通知策略" else "新建通知策略", Modifier.weight(1f), Color(0xFF0E131D), 18.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "保存",
+            Modifier.clickable(enabled = isValid, onClick = onSave),
+            if (isValid) Color(0xFF1A7DFA) else Color(0xFFB6C0CE),
+            18.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -264,8 +264,9 @@ private fun StrategyNameSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = BgSecondary),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color(0xFFD6E0ED)),
+        shape = RoundedCornerShape(8.dp)
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
@@ -284,7 +285,8 @@ private fun StrategyNameSection(
                 textStyle = TextStyle(fontSize = 14.sp, color = TextPrimary),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(BgCard, RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFFD6E0ED), RoundedCornerShape(8.dp))
+                    .background(Color(0xFFF7F8FC), RoundedCornerShape(8.dp))
                     .padding(10.dp),
                 decorationBox = { innerTextField ->
                     Box(modifier = Modifier.fillMaxWidth()) {
@@ -311,8 +313,9 @@ private fun CompactSelectionSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = BgSecondary),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color(0xFFD6E0ED)),
+        shape = RoundedCornerShape(8.dp)
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
@@ -334,15 +337,15 @@ private fun CompactSelectionSection(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) Primary else BgCard)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) Color(0xFF1A7DFA) else Color.White)
                             .border(
                                 width = 1.dp,
-                                color = if (isSelected) Primary else Border,
-                                shape = RoundedCornerShape(6.dp)
+                                color = if (isSelected) Color(0xFF1A7DFA) else Color(0xFFD6E0ED),
+                                shape = RoundedCornerShape(8.dp)
                             )
                             .clickable { onSelect(index) }
-                            .padding(vertical = 8.dp),
+                            .height(40.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -355,6 +358,35 @@ private fun CompactSelectionSection(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StrategyPreviewRow(
+    vibration: String,
+    sound: String,
+    notificationMode: String,
+    onPreview: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().border(1.dp, Color(0xFFD6E0ED), RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp)).background(Color.White).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(Color(0x1A1A7DFA)), contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.icon_action_preview), null, tint = Color(0xFF1A7DFA), modifier = Modifier.size(18.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("试用当前策略", color = Color(0xFF0F1726), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("$vibration · $sound · $notificationMode", color = Color(0xFF61738F), fontSize = 11.sp, maxLines = 1)
+        }
+        Box(
+            Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF1A7DFA)).clickable(onClick = onPreview),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(painterResource(R.drawable.icon_action_preview), "试用当前策略", tint = Color.White, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -377,8 +409,9 @@ private fun AdvanceReminderSection(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = BgSecondary),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color(0xFFD6E0ED)),
+        shape = RoundedCornerShape(8.dp)
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
@@ -408,15 +441,15 @@ private fun AdvanceReminderSection(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) Primary else BgCard)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) Color(0xFF1A7DFA) else Color.White)
                                 .border(
                                     width = 1.dp,
-                                    color = if (isSelected) Primary else Border,
-                                    shape = RoundedCornerShape(6.dp)
+                                    color = if (isSelected) Color(0xFF1A7DFA) else Color(0xFFD6E0ED),
+                                    shape = RoundedCornerShape(8.dp)
                                 )
                                 .clickable { onToggleMinutes(option.minutes) }
-                                .padding(vertical = 8.dp),
+                                .height(40.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -483,7 +516,7 @@ private fun PermissionWarningCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Warning.copy(alpha = 0.1f)),
         border = BorderStroke(1.dp, Warning.copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(8.dp)
     ) {
         Column(
             modifier = Modifier.padding(14.dp)

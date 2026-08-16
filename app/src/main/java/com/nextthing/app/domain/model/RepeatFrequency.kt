@@ -71,8 +71,8 @@ data class RepeatFrequency(
             RepeatFrequencyType.WEEKDAYS,
             RepeatFrequencyType.WEEKENDS,
             RepeatFrequencyType.LEGAL_HOLIDAY -> true
-            RepeatFrequencyType.WEEKLY -> weekdays.isNotEmpty()
-            RepeatFrequencyType.MONTHLY -> monthDays.isNotEmpty()
+            RepeatFrequencyType.WEEKLY -> weekdays.isNotEmpty() && weekdays.all { it in 1..7 }
+            RepeatFrequencyType.MONTHLY -> monthDays.isNotEmpty() && monthDays.all { it in 1..31 }
         }
     }
 }

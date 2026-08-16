@@ -6,7 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.nextthing.app.work.SyncTasksWorker
+import com.nextthing.app.work.SyncWorker
 import java.util.concurrent.TimeUnit
 
 object SyncScheduler {
@@ -17,14 +17,14 @@ object SyncScheduler {
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        val workRequest = PeriodicWorkRequestBuilder<SyncTasksWorker>(6, TimeUnit.HOURS)
+        val workRequest = PeriodicWorkRequestBuilder<SyncWorker>(6, TimeUnit.HOURS)
             .setConstraints(constraints)
             .build()
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             UNIQUE_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             workRequest
         )
     }
-} 
+}

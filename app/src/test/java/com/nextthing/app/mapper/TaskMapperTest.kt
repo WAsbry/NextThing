@@ -7,6 +7,7 @@ import com.nextthing.app.data.mapper.toDomain
 import com.nextthing.app.data.mapper.toEntity
 import com.nextthing.app.data.mapper.toDomainList
 import com.nextthing.app.data.mapper.toEntityList
+import com.nextthing.app.data.mapper.toSyncDto
 import com.nextthing.app.domain.model.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -171,6 +172,12 @@ class TaskMapperTest {
         assertTrue(entity.isTemplate)
         assertEquals("tpl-1", entity.templateTaskId)
         assertEquals(now, entity.instanceDate)
+    }
+
+    @Test
+    fun `deleted TaskEntity maps to a sync tombstone`() {
+        val dto = createTaskEntity().copy(deleted = true).toSyncDto()
+        assertTrue(dto.deleted)
     }
 
     // ===== TaskWithCategory -> Task (toDomain) =====

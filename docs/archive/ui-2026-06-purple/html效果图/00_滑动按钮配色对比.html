@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>专业配色方案</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, 'PingFang SC', sans-serif;
+  background: #F0F2F5; padding: 40px 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 28px;
+}
+h1 { font-size: 22px; color: #2D3436; text-align: center; }
+.sub { font-size: 13px; color: #636E72; text-align: center; max-width: 400px; line-height: 1.6; }
+
+.scheme {
+  background: white; border-radius: 20px; padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06); width: 400px;
+}
+.scheme-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.scheme-title { font-size: 16px; font-weight: 700; color: #2D3436; }
+.scheme-tag {
+  font-size: 11px; padding: 3px 10px; border-radius: 999px; font-weight: 600;
+}
+.tag-rec { background: #6C5CE7; color: white; }
+.scheme-desc { font-size: 13px; color: #636E72; margin-bottom: 16px; line-height: 1.5; }
+
+.preview-row {
+  display: flex; gap: 0; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.1);
+}
+.preview-btn {
+  flex: 1; padding: 24px 12px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.preview-icon { font-size: 22px; color: white; }
+.preview-label { font-size: 13px; font-weight: 600; color: white; }
+.preview-hex { font-size: 10px; color: rgba(255,255,255,0.75); }
+
+/* ── 在手机上的真实效果预览 ── */
+.phone-preview {
+  width: 400px; background: white; border-radius: 16px; padding: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+.phone-label { font-size: 14px; font-weight: 600; color: #2D3436; margin-bottom: 12px; }
+.task-mock {
+  position: relative; overflow: hidden; border-radius: 12px; margin-bottom: 8px;
+}
+.task-bg {
+  display: flex; position: absolute; right: 0; top: 0; bottom: 0;
+}
+.task-bg-btn {
+  width: 72px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px;
+}
+.task-bg-icon { font-size: 16px; color: white; }
+.task-bg-text { font-size: 10px; font-weight: 600; color: white; }
+.task-fg {
+  position: relative; z-index: 1; background: white;
+  padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+  transform: translateX(-200px);
+  transition: transform 0.3s;
+}
+.task-fg-title { font-size: 15px; font-weight: 600; color: #2D3436; }
+.task-fg-meta { font-size: 12px; color: #B2BEC3; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<h1>专业配色方案</h1>
+<p class="sub">基于 NextThing 品牌色 #6C5CE7，从色彩心理学和视觉层级角度出发</p>
+
+<!-- ═══ 方案1：极光渐变（推荐） ═══ -->
+<div class="scheme">
+  <div class="scheme-header">
+    <span class="scheme-title">方案 1 — 极光渐变</span>
+    <span class="scheme-tag tag-rec">推荐</span>
+  </div>
+  <div class="scheme-desc">
+    每个按钮从品牌紫蓝出发，渐变到语义色。统一感强，同时保留色彩含义。<br>
+    完成=紫蓝→薄荷绿（生机）/ 延期=紫蓝→暖金（提醒）/ 放弃=紫蓝→玫红（警示）
+  </div>
+  <div class="preview-row">
+    <div class="preview-btn" style="background: linear-gradient(135deg, #6C5CE7, #00B894);">
+      <span class="preview-icon">✓</span>
+      <span class="preview-label">完成</span>
+      <span class="preview-hex">#6C5CE7 → #00B894</span>
+    </div>
+    <div class="preview-btn" style="background: linear-gradient(135deg, #6C5CE7, #F9A825);">
+      <span class="preview-icon">⏰</span>
+      <span class="preview-label">延期</span>
+      <span class="preview-hex">#6C5CE7 → #F9A825</span>
+    </div>
+    <div class="preview-btn" style="background: linear-gradient(135deg, #6C5CE7, #E84393);">
+      <span class="preview-icon">✕</span>
+      <span class="preview-label">放弃</span>
+      <span class="preview-hex">#6C5CE7 → #E84393</span>
+    </div>
+  </div>
+</div>
+
+<!-- 真实效果 -->
+<div class="phone-preview">
+  <div class="phone-label">极光渐变 · 左滑效果</div>
+  <div class="task-mock">
+    <div class="task-bg">
+      <div class="task-bg-btn" style="background: linear-gradient(135deg, #6C5CE7, #00B894);">
+        <span class="task-bg-icon">✓</span><span class="task-bg-text">完成</span>
+      </div>
+      <div class="task-bg-btn" style="background: linear-gradient(135deg, #6C5CE7, #F9A825);">
+        <span class="task-bg-icon">⏰</span><span class="task-bg-text">延期</span>
+      </div>
+      <div class="task-bg-btn" style="background: linear-gradient(135deg, #6C5CE7, #E84393);">
+        <span class="task-bg-icon">✕</span><span class="task-bg-text">放弃</span>
+      </div>
+    </div>
+    <div class="task-fg">
+      <div>
+        <div class="task-fg-title">开项目周会</div>
+        <div class="task-fg-meta">📅 明天 15:00 · 工作</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 方案2：暗夜深色 ═══ -->
+<div class="scheme">
+  <div class="scheme-header">
+    <span class="scheme-title">方案 2 — 暗夜深色</span>
+  </div>
+  <div class="scheme-desc">
+    统一深色背景，仅用文字颜色区分语义。极简克制，高端质感。<br>
+    所有按钮共享 #2D3436 深色底，完成=薄荷绿文字 / 延期=暖金文字 / 放弃=玫红文字
+  </div>
+  <div class="preview-row">
+    <div class="preview-btn" style="background: #2D3436;">
+      <span class="preview-icon" style="color: #00B894;">✓</span>
+      <span class="preview-label" style="color: #00B894;">完成</span>
+      <span class="preview-hex" style="color: rgba(255,255,255,0.4);">底 #2D3436 · 字 #00B894</span>
+    </div>
+    <div class="preview-btn" style="background: #2D3436;">
+      <span class="preview-icon" style="color: #F9A825;">⏰</span>
+      <span class="preview-label" style="color: #F9A825;">延期</span>
+      <span class="preview-hex" style="color: rgba(255,255,255,0.4);">底 #2D3436 · 字 #F9A825</span>
+    </div>
+    <div class="preview-btn" style="background: #2D3436;">
+      <span class="preview-icon" style="color: #E84393;">✕</span>
+      <span class="preview-label" style="color: #E84393;">放弃</span>
+      <span class="preview-hex" style="color: rgba(255,255,255,0.4);">底 #2D3436 · 字 #E84393</span>
+    </div>
+  </div>
+</div>
+
+<div class="phone-preview">
+  <div class="phone-label">暗夜深色 · 左滑效果</div>
+  <div class="task-mock">
+    <div class="task-bg">
+      <div class="task-bg-btn" style="background: #2D3436;">
+        <span class="task-bg-icon" style="color: #00B894;">✓</span><span class="task-bg-text" style="color: #00B894;">完成</span>
+      </div>
+      <div class="task-bg-btn" style="background: #2D3436;">
+        <span class="task-bg-icon" style="color: #F9A825;">⏰</span><span class="task-bg-text" style="color: #F9A825;">延期</span>
+      </div>
+      <div class="task-bg-btn" style="background: #2D3436;">
+        <span class="task-bg-icon" style="color: #E84393;">✕</span><span class="task-bg-text" style="color: #E84393;">放弃</span>
+      </div>
+    </div>
+    <div class="task-fg">
+      <div>
+        <div class="task-fg-title">开项目周会</div>
+        <div class="task-fg-meta">📅 明天 15:00 · 工作</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 方案3：玻璃拟态 ═══ -->
+<div class="scheme">
+  <div class="scheme-header">
+    <span class="scheme-title">方案 3 — 玻璃拟态</span>
+  </div>
+  <div class="scheme-desc">
+    半透明毛玻璃 + 彩色光晕。现代感极强，和 AI 主题高度契合。<br>
+    每个按钮带微弱的语义色光晕，整体轻盈通透
+  </div>
+  <div class="preview-row" style="background: #F0F2F5;">
+    <div class="preview-btn" style="background: rgba(0,184,148,0.25); backdrop-filter: blur(10px); border: 1px solid rgba(0,184,148,0.3);">
+      <span class="preview-icon" style="color: #00B894;">✓</span>
+      <span class="preview-label" style="color: #00B894;">完成</span>
+      <span class="preview-hex" style="color: rgba(0,184,148,0.6);">薄荷绿光晕</span>
+    </div>
+    <div class="preview-btn" style="background: rgba(249,168,37,0.25); backdrop-filter: blur(10px); border: 1px solid rgba(249,168,37,0.3);">
+      <span class="preview-icon" style="color: #F9A825;">⏰</span>
+      <span class="preview-label" style="color: #F9A825;">延期</span>
+      <span class="preview-hex" style="color: rgba(249,168,37,0.6);">暖金光晕</span>
+    </div>
+    <div class="preview-btn" style="background: rgba(232,67,147,0.25); backdrop-filter: blur(10px); border: 1px solid rgba(232,67,147,0.3);">
+      <span class="preview-icon" style="color: #E84393;">✕</span>
+      <span class="preview-label" style="color: #E84393;">放弃</span>
+      <span class="preview-hex" style="color: rgba(232,67,147,0.6);">玫红光晕</span>
+    </div>
+  </div>
+</div>
+
+<div class="phone-preview">
+  <div class="phone-label">玻璃拟态 · 左滑效果</div>
+  <div class="task-mock">
+    <div class="task-bg" style="background: #F0F2F5;">
+      <div class="task-bg-btn" style="background: rgba(0,184,148,0.2);">
+        <span class="task-bg-icon" style="color: #00B894;">✓</span><span class="task-bg-text" style="color: #00B894;">完成</span>
+      </div>
+      <div class="task-bg-btn" style="background: rgba(249,168,37,0.2);">
+        <span class="task-bg-icon" style="color: #F9A825;">⏰</span><span class="task-bg-text" style="color: #F9A825;">延期</span>
+      </div>
+      <div class="task-bg-btn" style="background: rgba(232,67,147,0.2);">
+        <span class="task-bg-icon" style="color: #E84393;">✕</span><span class="task-bg-text" style="color: #E84393;">放弃</span>
+      </div>
+    </div>
+    <div class="task-fg">
+      <div>
+        <div class="task-fg-title">开项目周会</div>
+        <div class="task-fg-meta">📅 明天 15:00 · 工作</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 方案4：品牌单色 ═══ -->
+<div class="scheme">
+  <div class="scheme-header">
+    <span class="scheme-title">方案 4 — 品牌单色深浅</span>
+  </div>
+  <div class="scheme-desc">
+    Apple 风格。用品牌紫蓝的不同明度区分操作，极致统一。<br>
+    完成=浅紫（轻松）/ 延期=中紫（暂停）/ 放弃=深紫（严肃）
+  </div>
+  <div class="preview-row">
+    <div class="preview-btn" style="background: linear-gradient(to bottom, #A29BFE, #8B7FF7);">
+      <span class="preview-icon">✓</span>
+      <span class="preview-label">完成</span>
+      <span class="preview-hex">#A29BFE 浅紫</span>
+    </div>
+    <div class="preview-btn" style="background: linear-gradient(to bottom, #7C6FF7, #6C5CE7);">
+      <span class="preview-icon">⏰</span>
+      <span class="preview-label">延期</span>
+      <span class="preview-hex">#6C5CE7 中紫</span>
+    </div>
+    <div class="preview-btn" style="background: linear-gradient(to bottom, #5A4BD1, #4A3BC1);">
+      <span class="preview-icon">✕</span>
+      <span class="preview-label">放弃</span>
+      <span class="preview-hex">#4A3BC1 深紫</span>
+    </div>
+  </div>
+</div>
+
+<div class="phone-preview">
+  <div class="phone-label">品牌单色 · 左滑效果</div>
+  <div class="task-mock">
+    <div class="task-bg">
+      <div class="task-bg-btn" style="background: linear-gradient(to bottom, #A29BFE, #8B7FF7);">
+        <span class="task-bg-icon">✓</span><span class="task-bg-text">完成</span>
+      </div>
+      <div class="task-bg-btn" style="background: linear-gradient(to bottom, #7C6FF7, #6C5CE7);">
+        <span class="task-bg-icon">⏰</span><span class="task-bg-text">延期</span>
+      </div>
+      <div class="task-bg-btn" style="background: linear-gradient(to bottom, #5A4BD1, #4A3BC1);">
+        <span class="task-bg-icon">✕</span><span class="task-bg-text">放弃</span>
+      </div>
+    </div>
+    <div class="task-fg">
+      <div>
+        <div class="task-fg-title">开项目周会</div>
+        <div class="task-fg-meta">📅 明天 15:00 · 工作</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,243 @@
+﻿﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextThing — 创建任务 · 语音与AI</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#F8F9FC; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#2D3436; }
+  :root {
+    --primary: #6C5CE7; --primary-dark: #5A4BD1; --primary-light: #A29BFE;
+    --bg-primary: #F8F9FC; --bg-card: #FFFFFF; --bg-secondary: #F1F3F8;
+    --text-primary: #2D3436; --text-secondary: #636E72; --border: #E8ECF0;
+    --danger: #FF6B6B;
+  }
+  .page-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(375px,1fr)); gap:32px; padding:32px; max-width:1600px; margin:0 auto; }
+  .page-title { grid-column:1/-1; text-align:center; padding:24px 0 8px; }
+  .page-title h1 { font-size:28px; font-weight:700; color:var(--primary); }
+  .page-title p { font-size:14px; color:var(--text-secondary); margin-top:8px; }
+  .phone { width:375px; background:var(--bg-primary); border-radius:32px; border:8px solid #1a1a2e; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.15); position:relative; min-height:720px; }
+  .phone-inner { display:flex; flex-direction:column; height:100%; min-height:720px; }
+  .status-bar { display:flex; justify-content:space-between; align-items:center; padding:8px 20px; font-size:12px; font-weight:600; color:#fff; background:var(--primary); }
+  .top-nav { height:48px; background:var(--primary); display:flex; align-items:center; justify-content:space-between; padding:0 8px; position:relative; }
+  .top-nav .back-btn { width:40px;height:40px; display:flex;align-items:center;justify-content:center; color:#fff;font-size:20px;cursor:pointer; }
+  .top-nav .title { position:absolute; left:50%;top:50%;transform:translate(-50%,-50%); color:#fff;font-size:18px;font-weight:600; }
+  .content { flex:1; padding:12px 16px; overflow-y:auto; }
+  .input-card { background:var(--bg-card); border-radius:12px; padding:12px 16px; min-height:100px; box-shadow:0 2px 8px rgba(0,0,0,0.06); margin-bottom:12px; }
+  .input-card .placeholder { color:var(--text-secondary); font-size:16px; line-height:20px; }
+  .input-card .text { color:var(--text-primary); font-size:16px; line-height:20px; }
+  .config-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+  .config-card { background:var(--bg-card); border:0.5px solid var(--border); border-radius:8px; height:80px; padding:12px; position:relative; cursor:pointer; }
+  .config-card .label { font-size:10px; color:var(--text-secondary); position:absolute; top:8px;left:12px; }
+  .config-card .value-row { position:absolute; bottom:12px;left:12px;right:12px; display:flex;align-items:center;gap:8px; }
+  .config-card .value-row .icon { font-size:16px; }
+  .config-card .value-row .value { font-size:14px; color:var(--text-primary); flex:1; }
+  .config-card .value-row .arrow { font-size:12px; color:var(--text-secondary); }
+
+  /* 方案 B 一体化胶囊条 */
+  .bottom-action { padding:12px 16px; }
+  .pill-bar { display:flex; align-items:center; height:52px; background:var(--primary); border-radius:999px; padding:4px; box-shadow:0 6px 24px rgba(108,92,231,0.35); }
+  .pill-bar.disabled { opacity:0.5; }
+  .pill-bar.recording { background:var(--danger); box-shadow:0 6px 24px rgba(255,107,107,0.35); }
+  .pill-bar .mic { width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; flex-shrink:0; cursor:pointer; margin-left:4px; }
+  .pill-bar .divider { width:1px; height:28px; background:rgba(255,255,255,0.25); margin:0 8px; }
+  .pill-bar .btn { flex:1; height:44px; border-radius:999px; background:rgba(255,255,255,0.15); color:#fff; font-size:15px; font-weight:600; border:none; cursor:pointer; margin-right:4px; }
+  .pill-bar .btn:disabled { opacity:0.7; }
+  .voice-wave-inline { display:flex; align-items:center; justify-content:center; gap:3px; height:20px; }
+  .voice-wave-inline .bar { width:3px; background:#fff; border-radius:2px; animation:wave 0.8s ease-in-out infinite; }
+  .voice-wave-inline .bar:nth-child(1){height:6px;animation-delay:0s;} .voice-wave-inline .bar:nth-child(2){height:12px;animation-delay:0.1s;}
+  .voice-wave-inline .bar:nth-child(3){height:18px;animation-delay:0.2s;} .voice-wave-inline .bar:nth-child(4){height:12px;animation-delay:0.3s;}
+  .voice-wave-inline .bar:nth-child(5){height:6px;animation-delay:0.4s;}
+  @keyframes wave { 0%,100%{transform:scaleY(1);} 50%{transform:scaleY(2);} }
+
+  .ai-loading { display:flex; flex-direction:column; align-items:center; padding:40px 0; }
+  .ai-loading .spinner { width:40px;height:40px; border:3px solid var(--border); border-top-color:var(--primary); border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg);} }
+  .ai-loading p { margin-top:12px; font-size:14px; color:var(--text-secondary); }
+  .ai-task-item { display:flex; align-items:center; gap:10px; padding:12px; background:var(--bg-secondary); border-radius:10px; margin-bottom:8px; }
+  .ai-task-item .checkbox { width:22px;height:22px; border-radius:6px; border:2px solid var(--primary); display:flex;align-items:center;justify-content:center; flex-shrink:0; }
+  .ai-task-item .checkbox.checked { background:var(--primary); color:#fff; font-size:14px; }
+  .ai-task-item .task-info { flex:1; }
+  .ai-task-item .task-info .title { font-size:14px; font-weight:500; }
+  .ai-task-item .task-info .meta { font-size:12px; color:var(--text-secondary); margin-top:2px; }
+  .ai-actions { display:flex; gap:8px; margin-top:16px; }
+  .ai-actions button { flex:1; height:44px; border-radius:12px; border:none; font-size:14px; font-weight:600; cursor:pointer; }
+  .ai-actions .btn-edit { background:var(--bg-secondary); color:var(--text-primary); }
+  .ai-actions .btn-create { background:var(--primary); color:#fff; }
+  .ai-error { background:#FFF5F5; border:1px solid #FFD5D5; border-radius:12px; padding:16px; display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .ai-error .icon { font-size:24px; }
+  .ai-error .msg { flex:1; }
+  .ai-error .msg .title { font-size:14px; font-weight:600; color:var(--danger); }
+  .ai-error .msg .desc { font-size:12px; color:var(--text-secondary); margin-top:2px; }
+  .ai-error .retry-btn { padding:6px 16px; border-radius:8px; background:var(--danger); color:#fff; border:none; font-size:12px; cursor:pointer; }
+  .screen-label { text-align:center; padding:12px; font-size:14px; font-weight:600; color:var(--text-secondary); }
+  .screen-label span { display:inline-block; background:#EEF0FF; color:var(--primary); padding:4px 12px; border-radius:12px; }
+</style>
+</head>
+<body>
+<div class="page-grid">
+<div class="page-title">
+  <h1>04-B — 创建任务 · 语音与AI</h1>
+  <p>状态 6-10：录音中 / AI解析中 / 单条结果 / 多条结果 / 解析失败</p>
+</div>
+
+<!-- State 6: 语音录制中 — 红色胶囊条 + 波形 -->
+<div class="screen-label"><span>状态 6：语音录制中 — 红色胶囊条 + 波形</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:42</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div class="input-card"><div class="placeholder">输入任务内容</div></div>
+    <div class="config-grid">
+      <div class="config-card"><div class="label">日期</div><div class="value-row"><span class="icon">📅</span><span class="value">今天(9号)</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">精确时间</div><div class="value-row"><span class="icon">⏰</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">分类</div><div class="value-row"><span class="icon">📁</span><span class="value">未选择</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重要程度</div><div class="value-row"><span class="icon">⚠️</span><span class="value">未选择</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">附件图片</div><div class="value-row"><span class="icon">📷</span><span class="value">未添加</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">通知策略</div><div class="value-row"><span class="icon">🔔</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重复</div><div class="value-row"><span class="icon">🔄</span><span class="value">不重复</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">地理围栏</div><div class="value-row"><span class="icon">📍</span><span class="value">未启用</span><span class="arrow">▼</span></div></div>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar recording">
+      <div class="mic"><div class="voice-wave-inline"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div>
+      <div class="divider"></div>
+      <button class="btn" disabled>松开结束录音</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- State 7: AI 解析中 -->
+<div class="screen-label"><span>状态 7：AI 解析中 — 半透明胶囊条</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:42</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content" style="display:flex;align-items:center;justify-content:center;">
+    <div class="ai-loading">
+      <div class="spinner"></div>
+      <p>AI 正在解析你的任务...</p>
+      <p style="font-size:12px;color:var(--primary);margin-top:4px">「明天下午3点提醒我开会」</p>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar disabled">
+      <div class="mic">🎙</div>
+      <div class="divider"></div>
+      <button class="btn" disabled>解析中...</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- State 8: AI 解析结果（单条） -->
+<div class="screen-label"><span>状态 8：AI 解析结果 — 单条任务确认</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:42</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div style="background:var(--bg-card);border-radius:16px;padding:16px;box-shadow:0 4px 20px rgba(0,0,0,0.08);margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <span style="background:var(--primary);color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">AI</span>
+        <span style="font-size:14px;font-weight:600;color:var(--text-primary)">智能解析结果</span>
+      </div>
+      <div style="background:#EEF0FF;border-radius:12px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:8px">开会</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <span style="background:#fff;padding:3px 10px;border-radius:8px;font-size:12px;color:var(--primary)">📅 明天</span>
+          <span style="background:#fff;padding:3px 10px;border-radius:8px;font-size:12px;color:var(--primary)">⏰ 15:00</span>
+          <span style="background:#fff;padding:3px 10px;border-radius:8px;font-size:12px;color:var(--primary)">🔔 提前15分钟</span>
+        </div>
+      </div>
+      <div class="ai-actions">
+        <button class="btn-edit">编辑后创建</button>
+        <button class="btn-create">直接创建</button>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar disabled">
+      <div class="mic">🎙</div>
+      <div class="divider"></div>
+      <button class="btn" disabled>创建任务</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- State 9: AI 解析结果（多条） -->
+<div class="screen-label"><span>状态 9：AI 解析结果 — 多条任务批量选择</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:42</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div style="background:var(--bg-card);border-radius:16px;padding:16px;box-shadow:0 4px 20px rgba(0,0,0,0.08);margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span style="background:var(--primary);color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">AI</span>
+        <span style="font-size:14px;font-weight:600;color:var(--text-primary)">识别到 3 个任务</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;padding-left:34px;">勾选要创建的任务</div>
+      <div class="ai-task-item">
+        <div class="checkbox checked">✓</div>
+        <div class="task-info"><div class="title">完成项目报告</div><div class="meta">📅 今天 · 🔥 重要紧急</div></div>
+      </div>
+      <div class="ai-task-item">
+        <div class="checkbox checked">✓</div>
+        <div class="task-info"><div class="title">给张经理发邮件</div><div class="meta">📅 今天 · ⭐ 重要不紧急</div></div>
+      </div>
+      <div class="ai-task-item">
+        <div class="checkbox"></div>
+        <div class="task-info"><div class="title">预约下周会议室</div><div class="meta">📅 明天 · 🔵 不紧急不重要</div></div>
+      </div>
+      <div class="ai-actions" style="margin-top:12px;">
+        <button class="btn-edit">编辑后创建</button>
+        <button class="btn-create">创建选中 (2)</button>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar disabled">
+      <div class="mic">🎙</div>
+      <div class="divider"></div>
+      <button class="btn" disabled>创建任务</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- State 10: AI 解析失败 -->
+<div class="screen-label"><span>状态 10：AI 解析失败 — 错误提示</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:42</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="back-btn">←</div><div class="title">创建任务</div><div style="width:40px"></div></div>
+  <div class="content">
+    <div class="input-card"><div class="text">明天下午3点提醒我开会</div></div>
+    <div class="ai-error">
+      <div class="icon">⚠️</div>
+      <div class="msg">
+        <div class="title">AI 解析失败</div>
+        <div class="desc">网络连接超时，请检查网络后重试</div>
+      </div>
+      <button class="retry-btn">重试</button>
+    </div>
+    <div class="config-grid">
+      <div class="config-card"><div class="label">日期</div><div class="value-row"><span class="icon">📅</span><span class="value">今天(9号)</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">精确时间</div><div class="value-row"><span class="icon">⏰</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">分类</div><div class="value-row"><span class="icon">📁</span><span class="value">未选择</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重要程度</div><div class="value-row"><span class="icon">⚠️</span><span class="value">未选择</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">附件图片</div><div class="value-row"><span class="icon">📷</span><span class="value">未添加</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">通知策略</div><div class="value-row"><span class="icon">🔔</span><span class="value">未设置</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">重复</div><div class="value-row"><span class="icon">🔄</span><span class="value">不重复</span><span class="arrow">▼</span></div></div>
+      <div class="config-card"><div class="label">地理围栏</div><div class="value-row"><span class="icon">📍</span><span class="value">未启用</span><span class="arrow">▼</span></div></div>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar">
+      <div class="mic">🎙</div>
+      <div class="divider"></div>
+      <button class="btn">创建任务</button>
+    </div>
+  </div>
+</div></div>
+
+</div>
+</body>
+</html>

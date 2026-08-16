@@ -14,6 +14,7 @@ import com.nextthing.app.domain.model.LocationType
 import com.nextthing.app.domain.service.LocationService
 import com.google.android.gms.location.*
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -132,6 +133,8 @@ class LocationServiceImpl @Inject constructor(
             Timber.d("📍 [LocationService] 第三步：尝试最后已知位置")
             return getLastKnownLocationDirect()
 
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (e: Exception) {
             Timber.e(e, "💥 [LocationService] 获取位置异常")
             null
@@ -238,6 +241,8 @@ class LocationServiceImpl @Inject constructor(
                 Timber.e("❌ [LocationService] 最后已知位置也为空")
                 null
             }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (e: Exception) {
             Timber.e(e, "💥 [LocationService] 获取最后已知位置异常")
             null
@@ -492,4 +497,4 @@ class LocationServiceImpl @Inject constructor(
             else -> com.nextthing.app.domain.service.AccuracyLevel.UNAVAILABLE
         }
     }
-} 
+}

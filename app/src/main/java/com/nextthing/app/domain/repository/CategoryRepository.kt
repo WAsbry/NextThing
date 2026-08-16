@@ -65,8 +65,4 @@ interface CategoryRepository {
         ensurePresetCategories()
     }
 
-    /**
-     * 固定/取消固定分类
-     */
-    suspend fun pinCategory(categoryId: String, isPinned: Boolean): Result<Unit>
 }

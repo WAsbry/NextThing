@@ -14,6 +14,7 @@ import com.nextthing.app.util.NotificationHelper
 import com.nextthing.app.util.TaskAlarmManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.time.LocalDateTime
@@ -51,6 +52,8 @@ class TaskNotificationWorker @AssistedInject constructor(
             // 读取地理围栏全局配置
             val geofenceConfig = try {
                 geofenceUseCases.getGeofenceConfig.getOrDefault()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.tag(TAG_GEOFENCE).w(e, "读取地理围栏配置失败，使用默认值")
                 null
@@ -87,6 +90,8 @@ class TaskNotificationWorker @AssistedInject constructor(
                     if (taskGeofence != null && taskGeofence.isEnabled) {
                         taskGeofenceMap[task.id] = taskGeofence
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Timber.tag(TAG_GEOFENCE).e(e, "获取任务地理围栏失败: ${task.id}")
                 }
@@ -95,7 +100,14 @@ class TaskNotificationWorker @AssistedInject constructor(
             // 第三步：批量检查地理围栏（一次位置获取）
             val geofenceResults = if (taskGeofenceMap.isNotEmpty()) {
                 Timber.tag(TAG_GEOFENCE).d("🛡️ 批量检查 ${taskGeofenceMap.size} 个任务的地理围栏...")
-                geofenceCheckService.checkMultipleTaskGeofences(taskGeofenceMap.keys.toList())
+                try {
+                    geofenceCheckService.checkMultipleTaskGeofences(taskGeofenceMap.keys.toList())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag(TAG_GEOFENCE).e(e, "地理围栏批量检查失败，降级为普通通知")
+                    emptyMap()
+                }
             } else {
                 emptyMap()
             }
@@ -144,9 +156,18 @@ class TaskNotificationWorker @AssistedInject constructor(
                             } else {
                                 // 延期任务
                                 Timber.tag(TAG_GEOFENCE).w("⚠️ 用户在围栏外，延期任务（第${taskGeofence.geofenceDeferCount + 1}次）")
-                                handleOutsideGeofence(task, geofenceStatus)
-                                geofenceUseCases.createTaskGeofence.incrementDeferCount(task.id)
-                                geofenceDelayCount++
+                                if (handleOutsideGeofence(task, geofenceStatus)) {
+                                    geofenceUseCases.createTaskGeofence.incrementDeferCount(task.id)
+                                        .onFailure { error ->
+                                            Timber.tag(TAG_GEOFENCE)
+                                                .e(error, "任务已延期，但围栏延期次数更新失败: ${task.id}")
+                                        }
+                                    geofenceDelayCount++
+                                } else {
+                                    // 延期持久化失败时不能静默吞掉本轮提醒。
+                                    sendNotification(task, strategies, now, dueDate)
+                                    notificationCount++
+                                }
                             }
 
                             // 注意：检查结果已由 GeofenceCheckService 自动记录，无需重复更新
@@ -180,9 +201,11 @@ class TaskNotificationWorker @AssistedInject constructor(
             Timber.tag(TAG).i("   围栏延期: $geofenceDelayCount 个")
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 通知检查失败")
-            Result.retry()
+            WorkerFailurePolicy.result(TAG, runAttemptCount)
         }
     }
 
@@ -295,8 +318,8 @@ class TaskNotificationWorker @AssistedInject constructor(
     private suspend fun handleOutsideGeofence(
         task: com.nextthing.app.domain.model.Task,
         status: com.nextthing.app.domain.model.GeofenceStatus
-    ) {
-        try {
+    ): Boolean {
+        return try {
             val distanceText = String.format("%.0f", status.distance)
             val now = LocalDateTime.now()
             val deferredDueDate = now.plusMinutes(30)
@@ -310,17 +333,25 @@ class TaskNotificationWorker @AssistedInject constructor(
             taskRepository.updateTask(updatedTask)
 
             // 取消旧闹钟并按延期后的时间重新调度
-            taskAlarmManager.cancelTaskAlarm(task.id)
-            if (task.notificationStrategyId != null) {
-                taskAlarmManager.scheduleTaskAlarm(updatedTask)
+            try {
+                taskAlarmManager.cancelTaskAlarm(task.id)
+                if (task.notificationStrategyId != null) {
+                    taskAlarmManager.scheduleTaskAlarm(updatedTask)
+                }
+            } catch (e: Exception) {
+                Timber.tag(TAG_GEOFENCE).e(e, "任务已延期，但精确闹钟重排失败，由周期通知兜底")
             }
 
             Timber.tag(TAG_GEOFENCE).i("✅ 任务已延期30分钟: ${task.title}")
             Timber.tag(TAG_GEOFENCE).d("   距离: ${distanceText}米")
             Timber.tag(TAG_GEOFENCE).d("   新截止: $deferredDueDate")
             Timber.tag(TAG_GEOFENCE).d("   新状态: DELAYED")
+            true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG_GEOFENCE).e(e, "❌ 处理围栏外任务异常")
+            false
         }
     }
 
@@ -360,6 +391,8 @@ class TaskNotificationWorker @AssistedInject constructor(
                     Timber.tag(TAG_GEOFENCE).e("❌ 更新月度统计失败: ${error.message}")
                 }
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG_GEOFENCE).e(e, "更新统计信息异常")
         }

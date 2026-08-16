@@ -51,6 +51,8 @@ data class TaskDetailUiState(
     // 分类和重要性编辑
     val editedCategoryItem: CategoryItem? = null,
     val editedImportanceUrgency: TaskImportanceUrgency? = null,
+    val editedGeofenceEnabled: Boolean = false,
+    val editedGeofenceLocationId: String? = null,
 
     // 附件编辑
     val editedImageUri: String? = null,
@@ -121,6 +123,8 @@ class TaskDetailViewModel @Inject constructor(
 
     private val _availableNotificationStrategies = MutableStateFlow<List<NotificationStrategy>>(emptyList())
     val availableNotificationStrategies: StateFlow<List<NotificationStrategy>> = _availableNotificationStrategies.asStateFlow()
+    private val _geofenceLocations = MutableStateFlow<List<com.nextthing.app.domain.model.GeofenceLocation>>(emptyList())
+    val geofenceLocations: StateFlow<List<com.nextthing.app.domain.model.GeofenceLocation>> = _geofenceLocations.asStateFlow()
 
     private var currentTaskId: String? = null
 
@@ -128,16 +132,23 @@ class TaskDetailViewModel @Inject constructor(
         loadCategories()
         loadSavedLocations()
         loadNotificationStrategies()
+        loadGeofenceLocations()
+    }
+
+    private fun loadGeofenceLocations() {
+        viewModelScope.launch {
+            geofenceUseCases.getGeofenceLocations().collect { _geofenceLocations.value = it }
+        }
     }
 
     private fun loadNotificationStrategies() {
         viewModelScope.launch {
             try {
                 Timber.tag("TaskDetailPerf").d("开始加载通知策略...")
-                // 使用 first() 只加载一次，不持续监听
-                val strategies = notificationStrategyRepository.getAllStrategies().first()
-                _availableNotificationStrategies.value = strategies
-                Timber.tag("TaskDetailPerf").d("通知策略加载完成: ${strategies.size} 个")
+                notificationStrategyRepository.getAllStrategies().collect { strategies ->
+                    _availableNotificationStrategies.value = strategies
+                    Timber.tag("TaskDetailPerf").d("通知策略已同步: ${strategies.size} 个")
+                }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load notification strategies")
             }
@@ -403,6 +414,8 @@ class TaskDetailViewModel @Inject constructor(
             editedActualDuration = task.actualDuration,
             editedCategoryItem = categoryItem,
             editedImportanceUrgency = task.importanceUrgency,
+            editedGeofenceEnabled = _uiState.value.taskGeofence?.isEnabled == true,
+            editedGeofenceLocationId = _uiState.value.taskGeofence?.geofenceLocationId,
             editedImageUri = task.imageUri,
             editedTags = task.tags,
             editedSubtasks = task.subtasks,
@@ -423,6 +436,8 @@ class TaskDetailViewModel @Inject constructor(
             editedActualDuration = 0,
             editedCategoryItem = null,
             editedImportanceUrgency = null,
+            editedGeofenceEnabled = false,
+            editedGeofenceLocationId = null,
             editedImageUri = null,
             editedTags = emptyList(),
             editedSubtasks = emptyList(),
@@ -483,6 +498,17 @@ class TaskDetailViewModel @Inject constructor(
 
     fun updateEditedImportanceUrgency(importanceUrgency: TaskImportanceUrgency?) {
         _uiState.value = _uiState.value.copy(editedImportanceUrgency = importanceUrgency)
+    }
+
+    fun updateEditedGeofenceEnabled(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(editedGeofenceEnabled = enabled)
+    }
+
+    fun updateEditedGeofenceLocation(locationId: String?) {
+        _uiState.value = _uiState.value.copy(
+            editedGeofenceLocationId = locationId,
+            editedGeofenceEnabled = locationId != null
+        )
     }
 
     fun updateEditedTags(tags: List<String>) {
@@ -785,7 +811,8 @@ class TaskDetailViewModel @Inject constructor(
         }
 
         // 位置信息优先从地理围栏获取，无围栏时保留任务原有位置信息，避免清空
-        val locationInfoToSave = state.taskGeofence?.geofenceLocation?.locationInfo ?: task.locationInfo
+        val selectedGeofenceLocation = _geofenceLocations.value.firstOrNull { it.id == state.editedGeofenceLocationId }
+        val locationInfoToSave = selectedGeofenceLocation?.locationInfo ?: task.locationInfo
 
         val updatedTask = task.copy(
             title = state.editedTitle,
@@ -824,6 +851,21 @@ class TaskDetailViewModel @Inject constructor(
                     onSuccess = {
                         Timber.tag("TaskDetailSave").d("✅ 任务保存成功")
 
+                        val existingGeofence = state.taskGeofence
+                        if (!state.editedGeofenceEnabled || state.editedGeofenceLocationId == null) {
+                            if (existingGeofence != null) {
+                                geofenceUseCases.createTaskGeofence.deleteByTaskId(updatedTask.id)
+                            }
+                        } else if (existingGeofence?.geofenceLocationId != state.editedGeofenceLocationId) {
+                            if (existingGeofence != null) {
+                                geofenceUseCases.createTaskGeofence.deleteByTaskId(updatedTask.id)
+                            }
+                            geofenceUseCases.createTaskGeofence(updatedTask.id, state.editedGeofenceLocationId)
+                        } else {
+                            geofenceUseCases.createTaskGeofence.updateEnabled(updatedTask.id, true)
+                        }
+                        val savedTaskGeofence = geofenceUseCases.getTaskGeofence.getByTaskIdOnce(updatedTask.id)
+
                         // 若当前编辑的是重复任务实例，同步将结构性字段写回模板，
                         // 确保后续生成的实例继承最新修改（分类、标题、描述等）
                         val templateId = updatedTask.templateTaskId
@@ -849,6 +891,7 @@ class TaskDetailViewModel @Inject constructor(
 
                         _uiState.value = _uiState.value.copy(
                             task = updatedTask,
+                            taskGeofence = savedTaskGeofence,
                             isEditMode = false,
                             successMessage = "任务修改成功"
                         )

@@ -91,8 +91,7 @@ class CategoryRepositoryImpl @Inject constructor(
                 return Result.failure(IllegalStateException("不能删除预置分类"))
             }
 
-            categoryDao.updateSyncStatus(categoryId, SyncStatus.PENDING, null)
-            categoryDao.deleteCategory(category)
+            categoryDao.softDeleteCategory(categoryId)
             Timber.d("删除分类成功: $categoryId")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -202,15 +201,4 @@ class CategoryRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun pinCategory(categoryId: String, isPinned: Boolean): Result<Unit> {
-        return try {
-            // Note: Category实体不包含isPinned字段，这个方法保留用于向后兼容
-            // 实际的pin功能需要在CategoryEntity中添加isPinned字段才能实现
-            Timber.d("Pin category: $categoryId -> $isPinned (功能待实现)")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Timber.e(e, "Pin category失败: $categoryId")
-            Result.failure(e)
-        }
-    }
 }

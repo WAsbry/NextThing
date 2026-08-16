@@ -1,19 +1,26 @@
 package com.nextthing.app.presentation.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.nextthing.app.presentation.theme.*
+import androidx.compose.ui.window.DialogProperties
 
-/**
- * 延期任务原因输入对话框
- */
 @Composable
 fun PostponeReasonDialog(
     isVisible: Boolean,
@@ -24,105 +31,102 @@ fun PostponeReasonDialog(
 
     var reason by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = true
+        )
+    ) {
         Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = BgCard
-            ),
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = 8.dp
-            )
+            modifier = Modifier.size(340.dp, 220.dp),
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFED7AA)),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 14.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-            ) {
-                // 标题
+            Box(modifier = Modifier.fillMaxSize()) {
                 Text(
                     text = "延期任务",
+                    modifier = Modifier.offset(x = 20.dp, y = 16.dp),
+                    color = Color(0xFF0F172A),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    maxLines = 1
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 提示文字
                 Text(
-                    text = "任务将延期至明天，请输入延期原因（选填）",
+                    text = "任务将延期至明天，请输入延期原因",
+                    modifier = Modifier.offset(x = 20.dp, y = 50.dp),
+                    color = Color(0xFF64748B),
                     fontSize = 14.sp,
-                    color = TextSecondary
+                    maxLines = 1
                 )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 输入框
-                OutlinedTextField(
+                BasicTextField(
                     value = reason,
                     onValueChange = { reason = it },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp),
-                    placeholder = {
-                        Text(
-                            text = "例如：时间冲突、准备不足、临时有事等",
-                            color = TextSecondary,
-                            fontSize = 14.sp
-                        )
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Warning,
-                        unfocusedBorderColor = TextSecondary.copy(alpha = 0.3f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        .offset(x = 20.dp, y = 78.dp)
+                        .size(300.dp, 84.dp)
+                        .background(Color(0xFFF8FAFC), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color(0xFF0F172A),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
                     ),
-                    shape = RoundedCornerShape(8.dp),
-                    maxLines = 4
+                    singleLine = false,
+                    maxLines = 4,
+                    decorationBox = { innerTextField ->
+                        Box(contentAlignment = Alignment.TopStart) {
+                            if (reason.isEmpty()) {
+                                Text(
+                                    text = "例如：时间冲突、准备不足…",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp,
+                                    maxLines = 2
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
                 )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // 按钮行
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    // 取消按钮
-                    TextButton(
-                        onClick = {
+                Text(
+                    text = "取消",
+                    modifier = Modifier
+                        .offset(x = 184.dp, y = 170.dp)
+                        .size(44.dp, 38.dp)
+                        .clickable {
                             reason = ""
                             onDismiss()
                         }
-                    ) {
-                        Text(
-                            text = "取消",
-                            color = TextSecondary,
-                            fontSize = 16.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // 确认按钮
-                    Button(
-                        onClick = {
-                            onConfirm(reason.trim())
-                            reason = ""
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Warning,
-                            contentColor = androidx.compose.ui.graphics.Color.White
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "确认延期",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                        .wrapContentSize(Alignment.Center),
+                    color = Color(0xFF64748B),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Button(
+                    onClick = {
+                        onConfirm(reason.trim())
+                        reason = ""
+                    },
+                    modifier = Modifier
+                        .offset(x = 238.dp, y = 170.dp)
+                        .size(82.dp, 38.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFF59E0B),
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = "确认延期",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
                 }
             }
         }

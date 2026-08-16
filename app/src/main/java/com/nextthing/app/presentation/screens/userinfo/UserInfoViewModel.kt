@@ -7,6 +7,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nextthing.app.data.preferences.TokenManager
+import com.nextthing.app.domain.model.AchievementType
+import com.nextthing.app.domain.usecase.AchievementUseCases
 import com.nextthing.app.domain.usecase.UserUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -23,6 +25,9 @@ data class UserInfoUiState(
     val avatarUri: Uri? = null,
     val nickname: String = "",
     val userId: String = "",
+    val usageDays: Int = 1,
+    val unlockedAchievementsCount: Int = 0,
+    val totalAchievementsCount: Int = AchievementType.entries.size,
     val phoneNumber: String = "",
     val wechatId: String = "",
     val qqId: String = "",
@@ -39,6 +44,7 @@ enum class BindType {
 @HiltViewModel
 class UserInfoViewModel @Inject constructor(
     private val userUseCases: UserUseCases,
+    private val achievementUseCases: AchievementUseCases,
     private val tokenManager: TokenManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -51,6 +57,7 @@ class UserInfoViewModel @Inject constructor(
 
     init {
         loadUserInfo()
+        loadAchievements()
     }
 
     private fun loadUserInfo() {
@@ -60,11 +67,13 @@ class UserInfoViewModel @Inject constructor(
                 userUseCases.getCurrentUser().collect { user ->
                     if (user != null) {
                         _uiState.update {
+                            val usageDays = ((System.currentTimeMillis() - user.createdAt) / (24 * 60 * 60 * 1000)).toInt()
                             it.copy(
                                 currentUserId = user.id,
                                 avatarUri = user.avatarUri?.let { u -> Uri.parse(u) },
                                 nickname = user.nickname,
                                 userId = user.id,
+                                usageDays = usageDays.coerceAtLeast(1),
                                 phoneNumber = user.phoneNumber ?: "",
                                 wechatId = user.wechatId ?: "",
                                 qqId = user.qqId ?: "",
@@ -78,6 +87,22 @@ class UserInfoViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "加载用户信息失败")
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
+            }
+        }
+    }
+
+    private fun loadAchievements() {
+        viewModelScope.launch {
+            try {
+                val (achievements, _) = achievementUseCases.checkAndUnlock()
+                _uiState.update {
+                    it.copy(
+                        unlockedAchievementsCount = achievements.count { progress -> progress.isUnlocked },
+                        totalAchievementsCount = AchievementType.entries.size
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "加载成就信息失败")
             }
         }
     }

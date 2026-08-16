@@ -22,6 +22,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :taskId AND deleted = 0")
     suspend fun getTaskById(taskId: String): TaskWithCategory?
 
+    @Query("SELECT * FROM tasks WHERE id = :taskId")
+    suspend fun getTaskEntityByIdIncludingDeleted(taskId: String): TaskEntity?
+
     @Transaction
     @Query("SELECT * FROM tasks WHERE status = :status AND isTemplate = 0 AND deleted = 0 ORDER BY createdAt DESC")
     fun getTasksByStatus(status: TaskStatus): Flow<List<TaskWithCategory>>
@@ -42,13 +45,17 @@ interface TaskDao {
     @Transaction
     @Query("""
         SELECT * FROM tasks
-        WHERE dueDate < :currentTime AND status = 'PENDING' AND isTemplate = 0 AND deleted = 0
+        WHERE (
+            status = 'OVERDUE'
+            OR (status IN ('PENDING', 'DELAYED') AND dueDate < :currentTime)
+        )
+        AND isTemplate = 0 AND deleted = 0
         ORDER BY dueDate ASC
     """)
     fun getOverdueTasks(currentTime: LocalDateTime = LocalDateTime.now()): Flow<List<TaskWithCategory>>
 
     @Transaction
-    @Query("SELECT * FROM tasks WHERE isUrgent = 1 AND status != 'COMPLETED' AND isTemplate = 0 AND deleted = 0 ORDER BY dueDate ASC")
+    @Query("SELECT * FROM tasks WHERE isUrgent = 1 AND status IN ('PENDING', 'DELAYED', 'OVERDUE') AND isTemplate = 0 AND deleted = 0 ORDER BY dueDate ASC")
     fun getUrgentTasks(): Flow<List<TaskWithCategory>>
 
     @Transaction
@@ -77,29 +84,36 @@ interface TaskDao {
 
     // ========== 同步相关查询 ==========
 
-    @Query("SELECT * FROM tasks WHERE syncStatus = :status AND isTemplate = 0 AND deleted = 0")
+    @Query("SELECT * FROM tasks WHERE syncStatus = :status")
     suspend fun getTasksBySyncStatus(status: SyncStatus): List<TaskEntity>
 
-    @Query("SELECT * FROM tasks WHERE syncStatus = 'PENDING' AND isTemplate = 0")
+    @Query("SELECT * FROM tasks WHERE syncStatus = 'PENDING'")
     suspend fun getPendingSyncTasks(): List<TaskEntity>
 
-    @Query("SELECT * FROM tasks WHERE syncStatus = 'CONFLICT' AND isTemplate = 0 AND deleted = 0")
+    @Query("SELECT * FROM tasks WHERE syncStatus = 'CONFLICT'")
     suspend fun getConflictTasks(): List<TaskEntity>
 
-    @Query("UPDATE tasks SET syncStatus = :status, serverUpdatedAt = :serverTime WHERE id = :taskId")
+    @Query("UPDATE tasks SET syncStatus = :status, serverUpdatedAt = :serverTime, syncError = NULL WHERE id = :taskId")
     suspend fun updateSyncStatus(taskId: String, status: SyncStatus, serverTime: Long? = null)
 
     @Query("UPDATE tasks SET syncStatus = :status, syncError = :error WHERE id = :taskId")
     suspend fun updateSyncError(taskId: String, status: SyncStatus, error: String?)
 
-    @Query("SELECT COUNT(*) FROM tasks WHERE syncStatus = 'PENDING' AND isTemplate = 0 AND deleted = 0")
+    @Query("SELECT COUNT(*) FROM tasks WHERE syncStatus = 'PENDING'")
     suspend fun getPendingSyncCount(): Int
 
-    @Query("SELECT COUNT(*) FROM tasks WHERE syncStatus = 'CONFLICT' AND isTemplate = 0 AND deleted = 0")
+    @Query("SELECT COUNT(*) FROM tasks WHERE syncStatus = 'CONFLICT'")
     suspend fun getConflictCount(): Int
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: TaskEntity): Long
+
+    /**
+     * Used by recurring generation. IGNORE makes the unique
+     * (templateTaskId, instanceDate) index the atomic idempotency boundary.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertTaskIfAbsent(task: TaskEntity): Long
     
     @Update
     suspend fun updateTask(task: TaskEntity)
@@ -109,18 +123,50 @@ interface TaskDao {
     
     @Query("DELETE FROM tasks WHERE id = :taskId")
     suspend fun deleteTaskById(taskId: String)
+
+    @Query("""
+        UPDATE tasks
+        SET deleted = 1, syncStatus = 'PENDING', syncError = NULL, updatedAt = :updatedAt
+        WHERE id = :taskId
+    """)
+    suspend fun softDeleteTask(taskId: String, updatedAt: LocalDateTime)
     
-    @Query("DELETE FROM tasks WHERE status = 'COMPLETED'")
-    suspend fun deleteCompletedTasks()
+    @Query("""
+        UPDATE tasks
+        SET deleted = 1, syncStatus = 'PENDING', syncError = NULL, updatedAt = :updatedAt
+        WHERE status = 'COMPLETED' AND deleted = 0
+    """)
+    suspend fun softDeleteCompletedTasks(updatedAt: LocalDateTime)
+
+    @Query("""
+        UPDATE tasks
+        SET deleted = 1, syncStatus = 'PENDING', syncError = NULL, updatedAt = :updatedAt
+        WHERE deleted = 0
+    """)
+    suspend fun softDeleteAllTasks(updatedAt: LocalDateTime)
     
     @Query("DELETE FROM tasks")
     suspend fun deleteAllTasks()
     
-    @Query("UPDATE tasks SET status = 'COMPLETED', completedAt = :completedAt, syncStatus = 'PENDING' WHERE id IN (:taskIds)")
+    @Query("""
+        UPDATE tasks
+        SET status = 'COMPLETED', completedAt = :completedAt, updatedAt = :completedAt,
+            syncStatus = 'PENDING', syncError = NULL
+        WHERE id IN (:taskIds) AND deleted = 0
+    """)
     suspend fun markTasksAsCompleted(taskIds: List<String>, completedAt: LocalDateTime = LocalDateTime.now())
 
-    @Query("UPDATE tasks SET categoryId = :categoryId, syncStatus = 'PENDING' WHERE id IN (:taskIds)")
-    suspend fun bulkUpdateTaskCategory(taskIds: List<String>, categoryId: String)
+    @Query("""
+        UPDATE tasks
+        SET categoryId = :categoryId, updatedAt = :updatedAt,
+            syncStatus = 'PENDING', syncError = NULL
+        WHERE id IN (:taskIds) AND deleted = 0
+    """)
+    suspend fun bulkUpdateTaskCategory(
+        taskIds: List<String>,
+        categoryId: String,
+        updatedAt: LocalDateTime = LocalDateTime.now()
+    )
     
     // 统计查询
     @Query("SELECT COUNT(*) FROM tasks WHERE isTemplate = 0 AND deleted = 0")
@@ -178,7 +224,7 @@ interface TaskDao {
     // ========== 重复任务相关查询 ==========
 
     @Transaction
-    @Query("SELECT * FROM tasks WHERE isTemplate = 1")
+    @Query("SELECT * FROM tasks WHERE isTemplate = 1 AND deleted = 0")
     suspend fun getTemplateTasks(): List<TaskWithCategory>
 
     @Transaction
@@ -201,11 +247,19 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE templateTaskId = :templateId")
     suspend fun getInstancesByTemplateId(templateId: String): List<TaskWithCategory>
 
-    @Query("DELETE FROM tasks WHERE templateTaskId = :templateId")
-    suspend fun deleteInstancesByTemplateId(templateId: String)
+    @Query("""
+        UPDATE tasks
+        SET deleted = 1, syncStatus = 'PENDING', syncError = NULL, updatedAt = :updatedAt
+        WHERE templateTaskId = :templateId
+    """)
+    suspend fun softDeleteInstancesByTemplateId(templateId: String, updatedAt: LocalDateTime)
 
-    @Query("DELETE FROM tasks WHERE id = :templateId OR templateTaskId = :templateId")
-    suspend fun deleteTemplateAndAllInstances(templateId: String)
+    @Query("""
+        UPDATE tasks
+        SET deleted = 1, syncStatus = 'PENDING', syncError = NULL, updatedAt = :updatedAt
+        WHERE id = :templateId OR templateTaskId = :templateId
+    """)
+    suspend fun softDeleteTemplateAndAllInstances(templateId: String, updatedAt: LocalDateTime)
 
     // ========== 日历视图查询 ==========
 
@@ -253,4 +307,4 @@ interface TaskDao {
 data class CategoryTaskCount(
     val categoryId: String,
     val count: Int
-) 
+)

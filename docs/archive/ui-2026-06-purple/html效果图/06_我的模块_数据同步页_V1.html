@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NextThing 我的模块 - 数据同步页 V1</title>
+  <style>
+    :root {
+      --purple: #7057f5;
+      --blue: #1565c0;
+      --cyan: #16a8b8;
+      --green: #20a875;
+      --amber: #df9639;
+      --red: #df5c66;
+      --ink: #202331;
+      --sub: #697083;
+      --muted: #a6acb8;
+      --card: rgba(255,255,255,.82);
+      --shadow: 0 24px 70px rgba(32,35,49,.15);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(112,87,245,.16), transparent 30%),
+        radial-gradient(circle at 84% 18%, rgba(21,101,192,.14), transparent 28%),
+        linear-gradient(135deg, #fbfcff, #eceff6);
+      color: var(--ink);
+      font-family: "Segoe UI Variable", "HarmonyOS Sans SC", "Noto Sans SC", "Microsoft YaHei UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .workspace {
+      width: min(1180px, 100%);
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 28px;
+      padding: 28px;
+      align-items: start;
+    }
+    aside {
+      position: sticky;
+      top: 28px;
+      min-height: calc(100vh - 56px);
+      padding: 30px 28px;
+      border-radius: 28px;
+      background: rgba(255,255,255,.72);
+      border: 1px solid rgba(255,255,255,.86);
+      box-shadow: 0 22px 70px rgba(32,35,49,.08);
+      backdrop-filter: blur(18px);
+    }
+    .kicker {
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 12px 0 14px;
+      font-size: 34px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+    .lead {
+      margin: 0 0 24px;
+      color: var(--sub);
+      line-height: 1.72;
+      font-size: 14px;
+    }
+    .panel-title {
+      margin: 24px 0 12px;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .map {
+      display: grid;
+      gap: 9px;
+    }
+    .map-row {
+      display: grid;
+      grid-template-columns: 78px 1fr;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(247,248,255,.88);
+      border: 1px solid rgba(226,229,239,.8);
+      font-size: 12px;
+    }
+    .map-row span {
+      color: var(--sub);
+      line-height: 1.45;
+    }
+    .stage {
+      display: grid;
+      grid-template-columns: 390px minmax(320px, 1fr);
+      gap: 28px;
+      align-items: start;
+    }
+    .phone {
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      border-radius: 34px;
+      border: 10px solid #171923;
+      background: #f5efff;
+      box-shadow: var(--shadow);
+    }
+    .screen {
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 10%, rgba(255,255,255,.48), transparent 28%),
+        linear-gradient(120deg, #efe9ff 0%, #f2f7ff 48%, #eaf4ff 100%);
+    }
+    .status {
+      height: 30px;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      padding: 0 20px 6px;
+      color: #2e2840;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .topbar {
+      height: 50px;
+      padding: 8px 16px 8px 12px;
+      display: grid;
+      grid-template-columns: 36px 1fr 36px;
+      align-items: center;
+    }
+    .circle-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.68);
+      border: 1px solid rgba(255,255,255,.78);
+      color: #3f345d;
+      font-size: 23px;
+      font-weight: 300;
+      box-shadow: 0 8px 20px rgba(80,62,160,.08);
+    }
+    .back-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.72);
+      border: 1px solid rgba(112,87,245,.10);
+      color: #372f5a;
+      font-size: 22px;
+      font-weight: 400;
+      box-shadow: 0 8px 20px rgba(80,62,160,.08);
+    }
+    .title { text-align: center; }
+    .title h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 950;
+    }
+    .title p {
+      margin: 2px 0 0;
+      color: rgba(47,40,80,.62);
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .content {
+      height: calc(100% - 80px);
+      overflow: auto;
+      padding: 6px 14px 18px;
+      scrollbar-width: none;
+    }
+    .content::-webkit-scrollbar { display: none; }
+    .hero-card {
+      position: relative;
+      overflow: hidden;
+      padding: 14px;
+      border-radius: 22px;
+      color: #fff;
+      background:
+        radial-gradient(circle at 14% 18%, rgba(255,255,255,.34), transparent 25%),
+        radial-gradient(circle at 88% 14%, rgba(22,168,184,.4), transparent 28%),
+        linear-gradient(135deg, #7057f5 0%, #1565c0 58%, #16a8b8 100%);
+      box-shadow: 0 18px 38px rgba(54,86,170,.22);
+    }
+    .hero-main {
+      display: grid;
+      grid-template-columns: 48px 1fr auto;
+      gap: 11px;
+      align-items: start;
+    }
+    .cloud {
+      width: 48px;
+      height: 48px;
+      border-radius: 17px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.28);
+      font-size: 17px;
+      font-weight: 950;
+      box-shadow: inset 0 0 18px rgba(255,255,255,.14);
+    }
+    .hero-main h3 {
+      margin: 1px 0 4px;
+      font-size: 18px;
+      line-height: 1.1;
+      font-weight: 950;
+    }
+    .hero-main p {
+      margin: 0;
+      color: rgba(255,255,255,.78);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .status-chip {
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.24);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .sync-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .metric {
+      padding: 10px 8px;
+      border-radius: 15px;
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.18);
+      text-align: center;
+    }
+    .metric strong {
+      display: block;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .metric span {
+      display: block;
+      margin-top: 6px;
+      color: rgba(255,255,255,.74);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .primary-btn,
+    .ghost-btn {
+      height: 38px;
+      border-radius: 999px;
+      border: 0;
+      font-size: 12px;
+      font-weight: 950;
+    }
+    .primary-btn {
+      color: #1565c0;
+      background: #fff;
+    }
+    .ghost-btn {
+      color: #fff;
+      background: rgba(255,255,255,.16);
+      border: 1px solid rgba(255,255,255,.24);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 14px 2px 8px;
+    }
+    .section-title h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 950;
+    }
+    .section-title span {
+      color: rgba(47,40,80,.56);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .state-card,
+    .empty-card {
+      padding: 13px;
+      border-radius: 18px;
+      background: rgba(255,255,255,.78);
+      border: 1px solid rgba(255,255,255,.86);
+      box-shadow: 0 10px 24px rgba(88,72,150,.07);
+    }
+    .state-card {
+      display: grid;
+      grid-template-columns: 38px 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .mini-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 950;
+      background: var(--green);
+    }
+    .state-card h4,
+    .empty-card h4 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .state-card p,
+    .empty-card p {
+      margin: 4px 0 0;
+      color: var(--sub);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .pill {
+      padding: 5px 8px;
+      border-radius: 999px;
+      color: #1f7d53;
+      background: #e8f7f0;
+      font-size: 10px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .empty-card {
+      text-align: center;
+      border-style: dashed;
+      border-color: rgba(112,87,245,.28);
+    }
+    .empty-card .mini-icon {
+      margin: 0 auto 8px;
+      background: linear-gradient(145deg, #1565c0, #16a8b8);
+    }
+    .spec {
+      display: grid;
+      gap: 14px;
+    }
+    .spec-card {
+      padding: 18px;
+      border-radius: 24px;
+      background: rgba(255,255,255,.78);
+      border: 1px solid rgba(255,255,255,.9);
+      box-shadow: 0 16px 50px rgba(32,35,49,.075);
+      backdrop-filter: blur(18px);
+    }
+    .spec-card h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+    .spec-card p,
+    .spec-card li {
+      color: var(--sub);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .spec-card ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    @media (max-width: 980px) {
+      .workspace { grid-template-columns: 1fr; }
+      aside { position: static; min-height: auto; }
+      .stage { grid-template-columns: 1fr; justify-items: center; }
+      .spec { width: min(100%, 430px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="workspace">
+    <aside>
+      <div class="kicker">NEXTTHING / SYNC</div>
+      <h1>数据同步<br>独立页 V1</h1>
+      <p class="lead">
+        这个页面对应代码中的 `SyncScreen`。我的页只提供入口，具体的同步状态、立即同步、全量同步和冲突处理都在这里完成。
+      </p>
+      <div class="panel-title">代码映射</div>
+      <div class="map">
+        <div class="map-row"><b>页面</b><span>SyncScreen / SyncViewModel</span></div>
+        <div class="map-row"><b>状态</b><span>Idle、Syncing、Success、Error</span></div>
+        <div class="map-row"><b>结果</b><span>uploadedTasks、downloadedTasks、conflicts、timestamp</span></div>
+        <div class="map-row"><b>操作</b><span>立即同步、全量同步、使用服务端解决冲突</span></div>
+      </div>
+    </aside>
+
+    <main class="stage">
+      <section class="phone">
+        <div class="screen">
+          <div class="status"><span>9:41</span><span>61%</span></div>
+          <div class="topbar">
+            <div class="back-btn">‹</div>
+            <div class="title">
+              <h2>数据同步</h2>
+              <p>云端任务数据</p>
+            </div>
+            <div></div>
+          </div>
+          <div class="content">
+            <section class="hero-card">
+              <div class="hero-main">
+                <div class="cloud">SYNC</div>
+                <div>
+                  <h3>同步状态空闲</h3>
+                  <p>保持任务数据在本地与云端之间一致，冲突时可手动处理。</p>
+                </div>
+                <div class="status-chip">空闲</div>
+              </div>
+              <div class="sync-metrics">
+                <div class="metric">
+                  <strong>0</strong>
+                  <span>上传</span>
+                </div>
+                <div class="metric">
+                  <strong>0</strong>
+                  <span>下载</span>
+                </div>
+                <div class="metric">
+                  <strong>0</strong>
+                  <span>冲突</span>
+                </div>
+              </div>
+              <div class="action-row">
+                <button class="primary-btn">立即同步</button>
+                <button class="ghost-btn">全量同步</button>
+              </div>
+            </section>
+
+            <div class="section-title">
+              <h3>最近同步</h3>
+              <span>SyncPreferences</span>
+            </div>
+            <div class="state-card">
+              <div class="mini-icon">OK</div>
+              <div>
+                <h4>暂无同步记录</h4>
+                <p>完成第一次同步后，这里展示上次同步时间。</p>
+              </div>
+              <div class="pill">待开始</div>
+            </div>
+
+            <div class="section-title">
+              <h3>冲突处理</h3>
+              <span>本地与服务端</span>
+            </div>
+            <div class="empty-card">
+              <div class="mini-icon">0</div>
+              <h4>没有冲突</h4>
+              <p>当本地和服务端同时修改同一任务时，会在这里显示冲突列表。</p>
+            </div>
+
+            <div class="section-title">
+              <h3>同步说明</h3>
+              <span>当前能力边界</span>
+            </div>
+            <div class="state-card">
+              <div class="mini-icon" style="background:#7057f5;">API</div>
+              <div>
+                <h4>任务数据同步</h4>
+                <p>当前围绕任务上传、下载、冲突解决，不承担导出和清理。</p>
+              </div>
+              <div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="spec">
+        <div class="spec-card">
+          <h2>列表审核意见</h2>
+          <ul>
+            <li>数据同步是独立页面，不能用开关表达。</li>
+            <li>导出数据是 BottomSheet，不需要全屏页。</li>
+            <li>清除已完成是破坏性低频操作，不放在我的页首版数据管理入口里。</li>
+          </ul>
+        </div>
+        <div class="spec-card">
+          <h2>Compose 对齐</h2>
+          <p>
+            后续实现时复用 `SyncScreen` 和 `SyncViewModel`，主要做视觉升级；我的页入口调用 `onNavigateToSync`，不要把同步逻辑直接塞进我的页。
+          </p>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

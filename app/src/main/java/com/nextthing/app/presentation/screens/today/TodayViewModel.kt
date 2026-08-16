@@ -11,6 +11,8 @@ import com.nextthing.app.domain.service.LocationService
 import com.nextthing.app.domain.service.WeatherService
 import com.nextthing.app.domain.usecase.TaskUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +54,63 @@ data class TodayUiState(
     val collapseOverdue: Boolean = false,
     val collapseFuture: Boolean = false
 )
+
+/**
+ * 刷新权限/系统开关时只同步环境状态，不把“尚未取得位置”误判为“正在请求位置”。
+ * isLocationLoading 只允许由真实的前台定位 Job 管理。
+ */
+internal fun TodayUiState.withLocationEnvironment(
+    hasPermission: Boolean,
+    isEnabled: Boolean,
+    validCachedLocation: LocationInfo?
+): TodayUiState {
+    val stateWithEnvironment = copy(
+        hasLocationPermission = hasPermission,
+        isLocationEnabled = isEnabled
+    )
+
+    return when {
+        !hasPermission -> stateWithEnvironment.copy(
+            currentLocationName = "需要位置权限",
+            isLocationLoading = false
+        )
+        !isEnabled -> stateWithEnvironment.copy(
+            currentLocationName = "请开启位置服务",
+            isLocationLoading = false
+        )
+        currentLocation != null -> stateWithEnvironment
+        validCachedLocation != null -> stateWithEnvironment.copy(
+            currentLocation = validCachedLocation,
+            currentLocationName = validCachedLocation.locationName,
+            isLocationLoading = false
+        )
+        else -> stateWithEnvironment
+    }
+}
+
+internal fun TodayUiState.locationRequestStarted(): TodayUiState = copy(
+    isLocationLoading = true,
+    locationError = null,
+    currentLocationName = "正在获取位置..."
+)
+
+internal fun TodayUiState.locationRequestFailed(
+    locationName: String,
+    errorMessage: String?
+): TodayUiState = copy(
+    currentLocationName = locationName,
+    isLocationLoading = false,
+    locationError = errorMessage
+)
+
+internal fun TodayUiState.locationRequestCancelled(
+    locationName: String,
+    errorMessage: String
+): TodayUiState = when {
+    !hasLocationPermission || !isLocationEnabled || currentLocation != null ->
+        copy(isLocationLoading = false)
+    else -> locationRequestFailed(locationName, errorMessage)
+}
 
 @HiltViewModel
 class TodayViewModel @Inject constructor(
@@ -121,6 +180,16 @@ class TodayViewModel @Inject constructor(
     private var cachedLocationInfo: LocationInfo? = null
     private var lastLocationUpdateTime: Long = 0
     private val LOCATION_CACHE_DURATION = 5 * 60 * 1000L // 5分钟缓存
+    private val LOCATION_REQUEST_TIMEOUT = 35_000L
+
+    // 同一时刻最多一个可见定位请求和一个静默定位请求。
+    private var foregroundLocationJob: Job? = null
+    private var silentLocationJob: Job? = null
+
+    private enum class LocationRequestMode {
+        INITIAL,
+        MANUAL
+    }
 
     // 经纬度变化阈值（约110米）
     private val LOCATION_CHANGE_THRESHOLD = 0.001
@@ -542,81 +611,7 @@ class TodayViewModel @Inject constructor(
     }
 
     fun requestCurrentLocation() {
-        viewModelScope.launch {
-            Timber.d("开始请求位置信息")
-            
-            // 立即设置加载状态
-            _uiState.value = _uiState.value.copy(
-                isLocationLoading = true,
-                locationError = null,
-                currentLocationName = "正在获取位置..."
-            )
-            
-            // 检查权限状态
-            if (!locationService.hasLocationPermission()) {
-                Timber.w("位置权限检查失败")
-                _uiState.value = _uiState.value.copy(
-                    currentLocationName = "需要位置权限",
-                    isLocationLoading = false,
-                    locationError = "请授予位置权限以获取当前位置"
-                )
-                return@launch
-            }
-            
-            if (!locationService.isLocationEnabled()) {
-                Timber.w("位置服务检查失败")
-                _uiState.value = _uiState.value.copy(
-                    currentLocationName = "请开启位置服务",
-                    isLocationLoading = false,
-                    locationError = "请在设置中开启位置服务"
-                )
-                return@launch
-            }
-            
-            Timber.d("权限和服务检查通过，开始获取位置")
-            
-            try {
-                // 优先网络定位，再GPS定位
-                val location = withTimeoutOrNull(35000) { // 35秒超时
-                    locationService.getCurrentLocation(forceRefresh = true)
-                }
-
-                if (location != null) {
-                    // 位置获取成功，更新缓存和UI
-                    updateLocationCache(location)
-                    _uiState.value = _uiState.value.copy(
-                        currentLocation = location,
-                        currentLocationName = location.locationName,
-                        isLocationLoading = false,
-                        locationError = null
-                    )
-                    Timber.d("手动位置获取成功: ${location.locationName}")
-
-                    // 显示位置更新提示
-                    showLocationTooltip()
-                } else {
-                    // 位置获取失败或超时
-                    val errorMsg = "获取位置失败"
-
-                    _uiState.value = _uiState.value.copy(
-                        currentLocationName = errorMsg,
-                        isLocationLoading = false,
-                        locationError = "位置获取失败，请检查权限和位置服务"
-                    )
-                    Timber.w("手动位置获取失败: $errorMsg")
-
-                    // 显示位置获取帮助对话框
-                    _showLocationHelpDialog.value = true
-                }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    currentLocationName = "位置获取异常",
-                    isLocationLoading = false,
-                    locationError = e.message
-                )
-                Timber.e(e, "手动位置获取异常")
-            }
-        }
+        startForegroundLocationRequest(LocationRequestMode.MANUAL)
     }
     
     /**
@@ -636,12 +631,6 @@ class TodayViewModel @Inject constructor(
      */
     private val _showLocationTooltip = MutableStateFlow(false)
     val showLocationTooltip: StateFlow<Boolean> = _showLocationTooltip.asStateFlow()
-    
-    /**
-     * 显示位置帮助对话框状态
-     */
-    private val _showLocationHelpDialog = MutableStateFlow(false)
-    val showLocationHelpDialog: StateFlow<Boolean> = _showLocationHelpDialog.asStateFlow()
     
     /**
      * 串行初始化位置流程：权限检查 → 加载DB缓存 → 开始位置获取
@@ -703,20 +692,6 @@ class TodayViewModel @Inject constructor(
         _showLocationTooltip.value = false
     }
     
-    /**
-     * 显示位置帮助对话框
-     */
-    fun showLocationHelpDialog() {
-        _showLocationHelpDialog.value = true
-    }
-    
-    /**
-     * 隐藏位置帮助对话框
-     */
-    fun hideLocationHelpDialog() {
-        _showLocationHelpDialog.value = false
-    }
-
     /**
      * 获取天气信息
      */
@@ -788,35 +763,14 @@ class TodayViewModel @Inject constructor(
     private suspend fun performPermissionCheck() {
         val hasPermission = locationService.hasLocationPermission()
         val isEnabled = locationService.isLocationEnabled()
+        val validCachedLocation = cachedLocationInfo?.takeIf { isCacheValid() }
 
-        _uiState.value = _uiState.value.copy(
-            hasLocationPermission = hasPermission,
-            isLocationEnabled = isEnabled
-        )
-
-        if (!hasPermission) {
-            _uiState.value = _uiState.value.copy(
-                currentLocationName = "需要位置权限",
-                isLocationLoading = false
+        _uiState.update {
+            it.withLocationEnvironment(
+                hasPermission = hasPermission,
+                isEnabled = isEnabled,
+                validCachedLocation = validCachedLocation
             )
-        } else if (!isEnabled) {
-            _uiState.value = _uiState.value.copy(
-                currentLocationName = "请开启位置服务",
-                isLocationLoading = false
-            )
-        } else if (_uiState.value.currentLocation == null) {
-            if (isCacheValid()) {
-                _uiState.value = _uiState.value.copy(
-                    currentLocation = cachedLocationInfo,
-                    currentLocationName = cachedLocationInfo?.locationName ?: "未知位置",
-                    isLocationLoading = false
-                )
-            } else {
-                _uiState.value = _uiState.value.copy(
-                    currentLocationName = "正在获取位置...",
-                    isLocationLoading = true
-                )
-            }
         }
     }
     
@@ -852,8 +806,10 @@ class TodayViewModel @Inject constructor(
 
             Timber.tag("LocationUpdate").d("新权限状态: hasPermission=$newPermission, isEnabled=$newLocationEnabled")
 
-            if (!oldPermission && newPermission && newLocationEnabled) {
-                Timber.tag("LocationUpdate").d("🆕 权限刚被授予 → 调用 doAutoStartLocationUpdate()")
+            val locationBecameAvailable =
+                (!oldPermission && newPermission) || (!oldLocationEnabled && newLocationEnabled)
+            if (locationBecameAvailable && newPermission && newLocationEnabled) {
+                Timber.tag("LocationUpdate").d("🆕 定位条件刚恢复 → 调用 doAutoStartLocationUpdate()")
                 doAutoStartLocationUpdate()
             } else if (newPermission && newLocationEnabled) {
                 Timber.tag("LocationUpdate").d("✅ 有权限 → 调用 silentLocationUpdate()")
@@ -946,35 +902,7 @@ class TodayViewModel @Inject constructor(
 
             isInitializing = false
             Timber.tag("LocationUpdate").d("🏁 初始化完成（显示缓存），后台静默获取新位置")
-
-            viewModelScope.launch {
-                try {
-                    Timber.tag("LocationUpdate").d("📡 后台静默调用 locationService.getCurrentLocation()")
-                    val newLocation = locationService.getCurrentLocation(forceRefresh = false)
-
-                    if (newLocation != null) {
-                        val addressChanged = isLocationAddressChanged(cachedLocationInfo, newLocation)
-                        Timber.tag("LocationUpdate").d("📊 地址对比: ${if (addressChanged) "已变化" else "未变化"}")
-                        updateLocationCache(newLocation)
-                        if (addressChanged) {
-                            Timber.tag("LocationUpdate").d("🔄 地址变化，更新UI")
-                            _uiState.value = _uiState.value.copy(
-                                currentLocation = newLocation,
-                                currentLocationName = newLocation.locationName,
-                                isLocationLoading = false,
-                                locationError = null
-                            )
-                            silentWeatherUpdate(newLocation)
-                        } else {
-                            Timber.tag("LocationUpdate").d("➡️ 地址未变化，仅更新缓存")
-                        }
-                    } else {
-                        Timber.tag("LocationUpdate").w("❌ 后台获取失败，保持显示缓存")
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("LocationUpdate").e(e, "💥 后台获取异常，保持显示缓存")
-                }
-            }
+            silentLocationUpdate()
 
             Timber.tag("LocationUpdate").d("━━━━━ autoStartLocationUpdate 结束（静默更新）━━━━━")
         }
@@ -984,67 +912,101 @@ class TodayViewModel @Inject constructor(
      * 开始位置获取（首次获取或缓存无效时）
      */
     private fun startLocationAcquisition() {
-        viewModelScope.launch {
-            Timber.tag("LocationUpdate").d("━━━━━ startLocationAcquisition 开始 ━━━━━")
-            Timber.tag("LocationUpdate").d("📍 开始首次位置获取（显示加载动画）")
+        startForegroundLocationRequest(LocationRequestMode.INITIAL)
+    }
 
-            _uiState.value = _uiState.value.copy(
-                isLocationLoading = true,
-                currentLocationName = "正在获取位置...",
-                locationError = null
-            )
-            Timber.tag("LocationUpdate").d("✅ UI已设置为加载状态")
+    private fun startForegroundLocationRequest(mode: LocationRequestMode) {
+        if (foregroundLocationJob?.isActive == true) {
+            Timber.tag("LocationUpdate").d("已有前台定位请求进行中，跳过重复请求")
+            return
+        }
+
+        foregroundLocationJob = viewModelScope.launch {
+            val isInitialRequest = mode == LocationRequestMode.INITIAL
+            Timber.tag("LocationUpdate").d("━━━━━ 前台位置获取开始（$mode）━━━━━")
+            _uiState.update { it.locationRequestStarted() }
 
             try {
-                Timber.tag("LocationUpdate").d("📡 调用 locationService.getCurrentLocation(forceRefresh=true)")
-                // 优先网络定位，再GPS定位
-                val location = withTimeoutOrNull(35000) { // 35秒超时
+                if (!locationService.hasLocationPermission()) {
+                    Timber.tag("LocationUpdate").w("位置权限检查失败")
+                    _uiState.update {
+                        it.locationRequestFailed(
+                            locationName = "需要位置权限",
+                            errorMessage = "请授予位置权限以获取当前位置"
+                        ).copy(hasLocationPermission = false)
+                    }
+                    return@launch
+                }
+
+                if (!locationService.isLocationEnabled()) {
+                    Timber.tag("LocationUpdate").w("位置服务检查失败")
+                    _uiState.update {
+                        it.locationRequestFailed(
+                            locationName = "请开启位置服务",
+                            errorMessage = "请在设置中开启位置服务"
+                        ).copy(isLocationEnabled = false)
+                    }
+                    return@launch
+                }
+
+                Timber.tag("LocationUpdate").d("调用 locationService.getCurrentLocation(forceRefresh=true)")
+                val location = withTimeoutOrNull(LOCATION_REQUEST_TIMEOUT) {
                     locationService.getCurrentLocation(forceRefresh = true)
                 }
 
                 if (location != null) {
-                    Timber.tag("LocationUpdate").d("✅ 位置获取成功:")
-                    Timber.tag("LocationUpdate").d("   地址: ${location.locationName}")
-                    Timber.tag("LocationUpdate").d("   经纬度: (${location.latitude}, ${location.longitude})")
-
-                    // 位置获取成功，更新缓存和UI
                     updateLocationCache(location)
+                    _uiState.update {
+                        it.copy(
+                            currentLocation = location,
+                            currentLocationName = location.locationName,
+                            isLocationLoading = false,
+                            locationError = null
+                        )
+                    }
+                    Timber.tag("LocationUpdate").d("位置获取成功: ${location.locationName}")
 
-                    _uiState.value = _uiState.value.copy(
-                        currentLocation = location,
-                        currentLocationName = location.locationName,
-                        isLocationLoading = false,
-                        locationError = null
-                    )
-                    Timber.tag("LocationUpdate").d("✅ UI已更新显示新位置（关闭加载动画）")
-
-                    // 自动获取天气信息
-                    Timber.tag("LocationUpdate").d("🌤️ 位置获取成功，开始调用天气服务...")
-                    loadWeatherInfo()
+                    if (isInitialRequest) {
+                        loadWeatherInfo()
+                    } else {
+                        showLocationTooltip()
+                    }
                 } else {
-                    // 位置获取失败或超时
-                    Timber.tag("LocationUpdate").w("❌ 位置获取超时（返回null）")
-
-                    _uiState.value = _uiState.value.copy(
-                        currentLocationName = "获取位置失败",
-                        isLocationLoading = false,
-                        locationError = "位置获取超时，请检查GPS信号或稍后重试"
-                    )
+                    val failureMessage = if (isInitialRequest) {
+                        "位置获取超时，请检查GPS信号或稍后重试"
+                    } else {
+                        "位置获取失败，请检查权限和位置服务"
+                    }
+                    _uiState.update {
+                        it.locationRequestFailed("获取位置失败", failureMessage)
+                    }
+                    Timber.tag("LocationUpdate").w("位置获取失败或超时（返回 null）")
                 }
+            } catch (cancellation: CancellationException) {
+                val failureMessage = if (isInitialRequest) {
+                    "位置获取超时，请检查GPS信号或稍后重试"
+                } else {
+                    "位置获取失败，请检查权限和位置服务"
+                }
+                _uiState.update {
+                    it.locationRequestCancelled("获取位置失败", failureMessage)
+                }
+                Timber.tag("LocationUpdate").d("前台位置获取已取消（$mode）")
+                throw cancellation
             } catch (e: Exception) {
-                Timber.tag("LocationUpdate").e(e, "💥 位置获取异常: ${e.message}")
-                _uiState.value = _uiState.value.copy(
-                    currentLocationName = "位置获取异常",
-                    isLocationLoading = false,
-                    locationError = e.message
-                )
-            } finally {
-                // 位置获取完成（成功或失败），清除初始化标志
-                if (isInitializing) {
-                    isInitializing = false
-                    Timber.tag("LocationUpdate").d("🏁 初始化完成（位置获取结束），允许onScreenResumed触发更新")
+                Timber.tag("LocationUpdate").e(e, "位置获取异常: ${e.message}")
+                _uiState.update {
+                    it.locationRequestFailed("位置获取异常", e.message)
                 }
-                Timber.tag("LocationUpdate").d("━━━━━ startLocationAcquisition 结束 ━━━━━")
+            } finally {
+                // 任何成功、失败或取消路径都必须收敛 loading。
+                _uiState.update { it.copy(isLocationLoading = false) }
+                if (isInitialRequest && isInitializing) {
+                    isInitializing = false
+                    Timber.tag("LocationUpdate").d("初始化完成（位置获取结束），允许 onScreenResumed 更新")
+                }
+                foregroundLocationJob = null
+                Timber.tag("LocationUpdate").d("━━━━━ 前台位置获取结束（$mode）━━━━━")
             }
         }
     }
@@ -1154,34 +1116,43 @@ class TodayViewModel @Inject constructor(
      * 3. 只有地址名称变化才更新UI
      */
     fun silentLocationUpdate() {
-        viewModelScope.launch {
+        if (foregroundLocationJob?.isActive == true) {
+            Timber.tag("LocationUpdate").d("前台定位请求进行中，跳过静默更新")
+            return
+        }
+        if (silentLocationJob?.isActive == true) {
+            Timber.tag("LocationUpdate").d("静默定位请求进行中，跳过重复更新")
+            return
+        }
+
+        silentLocationJob = viewModelScope.launch {
             Timber.tag("LocationUpdate").d("━━━━━ 静默位置更新开始 ━━━━━")
             Timber.tag("LocationUpdate").d("当前UI状态: locationName=${_uiState.value.currentLocationName}, isLoading=${_uiState.value.isLocationLoading}")
             Timber.tag("LocationUpdate").d("缓存状态: hasCache=${cachedLocationInfo != null}, cacheLocation=${cachedLocationInfo?.locationName}")
 
-            // 检查权限和服务状态
-            if (!locationService.hasLocationPermission()) {
-                Timber.tag("LocationUpdate").w("❌ 静默更新失败：无位置权限")
-                return@launch
-            }
-
-            if (!locationService.isLocationEnabled()) {
-                Timber.tag("LocationUpdate").w("❌ 静默更新失败：位置服务未开启")
-                return@launch
-            }
-
-            Timber.tag("LocationUpdate").d("✅ 权限检查通过")
-
-            // 如果缓存有效（5分钟内），直接使用，不触发任何更新
-            val cacheAge = System.currentTimeMillis() - lastLocationUpdateTime
-            if (isCacheValid()) {
-                Timber.tag("LocationUpdate").d("✅ 静默更新：缓存有效（${cacheAge / 1000}秒前），跳过更新")
-                return@launch
-            }
-
-            // 缓存过期（超过5分钟），后台静默获取新位置
-            Timber.tag("LocationUpdate").d("⏰ 静默更新：缓存过期（${cacheAge / 1000}秒前），后台静默获取新位置")
             try {
+                // 检查权限和服务状态
+                if (!locationService.hasLocationPermission()) {
+                    Timber.tag("LocationUpdate").w("❌ 静默更新失败：无位置权限")
+                    return@launch
+                }
+
+                if (!locationService.isLocationEnabled()) {
+                    Timber.tag("LocationUpdate").w("❌ 静默更新失败：位置服务未开启")
+                    return@launch
+                }
+
+                Timber.tag("LocationUpdate").d("✅ 权限检查通过")
+
+                // 如果缓存有效（5分钟内），直接使用，不触发任何更新
+                val cacheAge = System.currentTimeMillis() - lastLocationUpdateTime
+                if (isCacheValid()) {
+                    Timber.tag("LocationUpdate").d("✅ 静默更新：缓存有效（${cacheAge / 1000}秒前），跳过更新")
+                    return@launch
+                }
+
+                // 缓存过期（超过5分钟），后台静默获取新位置
+                Timber.tag("LocationUpdate").d("⏰ 静默更新：缓存过期（${cacheAge / 1000}秒前），后台静默获取新位置")
                 Timber.tag("LocationUpdate").d("📡 后台静默调用 locationService.getCurrentLocation()（不显示加载动画）")
                 val newLocation = locationService.getCurrentLocation(forceRefresh = false)
 
@@ -1209,7 +1180,6 @@ class TodayViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(
                             currentLocation = newLocation,
                             currentLocationName = newLocation.locationName,
-                            isLocationLoading = false,  // 确保不显示加载动画
                             locationError = null
                         )
                         Timber.tag("LocationUpdate").d("✅ UI已更新显示新地址")
@@ -1224,14 +1194,20 @@ class TodayViewModel @Inject constructor(
                 } else {
                     Timber.tag("LocationUpdate").w("❌ 静默更新：位置获取失败（返回null）")
                     Timber.tag("LocationUpdate").d("   保持当前UI显示（缓存: ${cachedLocationInfo?.locationName}）")
-                    // 失败时什么都不做，UI保持当前状态
+                    // 失败时保留已有位置/错误；finally 只负责收敛残留 loading。
                 }
+            } catch (cancellation: CancellationException) {
+                Timber.tag("LocationUpdate").d("静默位置更新已取消")
+                throw cancellation
             } catch (e: Exception) {
                 Timber.tag("LocationUpdate").e(e, "💥 静默更新异常: ${e.message}")
                 Timber.tag("LocationUpdate").e("   异常类型: ${e.javaClass.simpleName}")
                 Timber.tag("LocationUpdate").d("   保持当前UI显示（缓存: ${cachedLocationInfo?.locationName}）")
-                // 异常时什么都不做，UI保持当前状态
             } finally {
+                if (foregroundLocationJob?.isActive != true) {
+                    _uiState.update { it.copy(isLocationLoading = false) }
+                }
+                silentLocationJob = null
                 Timber.tag("LocationUpdate").d("━━━━━ 静默位置更新结束 ━━━━━")
                 Timber.tag("LocationUpdate").d("最终UI状态: locationName=${_uiState.value.currentLocationName}, isLoading=${_uiState.value.isLocationLoading}")
             }
@@ -1303,4 +1279,4 @@ class TodayViewModel @Inject constructor(
             }
         }
     }
-} 
+}

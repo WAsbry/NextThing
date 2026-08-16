@@ -7,6 +7,7 @@ import com.nextthing.app.domain.repository.GeofenceConfigRepository
 import com.nextthing.app.domain.repository.GeofenceLocationRepository
 import com.nextthing.app.domain.repository.TaskGeofenceRepository
 import com.nextthing.app.domain.service.GeofenceManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import timber.log.Timber
 import javax.inject.Inject
@@ -74,6 +75,8 @@ class UpdateGeofenceConfigUseCase @Inject constructor(
             configRepository.updateConfig(config)
             Timber.tag(TAG).d("✅ 更新地理围栏配置成功")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新地理围栏配置失败")
             Result.failure(e)
@@ -88,6 +91,8 @@ class UpdateGeofenceConfigUseCase @Inject constructor(
             configRepository.updateGlobalEnabled(enabled)
             Timber.tag(TAG).d("✅ 更新全局开关: $enabled")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新全局开关失败")
             Result.failure(e)
@@ -105,6 +110,8 @@ class UpdateGeofenceConfigUseCase @Inject constructor(
             configRepository.updateDefaultRadius(radius)
             Timber.tag(TAG).d("✅ 更新默认半径: ${radius}m")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新默认半径失败")
             Result.failure(e)
@@ -122,6 +129,8 @@ class UpdateGeofenceConfigUseCase @Inject constructor(
             configRepository.updateLocationAccuracyThreshold(threshold)
             Timber.tag(TAG).d("✅ 更新精度阈值: ${threshold}m")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新精度阈值失败")
             Result.failure(e)
@@ -136,6 +145,8 @@ class UpdateGeofenceConfigUseCase @Inject constructor(
             configRepository.updateBatteryOptimization(enabled)
             Timber.tag(TAG).d("✅ 更新省电模式: $enabled")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新省电模式失败")
             Result.failure(e)
@@ -150,6 +161,8 @@ class UpdateGeofenceConfigUseCase @Inject constructor(
             configRepository.updateNotifyWhenOutside(enabled)
             Timber.tag(TAG).d("✅ 更新离开通知: $enabled")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新离开通知失败")
             Result.failure(e)
@@ -268,6 +281,8 @@ class CreateGeofenceLocationUseCase @Inject constructor(
             }
 
             result
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 创建地理围栏地点异常")
             Result.failure(e)
@@ -333,6 +348,8 @@ class UpdateGeofenceLocationUseCase @Inject constructor(
             }
 
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新地理围栏地点失败")
             Result.failure(e)
@@ -347,6 +364,8 @@ class UpdateGeofenceLocationUseCase @Inject constructor(
             locationRepository.updateFrequent(id, isFrequent)
             Timber.tag(TAG).d("✅ 更新常用标记: $id -> $isFrequent")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新常用标记失败")
             Result.failure(e)
@@ -361,6 +380,8 @@ class UpdateGeofenceLocationUseCase @Inject constructor(
             locationRepository.incrementUsageCount(id)
             Timber.tag(TAG).d("✅ 增加使用次数: $id")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 增加使用次数失败")
             Result.failure(e)
@@ -433,6 +454,8 @@ class DeleteGeofenceLocationUseCase @Inject constructor(
             }
 
             result
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 删除地理围栏地点异常")
             Result.failure(e)
@@ -549,6 +572,8 @@ class CreateTaskGeofenceUseCase @Inject constructor(
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
             result
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 创建任务地理围栏关联异常")
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -564,6 +589,8 @@ class CreateTaskGeofenceUseCase @Inject constructor(
             taskGeofenceRepository.updateEnabled(taskId, enabled)
             Timber.tag(TAG).d("✅ 更新地理围栏启用状态: $taskId -> $enabled")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新启用状态失败")
             Result.failure(e)
@@ -578,6 +605,8 @@ class CreateTaskGeofenceUseCase @Inject constructor(
             taskGeofenceRepository.deleteByTaskId(taskId)
             Timber.tag(TAG).d("✅ 删除任务地理围栏关联: $taskId")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 删除关联失败")
             Result.failure(e)
@@ -592,6 +621,8 @@ class CreateTaskGeofenceUseCase @Inject constructor(
             taskGeofenceRepository.incrementDeferCount(taskId)
             Timber.tag(TAG).d("✅ 延期次数+1: $taskId")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 增加延期次数失败")
             Result.failure(e)
@@ -606,6 +637,8 @@ class CreateTaskGeofenceUseCase @Inject constructor(
             taskGeofenceRepository.resetDeferCount(taskId)
             Timber.tag(TAG).d("✅ 延期次数重置: $taskId")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 重置延期次数失败")
             Result.failure(e)
@@ -646,6 +679,8 @@ class UpdateFrequentLocationsUseCase @Inject constructor(
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
             Result.success(updatedCount)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 更新常用地点失败")
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

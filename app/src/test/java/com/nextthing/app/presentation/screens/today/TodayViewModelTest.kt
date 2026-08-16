@@ -134,6 +134,87 @@ class TodayViewModelTest {
         assertEquals("网络错误", updated.errorMessage)
     }
 
+    @Test
+    fun locationEnvironment_doesNotOverwriteTerminalFailureWithLoading() {
+        val failed = TodayUiState(
+            hasLocationPermission = true,
+            isLocationEnabled = true
+        )
+            .locationRequestStarted()
+            .locationRequestFailed(
+                locationName = "获取位置失败",
+                errorMessage = "位置获取超时，请检查GPS信号或稍后重试"
+            )
+
+        val resumed = failed.withLocationEnvironment(
+            hasPermission = true,
+            isEnabled = true,
+            validCachedLocation = null
+        )
+
+        assertFalse(resumed.isLocationLoading)
+        assertEquals("获取位置失败", resumed.currentLocationName)
+        assertEquals("位置获取超时，请检查GPS信号或稍后重试", resumed.locationError)
+    }
+
+    @Test
+    fun locationEnvironment_keepsLoadingOnlyForActiveRequestState() {
+        val loading = TodayUiState(
+            hasLocationPermission = true,
+            isLocationEnabled = true
+        ).locationRequestStarted()
+
+        val refreshed = loading.withLocationEnvironment(
+            hasPermission = true,
+            isEnabled = true,
+            validCachedLocation = null
+        )
+
+        assertTrue(refreshed.isLocationLoading)
+        assertEquals("正在获取位置...", refreshed.currentLocationName)
+    }
+
+    @Test
+    fun locationEnvironment_usesValidCacheWithoutStartingLoading() {
+        val cachedLocation = LocationInfo(
+            id = "cached-location",
+            locationName = "测试地点",
+            latitude = 30.0,
+            longitude = 120.0
+        )
+
+        val refreshed = TodayUiState().withLocationEnvironment(
+            hasPermission = true,
+            isEnabled = true,
+            validCachedLocation = cachedLocation
+        )
+
+        assertEquals(cachedLocation, refreshed.currentLocation)
+        assertEquals("测试地点", refreshed.currentLocationName)
+        assertFalse(refreshed.isLocationLoading)
+    }
+
+    @Test
+    fun locationRequestCancellation_convergesLoadingAndPreservesPermissionState() {
+        val permissionDenied = TodayUiState(
+            hasLocationPermission = true,
+            isLocationEnabled = true
+        )
+            .locationRequestStarted()
+            .withLocationEnvironment(
+                hasPermission = false,
+                isEnabled = true,
+                validCachedLocation = null
+            )
+            .locationRequestCancelled(
+                locationName = "获取位置失败",
+                errorMessage = "位置获取失败，请检查权限和位置服务"
+            )
+
+        assertFalse(permissionDenied.isLocationLoading)
+        assertEquals("需要位置权限", permissionDenied.currentLocationName)
+    }
+
     // ── Task 模型测试 ──
 
     @Test

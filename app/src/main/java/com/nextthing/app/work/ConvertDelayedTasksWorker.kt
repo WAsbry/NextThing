@@ -8,6 +8,7 @@ import com.nextthing.app.domain.model.TaskStatus
 import com.nextthing.app.domain.repository.TaskRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.time.LocalDateTime
@@ -57,9 +58,15 @@ class ConvertDelayedTasksWorker @AssistedInject constructor(
 
             Timber.i("ConvertDelayedTasksWorker: Completed. Converted $convertedCount task(s) from DELAYED to PENDING")
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "ConvertDelayedTasksWorker: Failed to convert delayed tasks")
-            Result.retry()
+            WorkerFailurePolicy.result(TAG, runAttemptCount)
         }
+    }
+
+    private companion object {
+        const val TAG = "ConvertDelayedTasksWorker"
     }
 }

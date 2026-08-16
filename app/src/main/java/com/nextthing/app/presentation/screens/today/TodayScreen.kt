@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.runtime.*
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
@@ -36,7 +38,6 @@ import com.nextthing.app.domain.model.TaskStatus
 import com.nextthing.app.domain.model.TaskTab
 import com.nextthing.app.LocalPermissionLauncher
 import com.nextthing.app.presentation.components.LocationDetailDialog
-import com.nextthing.app.presentation.components.LocationHelpDialog
 import com.nextthing.app.presentation.components.LocationPermissionDialog
 import com.nextthing.app.presentation.components.WeatherSummaryCard
 import com.nextthing.app.presentation.components.CancelReasonDialog
@@ -63,6 +64,35 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.nextthing.app.presentation.components.ParticleExplosionEffect
+import java.time.LocalDateTime
+
+internal fun selectNextThingTask(
+    tasks: List<Task>,
+    now: LocalDateTime
+): Task? = tasks
+    .asSequence()
+    .filter { it.status == TaskStatus.PENDING }
+    .filter { task ->
+        task.dueDate?.let { dueDate ->
+            dueDate.toLocalDate() == now.toLocalDate() && dueDate.isAfter(now)
+        } == true
+    }
+    .minWithOrNull(
+        compareBy<Task> { it.dueDate!! }
+            .thenBy { it.createdAt }
+            .thenBy { it.id }
+    )
+
+internal fun isTodayTaskOverdue(
+    task: Task,
+    now: LocalDateTime
+): Boolean {
+    if (task.status == TaskStatus.OVERDUE) return true
+    val dueDate = task.dueDate ?: return false
+    return task.status == TaskStatus.PENDING &&
+        dueDate.toLocalDate() == now.toLocalDate() &&
+        now.isAfter(dueDate.plusMinutes(5))
+}
 
 @Composable
 fun TodayScreen(
@@ -73,15 +103,11 @@ fun TodayScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // 计算 NextThing：待办列表中 dueDate 距离现在最近的下一件未来任务
-    // 使用 uiState 整体作为 key，确保任务数据和时间变化都能触发重算
+    // 面试版 NextThing：今天尚未到期的待办任务中，截止时间最近且排序稳定的一件。
     val now = remember(uiState.displayTasks) { java.time.LocalDateTime.now() }
     val nextThingId by remember(uiState.allTasks, now) {
         derivedStateOf {
-            uiState.allTasks
-                .filter { it.status == TaskStatus.PENDING && it.dueDate != null && it.dueDate.isAfter(now) }
-                .minByOrNull { it.dueDate!! }
-                ?.id
+            selectNextThingTask(uiState.allTasks, now)?.id
         }
     }
 
@@ -95,7 +121,6 @@ fun TodayScreen(
     }
     val showPermissionDialog by viewModel.showPermissionDialog.collectAsState()
     val showLocationDetailDialog by viewModel.showLocationDetailDialog.collectAsState()
-    val showLocationHelpDialog by viewModel.showLocationHelpDialog.collectAsState()
     val permissionLauncher = LocalPermissionLauncher.current
 
     @Suppress("DEPRECATION") val lifecycleOwner = LocalLifecycleOwner.current
@@ -129,6 +154,13 @@ fun TodayScreen(
     var pendingPostponeReason by remember { mutableStateOf<String?>(null) }
     var pendingCancelTaskId by remember { mutableStateOf<String?>(null) }
     var pendingCancelReason by remember { mutableStateOf<String?>(null) }
+    val confirmPostponeFromDialog: (String, String) -> Unit = { taskId, reason ->
+        pendingPostponeTaskId = taskId
+        pendingPostponeReason = reason
+        viewModel.hidePostponeReasonDialog()
+        explodingTaskId = taskId
+        explodingColor = warningColor
+    }
 
     // 当 explodingTaskId 对应的任务从列表中消失后，清理爆炸状态
     LaunchedEffect(explodingTaskId, uiState.displayTasks) {
@@ -190,11 +222,9 @@ fun TodayScreen(
             // 任务列表（支持折叠视图）
             val isPendingTab = uiState.selectedTab == TaskTab.PENDING
 
-            // 分组逻辑：基于 dueDate 是否已过（而非仅靠 status 字段，避免 5 分钟空窗期）
-            // 逾期组：status == OVERDUE，或 dueDate 已过但 status 尚未更新的任务
+            // 与后台状态机统一使用 5 分钟宽限期，避免页面和数据库状态互相矛盾。
             val overdueTasks = if (isPendingTab) uiState.displayTasks.filter { task ->
-                task.status == TaskStatus.OVERDUE ||
-                (task.status == TaskStatus.PENDING && task.dueDate != null && task.dueDate.isBefore(now))
+                isTodayTaskOverdue(task, now)
             } else emptyList()
 
             val overdueIds = overdueTasks.map { it.id }.toSet()
@@ -227,6 +257,9 @@ fun TodayScreen(
                                     TaskItem(
                                         task = task,
                                         isNextThing = false,
+                                        isPostponeDialogVisible = uiState.showPostponeReasonDialog && uiState.postponeTaskId == task.id,
+                                        onDismissPostponeDialog = viewModel::hidePostponeReasonDialog,
+                                        onConfirmPostponeDialog = { reason -> confirmPostponeFromDialog(task.id, reason) },
                                         isExploding = explodingTaskId == task.id,
                                         explosionColor = if (explodingTaskId == task.id) explodingColor else Success,
                                         onExplosionFinished = {
@@ -250,6 +283,9 @@ fun TodayScreen(
                         items(items = overdueTasks, key = { it.id }) { task ->
                             TaskItem(
                                 task = task, isNextThing = false,
+                                isPostponeDialogVisible = uiState.showPostponeReasonDialog && uiState.postponeTaskId == task.id,
+                                onDismissPostponeDialog = viewModel::hidePostponeReasonDialog,
+                                onConfirmPostponeDialog = { reason -> confirmPostponeFromDialog(task.id, reason) },
                                 isExploding = explodingTaskId == task.id,
                                 explosionColor = if (explodingTaskId == task.id) explodingColor else Success,
                                 onExplosionFinished = { handleExplosionFinished(pendingCompleteTaskId, pendingPostponeTaskId, pendingPostponeReason, pendingCancelTaskId, pendingCancelReason, viewModel, { pendingCompleteTaskId = null }, { pendingPostponeTaskId = null; pendingPostponeReason = null }, { pendingCancelTaskId = null; pendingCancelReason = null }) },
@@ -268,6 +304,9 @@ fun TodayScreen(
                     item(key = "next_thing_${nextThingTask.id}") {
                         TaskItem(
                             task = nextThingTask, isNextThing = true,
+                            isPostponeDialogVisible = uiState.showPostponeReasonDialog && uiState.postponeTaskId == nextThingTask.id,
+                            onDismissPostponeDialog = viewModel::hidePostponeReasonDialog,
+                            onConfirmPostponeDialog = { reason -> confirmPostponeFromDialog(nextThingTask.id, reason) },
                             isExploding = explodingTaskId == nextThingTask.id,
                             explosionColor = if (explodingTaskId == nextThingTask.id) explodingColor else Success,
                             onExplosionFinished = { handleExplosionFinished(pendingCompleteTaskId, pendingPostponeTaskId, pendingPostponeReason, pendingCancelTaskId, pendingCancelReason, viewModel, { pendingCompleteTaskId = null }, { pendingPostponeTaskId = null; pendingPostponeReason = null }, { pendingCancelTaskId = null; pendingCancelReason = null }) },
@@ -297,6 +336,9 @@ fun TodayScreen(
                                 futureTasks.forEach { task ->
                                     TaskItem(
                                         task = task, isNextThing = false,
+                                        isPostponeDialogVisible = uiState.showPostponeReasonDialog && uiState.postponeTaskId == task.id,
+                                        onDismissPostponeDialog = viewModel::hidePostponeReasonDialog,
+                                        onConfirmPostponeDialog = { reason -> confirmPostponeFromDialog(task.id, reason) },
                                         isExploding = explodingTaskId == task.id,
                                         explosionColor = if (explodingTaskId == task.id) explodingColor else Success,
                                         onExplosionFinished = { handleExplosionFinished(pendingCompleteTaskId, pendingPostponeTaskId, pendingPostponeReason, pendingCancelTaskId, pendingCancelReason, viewModel, { pendingCompleteTaskId = null }, { pendingPostponeTaskId = null; pendingPostponeReason = null }, { pendingCancelTaskId = null; pendingCancelReason = null }) },
@@ -313,6 +355,9 @@ fun TodayScreen(
                         items(items = futureTasks, key = { it.id }) { task ->
                             TaskItem(
                                 task = task, isNextThing = false,
+                                isPostponeDialogVisible = uiState.showPostponeReasonDialog && uiState.postponeTaskId == task.id,
+                                onDismissPostponeDialog = viewModel::hidePostponeReasonDialog,
+                                onConfirmPostponeDialog = { reason -> confirmPostponeFromDialog(task.id, reason) },
                                 isExploding = explodingTaskId == task.id,
                                 explosionColor = if (explodingTaskId == task.id) explodingColor else Success,
                                 onExplosionFinished = { handleExplosionFinished(pendingCompleteTaskId, pendingPostponeTaskId, pendingPostponeReason, pendingCancelTaskId, pendingCancelReason, viewModel, { pendingCompleteTaskId = null }, { pendingPostponeTaskId = null; pendingPostponeReason = null }, { pendingCancelTaskId = null; pendingCancelReason = null }) },
@@ -334,6 +379,9 @@ fun TodayScreen(
                     TaskItem(
                         task = task,
                         isNextThing = task.id == nextThingId,
+                        isPostponeDialogVisible = uiState.showPostponeReasonDialog && uiState.postponeTaskId == task.id,
+                        onDismissPostponeDialog = viewModel::hidePostponeReasonDialog,
+                        onConfirmPostponeDialog = { reason -> confirmPostponeFromDialog(task.id, reason) },
                         isExploding = explodingTaskId == task.id,
                         explosionColor = if (explodingTaskId == task.id) explodingColor else Success,
                         onExplosionFinished = {
@@ -385,36 +433,9 @@ fun TodayScreen(
         isVisible = showLocationDetailDialog,
         location = uiState.currentLocation,
         isLoading = uiState.isLocationLoading,
+        errorMessage = uiState.locationError,
         onDismiss = { viewModel.hideLocationDetailDialog() },
         onRefresh = { viewModel.requestCurrentLocation() }
-    )
-
-    // 位置帮助对话框
-    LocationHelpDialog(
-        isVisible = showLocationHelpDialog,
-        errorMessage = uiState.locationError,
-        onDismiss = { viewModel.hideLocationHelpDialog() },
-        onRetry = { viewModel.requestCurrentLocation() },
-        onOpenSettings = {
-            viewModel.hideLocationHelpDialog()
-            // 位置设置已通过系统设置管理,可扩展:导航到应用详情页
-        }
-    )
-
-    // 延期任务原因对话框
-    PostponeReasonDialog(
-        isVisible = uiState.showPostponeReasonDialog && explodingTaskId == null,
-        onDismiss = { viewModel.hidePostponeReasonDialog() },
-        onConfirm = { reason ->
-            val taskId = uiState.postponeTaskId
-            if (taskId != null) {
-                pendingPostponeTaskId = taskId
-                pendingPostponeReason = reason
-                viewModel.hidePostponeReasonDialog()
-                explodingTaskId = taskId
-                explodingColor = warningColor
-            }
-        }
     )
 
     // 放弃任务原因对话框
@@ -438,12 +459,16 @@ fun TodayScreen(
 @Composable
 private fun LocationIcon(
     currentLocation: String,
+    location: com.nextthing.app.domain.model.LocationInfo?,
     isLoading: Boolean,
     hasPermission: Boolean,
     isLocationEnabled: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
 ) {
+    val compactLocation = remember(currentLocation, location) {
+        location?.toHomeLocationLabel() ?: currentLocation
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -451,26 +476,15 @@ private fun LocationIcon(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .background(
-                when {
-                    !hasPermission -> Danger.copy(alpha = 0.1f)
-                    !isLocationEnabled -> Warning.copy(alpha = 0.1f)
-                    isLoading -> Primary.copy(alpha = 0.2f)
-                    else -> Primary.copy(alpha = 0.1f)
-                },
-                RoundedCornerShape(20.dp)
-            )
+            .background(Color(0xFFF7F8FC), RoundedCornerShape(8.dp))
             .border(
                 width = 1.dp,
-                color = when {
-                    !hasPermission -> Danger.copy(alpha = 0.4f)
-                    !isLocationEnabled -> Warning.copy(alpha = 0.4f)
-                    isLoading -> Primary.copy(alpha = 0.6f)
-                    else -> Primary.copy(alpha = 0.4f)
-                },
-                shape = RoundedCornerShape(20.dp)
+                color = Color(0xFF29293A).copy(alpha = 0.23f),
+                shape = RoundedCornerShape(8.dp)
             )
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .widthIn(min = 132.dp, max = 132.dp)
+            .height(40.dp)
+            .padding(horizontal = 4.dp, vertical = 8.dp)
     ) {
         if (isLoading) {
             CircularProgressIndicator(
@@ -480,22 +494,23 @@ private fun LocationIcon(
             )
         } else {
             Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_mylocation),
+                painter = painterResource(id = R.drawable.icon_location),
                 contentDescription = "当前位置",
                 tint = when {
                     !hasPermission -> Danger
                     !isLocationEnabled -> Warning
                     else -> Primary
                 },
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
 
-        if (currentLocation.isNotBlank()) {
-            Spacer(modifier = Modifier.width(8.dp))
+        if (compactLocation.isNotBlank()) {
             Text(
-                text = currentLocation,
-                fontSize = 13.sp,
+                text = compactLocation,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
                 color = when {
                     !hasPermission -> Danger
                     !isLocationEnabled -> Warning
@@ -504,7 +519,7 @@ private fun LocationIcon(
                 },
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 140.dp)
+                modifier = Modifier.width(96.dp)
             )
         }
     }
@@ -519,8 +534,8 @@ private fun TopHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(BgCard)
-            .padding(12.dp),
+            .background(Color.White)
+            .padding(10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -531,7 +546,7 @@ private fun TopHeader(
             // NT Logo
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(38.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center
@@ -539,16 +554,15 @@ private fun TopHeader(
                 Text(
                     text = "NT",
                     color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = (-0.5).sp
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "NextThing",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
         }
@@ -557,13 +571,14 @@ private fun TopHeader(
             // 日历图标
             Box(
                 modifier = Modifier
-                    .clip(CircleShape)
+                    .size(24.dp)
                     .clickable { onNavigateToCalendar() }
-                    .padding(4.dp)
             ) {
-                androidx.compose.foundation.text.BasicText(
-                    text = "📅",
-                    style = androidx.compose.ui.text.TextStyle(fontSize = 18.sp)
+                Image(
+                    painter = painterResource(id = R.drawable.icon_calendar),
+                    contentDescription = "日历",
+                    modifier = Modifier.size(24.dp),
+                    contentScale = ContentScale.Fit
                 )
             }
 
@@ -572,6 +587,7 @@ private fun TopHeader(
             // 定位图标
             LocationIcon(
                 currentLocation = uiState.currentLocationName,
+                location = uiState.currentLocation,
                 isLoading = uiState.isLocationLoading,
                 hasPermission = uiState.hasLocationPermission,
                 isLocationEnabled = uiState.isLocationEnabled,
@@ -592,6 +608,14 @@ private fun TopHeader(
             )
         } // inner Row end
     } // outer Row end
+}
+
+private fun com.nextthing.app.domain.model.LocationInfo.toHomeLocationLabel(): String {
+    val area = district.trim()
+    val name = locationName.trim()
+    if (area.isBlank()) return name.ifBlank { "当前位置" }.take(8)
+    val detail = name.removePrefix(area).trim()
+    return if (detail.isBlank()) area else "$area · ${detail.take(4)}"
 }
 
 private fun weatherBgRes(condition: WeatherCondition?): Int = when (condition) {
@@ -619,8 +643,9 @@ private fun ProgressOverviewCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(12.dp),
+            .height(210.dp)
+            .padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.Transparent
         ),
@@ -631,7 +656,7 @@ private fun ProgressOverviewCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(8.dp))
         ) {
             // 第一层：天气背景图
             Image(
@@ -641,71 +666,94 @@ private fun ProgressOverviewCard(
                 contentScale = ContentScale.Crop
             )
             // 第二层：渐变蒙层（上浅下深，保证文字可读）
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color.Black.copy(alpha = 0.20f),
-                                Color.Black.copy(alpha = 0.55f)
-                            )
-                        )
-                    )
-            )
+            Box(modifier = Modifier.matchParentSize())
             // 第三层：内容
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(47.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 左侧：农历日期 + 节气/节日
                     val chineseDate = remember {
                         com.nextthing.app.util.ChineseDateHelper.getToday()
                     }
-                    Column {
+                    Box(
+                        modifier = Modifier
+                            .padding(
+                                start = 9.dp + with(LocalDensity.current) { 10f.toDp() }
+                            )
+                            .wrapContentWidth()
+                            .height(47.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
                         Text(
                             text = chineseDate.lunarText,
                             color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
                         )
-                        if (chineseDate.secondaryText != null) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = chineseDate.secondaryText!!,
-                                color = Color.White.copy(alpha = 0.85f),
-                                fontSize = 12.sp
-                            )
-                        }
                     }
+                    Spacer(modifier = Modifier.weight(1f))
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 18.dp)
+                            .width(52.dp)
+                            .height(43.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Text(
+                            text = weatherInfo?.let { "${it.temperature}°  ${it.condition.displayName}" }
+                                ?: "--°  --",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal,
+                            maxLines = 1
+                        )
+                    }
+                }
 
-                    // 右侧：天气信息区域
-                    WeatherInfoSection(
-                        weatherInfo = weatherInfo,
-                        modifier = Modifier.padding(top = 4.dp)
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(76.dp).padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = "${(completionRate * 100).toInt()}%",
+                        color = Color.White,
+                        fontSize = 42.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "${(completionRate * 100).toInt()}%",
-                    color = Color.White,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(77.dp)
                 ) {
-                    StatItem("今日任务", "$totalTasks 项")
-                    StatItem("已完成", "$completedTasks 项")
-                    StatItem("剩余", "$remainingTasks 项")
+                    StatItem(
+                        label = "今日任务",
+                        value = totalTasks.toString(),
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = with(LocalDensity.current) { 10f.toDp() })
+                            .width(70.dp)
+                    )
+                    StatItem(
+                        label = "已完成",
+                        value = completedTasks.toString(),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .width(60.dp)
+                    )
+                    StatItem(
+                        label = "剩余",
+                        value = remainingTasks.toString(),
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = with(LocalDensity.current) { 10f.toDp() })
+                            .width(40.dp)
+                    )
                 }
             }
         }
@@ -713,19 +761,26 @@ private fun ProgressOverviewCard(
 }
 
 @Composable
-private fun StatItem(label: String, value: String) {
-    Column {
+private fun StatItem(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
         Text(
             text = label,
-            color = Color.White.copy(alpha = 0.8f),
-            fontSize = 14.sp
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = value,
             color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1
         )
     }
 }
@@ -814,43 +869,54 @@ private fun WeatherInfoSection(
 
 @Composable
 private fun TodaySectionHeader(completedCount: Int, pendingCount: Int) {
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .height(39.dp)
     ) {
         Text(
             text = "今日任务",
+            modifier = Modifier.offset(x = 10.dp, y = 10.dp),
             fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextPrimary
+            lineHeight = 19.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF16181D),
+            maxLines = 1
         )
-
-        Row {
-            Text(
-                text = "完成 ${completedCount}项",
-                color = Success,
-                fontSize = 14.sp
-            )
-            Spacer(modifier = Modifier.width(24.dp))
-            Text(
-                text = "待办 ${pendingCount}项",
-                color = Danger,
-                fontSize = 14.sp
-            )
-        }
+        Text(
+            text = "$completedCount 已完成",
+            modifier = Modifier.offset(x = 232.dp, y = 10.dp),
+            color = Color(0xFF34C759),
+            fontSize = 16.sp,
+            lineHeight = 19.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1
+        )
+        Text(
+            text = "$pendingCount 待办",
+            modifier = Modifier.offset(x = 307.dp, y = 10.dp),
+            color = Color(0xFFFF453A),
+            fontSize = 16.sp,
+            lineHeight = 19.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1
+        )
     }
 }
 
 @Composable
 private fun TaskTabs(selectedTab: TaskTab, onTabSelected: (TaskTab) -> Unit) {
+    val cornerRadius = with(LocalDensity.current) { 8f.toDp() }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp)
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(cornerRadius),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFF29293A).copy(alpha = 0.23f)
+        )
     ) {
         Row(
             modifier = Modifier
@@ -885,6 +951,9 @@ private fun TaskTabs(selectedTab: TaskTab, onTabSelected: (TaskTab) -> Unit) {
 private fun TaskItem(
     task: Task,
     isNextThing: Boolean = false,
+    isPostponeDialogVisible: Boolean = false,
+    onDismissPostponeDialog: () -> Unit = {},
+    onConfirmPostponeDialog: (String) -> Unit = {},
     onToggleStatus: () -> Unit,
     onPostpone: () -> Unit,
     onCancel: () -> Unit,
@@ -911,7 +980,7 @@ private fun TaskItem(
     }
 
     Column(
-        modifier = Modifier.padding(horizontal = 16.dp)
+        modifier = Modifier.padding(horizontal = 10.dp)
     ) {
         Box(
             modifier = Modifier
@@ -928,33 +997,35 @@ private fun TaskItem(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(8.dp))
         ) {
             // 完成按钮
             Box(
                 modifier = Modifier
                     .width(actionWidth)
                     .fillMaxHeight()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color(0xFFA29BFE), Color(0xFF8B7FF7))
-                        )
-                    )
+                    .background(Color(0xFF21C45E))
                     .clickable {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         onToggleStatus()
                     },
-                contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        painter = painterResource(id = android.R.drawable.checkbox_on_background),
+                Image(
+                        painter = painterResource(id = R.drawable.icon_item_finish),
                         contentDescription = "完成",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = 53.dp)
+                            .size(16.dp, 12.dp)
                     )
-                    Text(text = "完成", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                }
+                Text(
+                    text = "完成",
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = 81.dp),
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
             // 延期按钮
@@ -962,26 +1033,28 @@ private fun TaskItem(
                 modifier = Modifier
                     .width(actionWidth)
                     .fillMaxHeight()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color(0xFF7C6FF7), Color(0xFF6C5CE7))
-                        )
-                    )
+                    .background(Color(0xFFF59E0A))
                     .clickable {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         onPostpone()
                     },
-                contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        painter = painterResource(id = android.R.drawable.ic_menu_recent_history),
+                Image(
+                        painter = painterResource(id = R.drawable.icon_item_delay),
                         contentDescription = "延期",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = 48.dp)
+                            .size(34.dp, 22.dp)
                     )
-                    Text(text = "延期", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                }
+                Text(
+                    text = "延期",
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = 84.dp),
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
             // 放弃按钮
@@ -989,26 +1062,28 @@ private fun TaskItem(
                 modifier = Modifier
                     .width(actionWidth)
                     .fillMaxHeight()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color(0xFF5A4BD1), Color(0xFF4A3BC1))
-                        )
-                    )
+                    .background(Color(0xFFF54040))
                     .clickable {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                         onCancel()
                     },
-                contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
+                Image(
+                        painter = painterResource(id = R.drawable.icon_item_giveup),
                         contentDescription = "放弃",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = 53.5.dp)
+                            .size(11.dp)
                     )
-                    Text(text = "放弃", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                }
+                Text(
+                    text = "放弃",
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = 81.dp),
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
         }
@@ -1017,6 +1092,7 @@ private fun TaskItem(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer { alpha = if (isPostponeDialogVisible) 0.18f else 1f }
                 .then(
                     if (isExploding) Modifier.graphicsLayer {
                         alpha = 0f
@@ -1046,6 +1122,12 @@ private fun TaskItem(
                 onClick = { if (!isExploding) onClick() }
             )
         }
+
+        PostponeReasonDialog(
+            isVisible = isPostponeDialogVisible && !isExploding,
+            onDismiss = onDismissPostponeDialog,
+            onConfirm = onConfirmPostponeDialog
+        )
 
         // 粒子爆炸效果层
         if (isExploding) {

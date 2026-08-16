@@ -2,7 +2,6 @@ package com.nextthing.app.domain.repository
 
 import com.nextthing.app.domain.model.SyncResult
 import com.nextthing.app.domain.model.SyncConflict
-import com.nextthing.app.domain.model.Task
 import com.nextthing.app.data.repository.SyncState
 import kotlinx.coroutines.flow.Flow
 
@@ -46,5 +45,5 @@ interface SyncRepository {
     /**
      * 解决冲突（使用本地版本）
      */
-    suspend fun resolveConflictUseLocal(task: Task): Result<Unit>
+    suspend fun resolveConflictUseLocal(taskId: String): Result<Unit>
 }

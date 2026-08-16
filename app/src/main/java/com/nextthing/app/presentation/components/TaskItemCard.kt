@@ -1,6 +1,7 @@
 package com.nextthing.app.presentation.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -53,258 +54,191 @@ fun TaskItemCard(
     timber.log.Timber.tag("TodayScreenRender").d("  状态: ${task.status}")
     timber.log.Timber.tag("TodayScreenRender").d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
+    val accentColor = if (isNextThing) Primary else parseCategoryColor(task.category)
+    val statusText = when (task.status) {
+        TaskStatus.COMPLETED -> "完成"
+        TaskStatus.DELAYED -> "延期"
+        TaskStatus.OVERDUE -> "逾期"
+        TaskStatus.CANCELLED -> "放弃"
+        TaskStatus.PENDING -> "待办"
+    }
+    val timeText = task.dueDate?.let { dueDate ->
+        if (dueDate.toLocalDate() == LocalDateTime.now().toLocalDate()) {
+            "今天 ${dueDate.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+        } else {
+            dueDate.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm"))
+        }
+    } ?: "未设置时间"
+
     Card(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        shape = if (useRoundedCorners) RoundedCornerShape(12.dp) else RoundedCornerShape(0.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = BgCard
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = elevation
-        )
+        modifier = modifier
+            .fillMaxWidth()
+            .wrapContentHeight()
+            .heightIn(min = 112.dp, max = 176.dp),
+        shape = if (useRoundedCorners) RoundedCornerShape(8.dp) else RoundedCornerShape(0.dp),
+        border = BorderStroke(1.dp, Color(0x6618202C)),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // NextThing 左侧主题色竖条
-            if (isNextThing) {
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .fillMaxHeight()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Primary, Primary.copy(alpha = 0.6f))
-                            )
-                        )
-                )
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(accentColor)
+            )
 
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-            // 顶部区域：分类图标、标题和重要程度
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                // 分类图标
-                Box(
+                Row(
                     modifier = Modifier
-                        .size(36.dp)
-                        .align(Alignment.CenterVertically)
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = getCategoryColors(task.category)
-                            )
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = getCategoryBorderColor(task.category),
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CategoryIconView(
-                        icon = task.category.icon,
-                        size = 20.dp
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // 标题
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = task.title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (task.status == TaskStatus.COMPLETED) TextMuted else TextPrimary,
-                        textDecoration = if (task.status == TaskStatus.COMPLETED) TextDecoration.LineThrough else null,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    // 分类标签 + NextThing 标识
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFFEAF4FF)),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = task.category.displayName,
-                            fontSize = 11.sp,
-                            color = TextMuted
+                            text = task.category.displayName.take(1),
+                            color = Primary,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            fontWeight = FontWeight.Bold
                         )
-                        if (isNextThing) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = Primary
-                            ) {
-                                Text(
-                                    text = "NextThing",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
                     }
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // 重要程度标签
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = getImportanceBackgroundColor(task.importanceUrgency),
-                ) {
                     Text(
-                        text = getImportanceDisplayText(task.importanceUrgency),
-                        fontSize = 10.sp,
+                        text = task.title,
+                        modifier = Modifier.weight(1f),
+                        color = if (task.status == TaskStatus.COMPLETED) TextMuted else Color(0xFF16181D),
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        textDecoration = if (task.status == TaskStatus.COMPLETED) TextDecoration.LineThrough else null,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = statusText,
+                        modifier = Modifier
+                            .wrapContentWidth()
+                            .align(Alignment.Top),
+                        color = Color(0xFF475467),
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp,
                         fontWeight = FontWeight.Medium,
-                        color = getImportanceTextColor(task.importanceUrgency),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        maxLines = 1
                     )
                 }
-            }
 
-            // 任务内容（描述）
-            // 检查是否包含延期或放弃原因
-            val postponeReasonPrefix = "【延期原因】"
-            val cancelReasonPrefix = "【放弃原因】"
-            val hasPostponeReason = task.description.contains(postponeReasonPrefix)
-            val hasCancelReason = task.description.contains(cancelReasonPrefix)
-
-            // 如果有延期原因或放弃原因，显示特殊格式
-            if (hasPostponeReason || hasCancelReason) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 提取延期/放弃信息
-                when {
-                    hasPostponeReason -> {
-                        val startIndex = task.description.indexOf(postponeReasonPrefix)
-                        // 提取【延期原因】之后的第一行作为原因
-                        val afterPrefix = task.description.substring(startIndex + postponeReasonPrefix.length).trim()
-                        val actualReason = afterPrefix.split("\n").firstOrNull()?.trim() ?: afterPrefix.take(50)
-
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(19.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(task.category.displayName, color = Color(0xFF667085), fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    Text("·", color = Color(0xFF98A2B3), fontSize = 11.sp, lineHeight = 16.sp)
+                    Text(timeText, color = if (task.status == TaskStatus.COMPLETED) Color(0xFF34C759) else Color(0xFFDC2626), fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text("·", color = Color(0xFF98A2B3), fontSize = 11.sp, lineHeight = 16.sp)
+                    Surface(shape = RoundedCornerShape(5.dp), color = getImportanceBackgroundColor(task.importanceUrgency)) {
                         Text(
-                            text = "延期到明天：$postponeReasonPrefix",
-                            fontSize = 13.sp,
-                            color = Warning,  // 延期使用橙黄色
-                            fontWeight = FontWeight.Medium
+                            text = getCompactImportanceText(task.importanceUrgency),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            color = getImportanceTextColor(task.importanceUrgency),
+                            fontSize = 10.sp,
+                            lineHeight = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
                         )
-                        if (actualReason.isNotBlank()) {
+                    }
+                    if (isNextThing) {
+                        Surface(shape = RoundedCornerShape(5.dp), color = Color(0xFFEAF4FF)) {
                             Text(
-                                text = actualReason,
-                                fontSize = 13.sp,
-                                color = Warning,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = "NextThing",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = Primary,
+                                fontSize = 10.sp,
+                                lineHeight = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1
                             )
                         }
                     }
-                    hasCancelReason -> {
-                        val startIndex = task.description.indexOf(cancelReasonPrefix)
-                        // 提取【放弃原因】之后的第一行作为原因
-                        val afterPrefix = task.description.substring(startIndex + cancelReasonPrefix.length).trim()
-                        val actualReason = afterPrefix.split("\n").firstOrNull()?.trim() ?: afterPrefix.take(50)
-
-                        Text(
-                            text = "放弃任务$cancelReasonPrefix：$actualReason",
-                            fontSize = 13.sp,
-                            color = Danger,  // 放弃使用红色
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                 }
-            } else if (task.description.isNotBlank()) {
-                // 正常描述显示
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = task.description,
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
 
-            Spacer(modifier = Modifier.height(3.dp))
+                if (task.description.isNotBlank()) {
+                    Text(
+                        text = task.description,
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF667085),
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
-            // 底部区域：地理位置、逾期状态、重复频率
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 左侧：地理位置 + 逾期状态
                 Row(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "📍 ${task.locationInfo?.locationName ?: "未设置"}",
+                        text = task.locationInfo?.locationName ?: "未设置地点",
+                        modifier = Modifier.weight(1f),
+                        color = Color(0xFF98A2B3),
                         fontSize = 11.sp,
-                        color = if (task.locationInfo != null) TextPrimary else TextMuted,
+                        lineHeight = 16.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
+                        overflow = TextOverflow.Ellipsis
                     )
-
-                    // 逾期状态标签（基于 dueDate 判断，不仅依赖 status 字段）
-                    val isOverdue = task.status == TaskStatus.OVERDUE ||
-                        (task.status == TaskStatus.PENDING && task.dueDate != null && task.dueDate.isBefore(LocalDateTime.now()))
-                    if (isOverdue) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "已逾期",
-                            fontSize = 10.sp,
-                            color = Danger,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                    Text(
+                        text = if (task.repeatFrequency.type == RepeatFrequencyType.NONE) "单次任务" else getRepeatDisplayText(task.repeatFrequency),
+                        color = Color(0xFF667085),
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
                 }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // 右侧：重复频率（限制最大宽度）
-                Box(
-                    modifier = Modifier.widthIn(max = 120.dp) // 限制最大宽度
-                ) {
-                    if (task.repeatFrequency.type != RepeatFrequencyType.NONE) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = Primary.copy(alpha = 0.1f)
-                        ) {
-                            Text(
-                                text = "🔄 ${getRepeatDisplayText(task.repeatFrequency)}",
-                                fontSize = 10.sp,
-                                color = Primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = "🔄 单次",
-                            fontSize = 11.sp,
-                            color = TextMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
             }
         }
     }
+}
+
+private fun parseCategoryColor(category: Category): Color = try {
+    Color(android.graphics.Color.parseColor(category.colorHex))
+} catch (_: IllegalArgumentException) {
+    Color(0xFF0A84FF)
+}
+
+private fun getCompactImportanceText(importanceUrgency: TaskImportanceUrgency?): String = when (importanceUrgency) {
+    TaskImportanceUrgency.IMPORTANT_URGENT -> "重要紧急"
+    TaskImportanceUrgency.IMPORTANT_NOT_URGENT -> "重要不紧急"
+    TaskImportanceUrgency.NOT_IMPORTANT_URGENT -> "紧急"
+    TaskImportanceUrgency.NOT_IMPORTANT_NOT_URGENT -> "普通"
+    null -> "未设置"
 }
 
 // 辅助函数

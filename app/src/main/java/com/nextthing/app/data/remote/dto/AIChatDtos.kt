@@ -8,5 +8,18 @@ data class AIChatRequest(
 
 data class AIChatResponse(
     val success: Boolean,
-    val reply: String?
+    val reply: String?,
+    val sessionId: String? = null
+)
+
+data class AIRunCreateRequest(
+    val sessionId: String? = null,
+    val message: String
+)
+
+data class AIRunResponse(
+    val runId: String,
+    val sessionId: String,
+    val status: String,
+    val errorCode: String? = null
 )

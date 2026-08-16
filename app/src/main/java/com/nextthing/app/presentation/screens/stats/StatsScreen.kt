@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +49,15 @@ import androidx.compose.foundation.lazy.items
 import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
+private val StatsSoftStart = Color(0xFFF4EFFF)
+private val StatsSoftMid = Color(0xFFF7F3FF)
+private val StatsSoftEnd = Color(0xFFFBFAFF)
+private val StatsInk = Color(0xFF202331)
+private val StatsDeep = Color(0xFF2F2850)
+private val StatsSub = Color(0xFF656B78)
+private val StatsMuted = Color(0xFFA6ACB8)
+private val StatsLine = Color(0xFFEEF0F5)
+
 // 扩展属性：将 Category 的 colorHex 转换为 Compose Color
 private val Category.color: Color
     get() = Color(android.graphics.Color.parseColor(this.colorHex))
@@ -70,67 +82,187 @@ private val Category.pastelColor: Color
 @Composable
 fun StatsScreen(
     viewModel: StatsViewModel = hiltViewModel(),
-    onNavigateToTrendDetail: (trendType: String) -> Unit = {}
+    onNavigateToStatsSection: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        StatsTopBar()
+
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .background(BgPrimary),
-            contentPadding = PaddingValues(bottom = 112.dp)
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            item {
-                StatsImmersiveHeader(
-                    uiState = uiState,
-                    selectedTab = uiState.selectedTab,
-                    onTabSelected = { viewModel.selectTab(it) },
-                    onOverviewTimeRangeSelected = { viewModel.selectOverviewTimeRange(it) }
-                )
-            }
+            item { StatsHomeContent(uiState, viewModel, onNavigateToStatsSection) }
+        }
+    }
+}
 
-            // 根据选中的 Tab 显示不同内容
-            when (uiState.selectedTab) {
-                StatsTab.OVERVIEW -> {
-                    item { OverviewContent(uiState, viewModel) }
-                }
-                StatsTab.CATEGORY -> {
-                    item { CategoryContent(uiState, viewModel) }
-                }
-                StatsTab.TREND -> {
-                    item { TrendContent(uiState, viewModel, onNavigateToTrendDetail) }
-                }
-                StatsTab.EFFICIENCY -> {
-                    item { EfficiencyContent(uiState, viewModel) }
-                }
-                StatsTab.AI_INSIGHT -> {
-                    item { AIInsightContent(uiState, viewModel) }
-                }
-            }
-
-            // 最后更新时间
-            item {
+@Composable
+private fun StatsTopBar() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = BgCard,
+        shadowElevation = 0.dp
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "最后更新于: ${uiState.lastUpdateTime.format(DateTimeFormatter.ofPattern("HH:mm:ss"))}",
-                    fontSize = 12.sp,
-                    color = TextMuted,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    textAlign = TextAlign.Center
+                    text = "统计",
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
                 )
+            }
+            HorizontalDivider(thickness = 0.5.dp, color = Border)
+        }
+    }
+}
+
+@Composable
+fun StatsStructureScreen(
+    viewModel: StatsViewModel = hiltViewModel(),
+    onBackPressed: () -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    StatsDetailScaffold(
+        title = "任务结构",
+        subtitle = "看任务分布是否偏科",
+        onBackPressed = onBackPressed
+    ) {
+        CategoryContent(uiState = uiState, viewModel = viewModel)
+    }
+}
+
+@Composable
+fun StatsTrendScreen(
+    viewModel: StatsViewModel = hiltViewModel(),
+    onBackPressed: () -> Unit,
+    onNavigateToTrendDetail: (String) -> Unit = {}
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    StatsDetailScaffold(
+        title = "趋势分析",
+        subtitle = "看执行状态是在变好还是变差",
+        onBackPressed = onBackPressed
+    ) {
+        TrendContent(
+            uiState = uiState,
+            viewModel = viewModel,
+            onNavigateToTrendDetail = onNavigateToTrendDetail
+        )
+    }
+}
+
+@Composable
+fun StatsEfficiencyScreen(
+    viewModel: StatsViewModel = hiltViewModel(),
+    onBackPressed: () -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    StatsDetailScaffold(
+        title = "效率诊断",
+        subtitle = "看拖延、热力和效率建议",
+        onBackPressed = onBackPressed
+    ) {
+        EfficiencyContent(uiState = uiState, viewModel = viewModel)
+    }
+}
+
+@Composable
+fun StatsAIReportScreen(
+    viewModel: StatsViewModel = hiltViewModel(),
+    onBackPressed: () -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    StatsDetailScaffold(
+        title = "AI 周报",
+        subtitle = "把行为模式和改进建议整理出来",
+        onBackPressed = onBackPressed
+    ) {
+        AIInsightContent(uiState = uiState, viewModel = viewModel)
+    }
+}
+
+@Composable
+private fun StatsDetailScaffold(
+    title: String,
+    subtitle: String,
+    onBackPressed: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgPrimary)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = BgCard,
+            shadowElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBackPressed) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = TextPrimary
+                    )
+                }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = subtitle,
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             }
         }
 
-        // 任务列表弹窗
-        if (uiState.showTaskListSheet) {
-            TaskListBottomSheet(
-                taskListType = uiState.taskListType!!,
-                tasks = uiState.filteredTasks,
-                timeRange = uiState.selectedOverviewTimeRange,
-                onDismiss = { viewModel.hideTaskList() }
-            )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 56.dp)
+        ) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    content = content
+                )
+            }
         }
     }
 }
@@ -140,7 +272,7 @@ private fun StatsImmersiveHeader(
     uiState: StatsUiState,
     selectedTab: StatsTab,
     onTabSelected: (StatsTab) -> Unit,
-    onOverviewTimeRangeSelected: (OverviewTimeRange) -> Unit
+    showTabs: Boolean = true
 ) {
     val header = remember(uiState, selectedTab) {
         buildStatsHeaderModel(uiState, selectedTab)
@@ -152,16 +284,16 @@ private fun StatsImmersiveHeader(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF171B2D),
-                        Color(0xFF242E53),
-                        Color(0xFF0F9DB2)
+                        StatsSoftStart,
+                        StatsSoftMid,
+                        StatsSoftEnd
                     )
                 )
             )
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
             drawCircle(
-                color = Color.White.copy(alpha = 0.09f),
+                color = Color(0xFF7057F5).copy(alpha = 0.10f),
                 radius = size.width * 0.32f,
                 center = Offset(size.width * 0.88f, size.height * 0.14f)
             )
@@ -188,7 +320,7 @@ private fun StatsImmersiveHeader(
                             .clip(RoundedCornerShape(10.dp))
                             .background(
                                 Brush.linearGradient(
-                                    listOf(Color(0xFF4F63E7), Color(0xFF0F9DB2))
+                                    listOf(Primary, Color(0xFFB06DFF))
                                 )
                             ),
                         contentAlignment = Alignment.Center
@@ -201,47 +333,34 @@ private fun StatsImmersiveHeader(
                         )
                     }
 
-                    Column {
-                        Text(
-                            text = "统计",
-                            color = Color.White.copy(alpha = 0.68f),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = header.title,
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Text(
+                        text = "统计",
+                        color = StatsDeep,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 Surface(
-                    color = Color.White.copy(alpha = 0.12f),
+                    color = Color.White.copy(alpha = 0.72f),
                     shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                    border = BorderStroke(1.dp, StatsLine)
                 ) {
                     Text(
                         text = header.badge,
                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                        color = Color.White,
+                        color = Primary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            StatsTabRow(
-                selectedTab = selectedTab,
-                onTabSelected = onTabSelected,
-                immersive = true
-            )
-
-            if (selectedTab == StatsTab.OVERVIEW) {
-                OverviewTimeRangeChips(
-                    selectedTimeRange = uiState.selectedOverviewTimeRange,
-                    onTimeRangeSelected = onOverviewTimeRangeSelected
+            if (showTabs) {
+                StatsTabRow(
+                    selectedTab = selectedTab,
+                    onTabSelected = onTabSelected,
+                    immersive = true
                 )
             }
 
@@ -249,11 +368,18 @@ private fun StatsImmersiveHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color.White.copy(alpha = 0.11f))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.76f))
+                    .border(1.dp, StatsLine, RoundedCornerShape(16.dp))
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Text(
+                    text = header.title,
+                    color = Primary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -262,27 +388,27 @@ private fun StatsImmersiveHeader(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = header.label,
-                            color = Color.White.copy(alpha = 0.68f),
+                            color = StatsSub,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
                             text = header.value,
-                            color = Color.White,
+                            color = StatsDeep,
                             fontSize = 28.sp,
                             fontWeight = FontWeight.Black,
                             lineHeight = 32.sp
                         )
                     }
                     Surface(
-                        color = Color.White.copy(alpha = 0.13f),
+                        color = Primary.copy(alpha = 0.10f),
                         shape = RoundedCornerShape(50),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                        border = BorderStroke(1.dp, Primary.copy(alpha = 0.16f))
                     ) {
                         Text(
                             text = header.state,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            color = Color.White,
+                            color = Primary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -291,7 +417,7 @@ private fun StatsImmersiveHeader(
 
                 Text(
                     text = header.summary,
-                    color = Color.White.copy(alpha = 0.82f),
+                    color = StatsSub,
                     fontSize = 12.sp,
                     lineHeight = 17.sp
                 )
@@ -338,7 +464,7 @@ private fun buildStatsHeaderModel(
 
     return when (selectedTab) {
         StatsTab.OVERVIEW -> StatsHeaderModel(
-            title = "洞察中枢",
+            title = "执行概览",
             label = "AI 判断",
             value = when {
                 uiState.totalTasks == 0 -> "等待数据"
@@ -360,29 +486,16 @@ private fun buildStatsHeaderModel(
             )
         )
         StatsTab.CATEGORY -> StatsHeaderModel(
-            title = "分类分析",
+            title = "任务结构",
             label = "结构判断",
-            value = "投入分布",
+            value = "分布与变化",
             badge = "${uiState.categoryStats.size} 类",
             state = "看结构",
-            summary = "分类页重点看任务投入是否偏科，以及哪些分类完成率高、拖延成本低。",
+            summary = "这里把分类分布和趋势变化放在一起，重点看任务投入是否偏科，以及执行结构是在变好还是变差。",
             signals = listOf(
                 "分类数" to "${uiState.categoryStats.size}",
-                "排行" to "${uiState.categoryEfficiencyRanking.size}",
-                "热力" to if (uiState.categoryWeekdayHeatmap.isEmpty()) "暂无" else "已生成"
-            )
-        )
-        StatsTab.TREND -> StatsHeaderModel(
-            title = "趋势追踪",
-            label = "趋势判断",
-            value = if (uiState.completionRateTrend.isEmpty()) "等待数据" else "持续观察",
-            badge = uiState.selectedTrendTimeRange.displayName,
-            state = "看变化",
-            summary = "趋势页保留完成量、完成率、周期时间和累积流，用来判断效率是在变好还是变差。",
-            signals = listOf(
                 "日趋势" to "${uiState.weeklyTrend.size}",
-                "完成率" to "${uiState.completionRateTrend.size}",
-                "周期" to "${uiState.cycleTimeTrend.size}"
+                "排行" to "${uiState.categoryEfficiencyRanking.size}"
             )
         )
         StatsTab.EFFICIENCY -> StatsHeaderModel(
@@ -410,21 +523,6 @@ private fun buildStatsHeaderModel(
                 "热力" to if (uiState.timeHeatmap.isEmpty()) "暂无" else "已生成"
             )
         )
-        StatsTab.AI_INSIGHT -> StatsHeaderModel(
-            title = "AI 周报",
-            label = "本周判断",
-            value = uiState.weeklyReport?.title ?: "等待生成",
-            badge = if (uiState.isGeneratingReport || uiState.isAnalyzingBehavior) "分析中" else "AI",
-            state = "行动建议",
-            summary = uiState.weeklyReport?.summary
-                ?: uiState.behaviorInsight?.patterns?.firstOrNull()
-                ?: "AI 洞察会把行为模式、周报摘要和下周建议收敛成可以执行的行动。",
-            signals = listOf(
-                "行为模式" to (uiState.behaviorInsight?.patterns?.size?.toString() ?: "0"),
-                "改进建议" to (uiState.behaviorInsight?.suggestions?.size?.toString() ?: "0"),
-                "周报" to if (uiState.weeklyReport == null) "未生成" else "已生成"
-            )
-        )
     }
 }
 
@@ -437,13 +535,13 @@ private fun HeaderSignalCard(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Color.White.copy(alpha = 0.08f))
-            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(10.dp))
+            .background(StatsSoftMid.copy(alpha = 0.72f))
+            .border(1.dp, StatsLine, RoundedCornerShape(10.dp))
             .padding(8.dp)
     ) {
         Text(
             text = label,
-            color = Color.White.copy(alpha = 0.62f),
+            color = StatsSub,
             fontSize = 10.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -451,7 +549,7 @@ private fun HeaderSignalCard(
         Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = value,
-            color = Color.White,
+            color = StatsDeep,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -468,26 +566,31 @@ private fun OverviewTimeRangeChips(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.10f))
-            .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+            .padding(horizontal = 10.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(BgSecondary)
+            .border(1.dp, Color(0xFF29293A).copy(alpha = 0.23f), RoundedCornerShape(8.dp))
+            .padding(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        OverviewTimeRange.values().forEach { range ->
+        listOf(
+            OverviewTimeRange.TODAY,
+            OverviewTimeRange.THIS_WEEK,
+            OverviewTimeRange.THIS_MONTH
+        ).forEach { range ->
             val selected = selectedTimeRange == range
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) Color.White else Color.Transparent)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (selected) Primary else Color.Transparent)
                     .clickable { onTimeRangeSelected(range) }
-                    .padding(vertical = 7.dp),
+                    .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = range.displayName,
-                    color = if (selected) Color(0xFF171B2D) else Color.White.copy(alpha = 0.70f),
+                    color = if (selected) Color.White else StatsSub,
                     fontSize = 12.sp,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                 )
@@ -508,9 +611,9 @@ private fun StatsTabRow(
             .then(if (immersive) Modifier else Modifier.padding(16.dp)),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (immersive) Color.White.copy(alpha = 0.10f) else BgCard
+            containerColor = if (immersive) Color.White.copy(alpha = 0.62f) else BgCard
         ),
-        border = if (immersive) BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)) else null
+        border = if (immersive) BorderStroke(1.dp, StatsLine) else null
     ) {
         Row(
             modifier = Modifier
@@ -526,7 +629,7 @@ private fun StatsTabRow(
                         .clip(RoundedCornerShape(10.dp))
                         .background(
                             when {
-                                immersive && isSelected -> Color.White
+                                immersive && isSelected -> Primary
                                 isSelected -> Primary
                                 else -> Color.Transparent
                             }
@@ -538,8 +641,8 @@ private fun StatsTabRow(
                     Text(
                         text = tab.title,
                         color = when {
-                            immersive && isSelected -> Color(0xFF171B2D)
-                            immersive -> Color.White.copy(alpha = 0.70f)
+                            immersive && isSelected -> Color.White
+                            immersive -> StatsSub
                             isSelected -> Color.White
                             else -> TextSecondary
                         },
@@ -548,6 +651,127 @@ private fun StatsTabRow(
                     )
                 }
             }
+        }
+    }
+}
+
+// ==================== 统计首页 ====================
+@Composable
+private fun StatsHomeContent(
+    uiState: StatsUiState,
+    viewModel: StatsViewModel,
+    onNavigateToStatsSection: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OverviewTimeRangeChips(
+            selectedTimeRange = uiState.selectedOverviewTimeRange,
+            onTimeRangeSelected = { viewModel.selectOverviewTimeRange(it) }
+        )
+
+        ExecutionSummaryCard(uiState)
+
+        OverviewMetricStrip(uiState = uiState)
+
+        StatsTrendPreview(uiState)
+
+        StatsAnalysisEntryGrid(onNavigateToStatsSection = onNavigateToStatsSection)
+    }
+}
+
+@Composable
+private fun StatsAnalysisEntryGrid(
+    onNavigateToStatsSection: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "专项分析",
+            color = TextPrimary,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        StatsAnalysisEntryCard(
+            title = "任务结构",
+            description = "查看分类分布与任务构成",
+            onClick = { onNavigateToStatsSection("structure") }
+        )
+        StatsAnalysisEntryCard(
+            title = "趋势分析",
+            description = "查看完成趋势与任务积压变化",
+            onClick = { onNavigateToStatsSection("trend") }
+        )
+        StatsAnalysisEntryCard(
+            title = "效率诊断",
+            description = "分析拖延、活跃时段与执行效率",
+            onClick = { onNavigateToStatsSection("efficiency") }
+        )
+        StatsAnalysisEntryCard(
+            title = "AI 周报",
+            description = "汇总行为变化与改进建议",
+            onClick = { onNavigateToStatsSection("ai") }
+        )
+    }
+}
+
+@Composable
+private fun StatsAnalysisEntryCard(
+    title: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = description,
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "进入$title",
+                tint = TextMuted,
+                modifier = Modifier.size(22.dp)
+            )
         }
     }
 }
@@ -561,7 +785,12 @@ private fun OverviewContent(uiState: StatsUiState, viewModel: StatsViewModel) {
     ) {
         Spacer(modifier = Modifier.height(2.dp))
 
-        OverviewMetricGrid(uiState = uiState, viewModel = viewModel)
+        OverviewTimeRangeChips(
+            selectedTimeRange = uiState.selectedOverviewTimeRange,
+            onTimeRangeSelected = { viewModel.selectOverviewTimeRange(it) }
+        )
+
+        OverviewMetricStrip(uiState = uiState)
 
         // 新增：本周vs上周对比卡片
         uiState.weekComparison?.let { comparison ->
@@ -581,86 +810,23 @@ private fun OverviewContent(uiState: StatsUiState, viewModel: StatsViewModel) {
 }
 
 @Composable
-private fun OverviewMetricGrid(
-    uiState: StatsUiState,
-    viewModel: StatsViewModel
-) {
-    val progressTitle = if (uiState.coreMetricProgressType == "count") "已完成" else "完成率"
+private fun ExecutionSummaryCard(uiState: StatsUiState) {
+    val rangeName = uiState.selectedOverviewTimeRange.displayName
+    val progress = (uiState.overviewCompletionRate / 100f).coerceIn(0f, 1f)
 
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OverviewMetricTile(
-                label = "待办任务",
-                value = uiState.coreMetricPending.toString(),
-                trend = "需要推进",
-                color = Primary,
-                modifier = Modifier.weight(1f),
-                onClick = { viewModel.showTaskList(TaskListType.PENDING) }
-            )
-            OverviewMetricTile(
-                label = "逾期",
-                value = uiState.coreMetricOverdue.toString(),
-                trend = if (uiState.coreMetricOverdue == 0) "当前清爽" else "优先处理",
-                color = Danger,
-                modifier = Modifier.weight(1f),
-                onClick = { viewModel.showTaskList(TaskListType.OVERDUE) }
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OverviewMetricTile(
-                label = "重要紧急",
-                value = uiState.coreMetricImportantUrgent.toString(),
-                trend = if (uiState.coreMetricImportantUrgent == 0) "风险较低" else "风险仍在",
-                color = Warning,
-                modifier = Modifier.weight(1f),
-                onClick = { viewModel.showTaskList(TaskListType.IMPORTANT_URGENT) }
-            )
-            OverviewMetricTile(
-                label = progressTitle,
-                value = uiState.coreMetricProgress,
-                trend = "当前进度",
-                color = Success,
-                modifier = Modifier.weight(1f),
-                onClick = { viewModel.showTaskList(TaskListType.COMPLETED) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun OverviewMetricTile(
-    label: String,
-    value: String,
-    trend: String,
-    color: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = modifier
-            .height(104.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = BgCard),
-        border = BorderStroke(1.dp, Border.copy(alpha = 0.65f))
+        border = BorderStroke(1.dp, Border)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -668,39 +834,170 @@ private fun OverviewMetricTile(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = label,
-                    color = TextMuted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    text = "${rangeName}执行",
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(color)
+                Text(
+                    text = "完成率",
+                    color = TextMuted,
+                    fontSize = 12.sp
                 )
             }
-
-            Column {
-                Text(
-                    text = value,
-                    color = TextPrimary,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 1
-                )
-                Text(
-                    text = trend,
-                    color = color,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            if (uiState.overviewTotalTasks == 0) {
+                Text("该时间范围内暂无任务", color = TextSecondary, fontSize = 15.sp)
+                Text("创建任务后，这里会展示执行进度。", color = TextMuted, fontSize = 12.sp)
+            } else {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "${uiState.overviewCompletionRate.toInt()}%",
+                        color = Primary,
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "已完成 ${uiState.overviewCompletedTasks} / ${uiState.overviewTotalTasks} 项",
+                        color = TextSecondary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 5.dp)
+                    )
+                }
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(99.dp)),
+                    color = Primary,
+                    trackColor = BgSecondary
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun StatsTrendPreview(uiState: StatsUiState) {
+    val recentTrend = uiState.overviewTrend.take(7).reversed()
+    val maxCompleted = recentTrend.maxOfOrNull { it.completedCount }?.coerceAtLeast(1) ?: 1
+    val hasCompletion = recentTrend.any { it.completedCount > 0 }
+    val rangeLabel = when (uiState.selectedOverviewTimeRange) {
+        OverviewTimeRange.TODAY -> "今日"
+        OverviewTimeRange.THIS_WEEK -> "本周"
+        OverviewTimeRange.THIS_MONTH -> "本月"
+        OverviewTimeRange.ALL -> "全部"
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("完成趋势", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(rangeLabel, color = TextMuted, fontSize = 12.sp)
+            }
+            if (recentTrend.isEmpty() || !hasCompletion) {
+                Text("该时间范围内暂无完成记录", color = TextMuted, fontSize = 13.sp)
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(88.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    recentTrend.forEach { day ->
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Bottom
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height((day.completedCount.toFloat() / maxCompleted * 52f).coerceAtLeast(4f).dp)
+                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                    .background(Primary.copy(alpha = if (day.completedCount > 0) 1f else 0.16f))
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(day.date.dayOfMonth.toString(), color = TextMuted, fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverviewMetricStrip(uiState: StatsUiState) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(82.dp)
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OverviewMetricItem("待办", uiState.coreMetricPending.toString(), Primary, Modifier.weight(1f))
+            VerticalDivider(Modifier.height(42.dp), thickness = 0.5.dp, color = Border)
+            OverviewMetricItem("逾期", uiState.coreMetricOverdue.toString(), Danger, Modifier.weight(1f))
+            VerticalDivider(Modifier.height(42.dp), thickness = 0.5.dp, color = Border)
+            OverviewMetricItem("重要紧急", uiState.coreMetricImportantUrgent.toString(), Warning, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun OverviewMetricItem(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 10.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = label,
+            color = TextSecondary,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = value,
+            color = color,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
     }
 }
 
@@ -1242,6 +1539,26 @@ private fun LegendItem(
             text = "$label: $count",
             fontSize = 13.sp,
             color = TextSecondary
+        )
+    }
+}
+
+// ==================== 结构统计页面 ====================
+@Composable
+private fun StructureContent(
+    uiState: StatsUiState,
+    viewModel: StatsViewModel,
+    onNavigateToTrendDetail: (String) -> Unit = {}
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        CategoryContent(uiState = uiState, viewModel = viewModel)
+        TrendContent(
+            uiState = uiState,
+            viewModel = viewModel,
+            onNavigateToTrendDetail = onNavigateToTrendDetail
         )
     }
 }
@@ -1796,6 +2113,7 @@ private fun EfficiencyContent(uiState: StatsUiState, viewModel: StatsViewModel) 
 
         // 4. 效率建议卡
         EfficiencyAdviceCard(uiState = uiState)
+
     }
 }
 

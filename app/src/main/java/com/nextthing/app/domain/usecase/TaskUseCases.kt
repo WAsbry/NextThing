@@ -8,9 +8,10 @@ import com.nextthing.app.domain.model.RepeatFrequency
 import com.nextthing.app.domain.model.TaskImportanceUrgency
 import com.nextthing.app.domain.repository.TaskRepository
 import com.nextthing.app.domain.repository.LocationRepository
-import com.nextthing.app.domain.repository.SyncRepository
-import com.nextthing.app.data.local.entity.SyncStatus
+import com.nextthing.app.domain.repository.TaskGeofenceRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import timber.log.Timber
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -70,7 +71,8 @@ class GetTodayTasksUseCase @Inject constructor(
 class CreateTaskUseCase @Inject constructor(
     private val repository: TaskRepository,
     private val taskAlarmManager: com.nextthing.app.util.TaskAlarmManager,
-    private val syncRepository: SyncRepository? = null // 可选，用于数据同步
+    private val taskGeofenceRepository: TaskGeofenceRepository,
+    private val generateRecurringTasksUseCase: GenerateRecurringTasksUseCase
 ) {
     companion object {
         private const val TAG = "NotificationTask"
@@ -86,7 +88,8 @@ class CreateTaskUseCase @Inject constructor(
         repeatFrequency: RepeatFrequency = RepeatFrequency(),
         notificationStrategyId: String? = null,
         importanceUrgency: TaskImportanceUrgency? = null,
-        locationInfo: com.nextthing.app.domain.model.LocationInfo? = null
+        locationInfo: com.nextthing.app.domain.model.LocationInfo? = null,
+        geofenceLocationId: String? = null
     ): Result<String> {
         Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         Timber.tag(TAG).d("【UseCase】CreateTaskUseCase 开始执行")
@@ -101,6 +104,8 @@ class CreateTaskUseCase @Inject constructor(
             if (title.isBlank()) {
                 Timber.tag(TAG).e("❌ 任务标题为空，创建失败")
                 Result.failure(IllegalArgumentException("任务标题不能为空"))
+            } else if (!repeatFrequency.isValid()) {
+                Result.failure(IllegalArgumentException("重复规则配置无效"))
             } else {
                 // 如果未设置截止时间，默认为今天23:59:59
                 // 这样确保所有任务都有截止时间，符合逾期检测逻辑
@@ -140,8 +145,16 @@ class CreateTaskUseCase @Inject constructor(
                 val taskId = repository.insertTask(task)
                 Timber.tag(TAG).d("✅ 任务已保存，ID: $taskId")
 
-                // 如果任务设置了通知策略和截止时间，注册闹钟
-                if (task.notificationStrategyId != null && task.dueDate != null) {
+                geofenceLocationId?.let { locationId ->
+                    taskGeofenceRepository.createTaskGeofence(taskId, locationId)
+                        .onFailure { error ->
+                            if (error is CancellationException) throw error
+                            Timber.tag(TAG).w(error, "任务已创建，但地理围栏关联失败")
+                        }
+                }
+
+                // 普通任务直接注册闹钟；重复模板不提醒，由实际实例负责提醒。
+                if (!isRecurringTask && task.notificationStrategyId != null && task.dueDate != null) {
                     Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     Timber.tag(TAG).d("检测到任务设置了通知策略，准备调度闹钟...")
                     Timber.tag(TAG).d("   任务ID: $taskId")
@@ -149,32 +162,33 @@ class CreateTaskUseCase @Inject constructor(
                     Timber.tag(TAG).d("   通知策略ID: ${task.notificationStrategyId}")
                     Timber.tag(TAG).d("调用 TaskAlarmManager.scheduleTaskAlarm()")
 
-                    taskAlarmManager.scheduleTaskAlarm(task)
-                } else {
+                    runCatching { taskAlarmManager.scheduleTaskAlarm(task) }
+                        .onFailure { error ->
+                            Timber.tag(TAG).w(error, "任务已创建，但精确闹钟调度失败，将由后台通知兜底")
+                        }
+                } else if (!isRecurringTask) {
                     Timber.tag(TAG).d("任务未设置通知策略或截止时间，跳过闹钟调度")
                     Timber.tag(TAG).d("   notificationStrategyId: $notificationStrategyId")
                     Timber.tag(TAG).d("   dueDate: $finalDueDate")
                 }
 
+                if (isRecurringTask) {
+                    generateRecurringTasksUseCase(LocalDate.now())
+                        .onFailure { error ->
+                            if (error is CancellationException) throw error
+                            Timber.tag(TAG).w(error, "重复模板已创建，但当天实例生成失败，将由后台任务补偿")
+                        }
+                }
+
                 Timber.tag(TAG).d("✅ CreateTaskUseCase 执行完成")
                 Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-                // 标记需要同步
-                syncRepository?.let {
-                    try {
-                        it.markTaskForSync(taskId)
-                    } catch (e: Exception) {
-                        Timber.tag(TAG).w(e, "标记任务同步状态失败")
-                    }
-                }
-
                 Result.success(taskId)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Timber.tag(TAG).e("❌ 创建任务时发生异常")
-            Timber.tag(TAG).e("   异常类型: ${e.javaClass.simpleName}")
-            Timber.tag(TAG).e("   异常信息: ${e.message}")
-            e.printStackTrace()
+            Timber.tag(TAG).e(e, "❌ 创建任务时发生异常")
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             Result.failure(e)
         }
@@ -184,34 +198,64 @@ class CreateTaskUseCase @Inject constructor(
 class UpdateTaskUseCase @Inject constructor(
     private val repository: TaskRepository,
     private val taskAlarmManager: com.nextthing.app.util.TaskAlarmManager,
-    private val notificationHelper: com.nextthing.app.util.NotificationHelper,
-    private val syncRepository: SyncRepository? = null
+    private val notificationHelper: com.nextthing.app.util.NotificationHelper
 ) {
     suspend operator fun invoke(task: Task): Result<Unit> {
         return try {
             if (task.title.isBlank()) {
                 Result.failure(IllegalArgumentException("任务标题不能为空"))
             } else {
+                val now = LocalDateTime.now()
+                val existingTask = repository.getTaskById(task.id)
+
+                // 普通编辑入口也必须遵守任务状态机，避免只修改 status 而遗漏 completedAt。
+                val normalizedCompletedAt = when {
+                    task.status == TaskStatus.COMPLETED &&
+                        existingTask?.status != TaskStatus.COMPLETED -> now
+
+                    task.status == TaskStatus.COMPLETED ->
+                        existingTask?.completedAt ?: task.completedAt ?: now
+
+                    existingTask?.status == TaskStatus.COMPLETED &&
+                        task.status == TaskStatus.PENDING -> {
+                        val completedAt = existingTask.completedAt
+                            ?: return Result.failure(
+                                IllegalStateException("任务缺少完成时间，无法撤销完成")
+                            )
+                        if (completedAt.isBefore(now.minusDays(7))) {
+                            return Result.failure(
+                                IllegalStateException("仅支持撤销 7 天内完成的任务")
+                            )
+                        }
+                        null
+                    }
+
+                    else -> null
+                }
+
                 val updatedTask = task.copy(
-                    updatedAt = LocalDateTime.now(),
-                    isUrgent = task.dueDate?.let { it.isBefore(LocalDateTime.now().plusHours(2)) } ?: false
+                    completedAt = normalizedCompletedAt,
+                    updatedAt = now,
+                    isUrgent = task.dueDate?.let { it.isBefore(now.plusHours(2)) } ?: false
                 )
                 repository.updateTask(updatedTask)
 
-                // 标记需要同步
-                syncRepository?.markTaskForSync(task.id)
-
                 // 取消旧闹钟并重新设置（如果有通知策略）
-                taskAlarmManager.cancelTaskAlarm(updatedTask.id)
+                runCatching { taskAlarmManager.cancelTaskAlarm(updatedTask.id) }
+                    .onFailure { Timber.w(it, "任务已更新，但取消旧闹钟失败: %s", updatedTask.id) }
                 if (updatedTask.status == TaskStatus.COMPLETED || updatedTask.status == TaskStatus.CANCELLED) {
                     // 完成或取消的任务，同时移除通知
-                    notificationHelper.cancelNotification(updatedTask.id)
+                    runCatching { notificationHelper.cancelNotification(updatedTask.id) }
+                        .onFailure { Timber.w(it, "任务已更新，但移除旧通知失败: %s", updatedTask.id) }
                 } else if (updatedTask.notificationStrategyId != null && updatedTask.dueDate != null) {
-                    taskAlarmManager.scheduleTaskAlarm(updatedTask)
+                    runCatching { taskAlarmManager.scheduleTaskAlarm(updatedTask) }
+                        .onFailure { Timber.w(it, "任务已更新，但精确闹钟调度失败，将由后台通知兜底") }
                 }
 
                 Result.success(Unit)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -221,8 +265,7 @@ class UpdateTaskUseCase @Inject constructor(
 class DeleteTaskUseCase @Inject constructor(
     private val repository: TaskRepository,
     private val taskAlarmManager: com.nextthing.app.util.TaskAlarmManager,
-    private val notificationHelper: com.nextthing.app.util.NotificationHelper,
-    private val syncRepository: SyncRepository? = null
+    private val notificationHelper: com.nextthing.app.util.NotificationHelper
 ) {
     /**
      * 删除任务
@@ -242,13 +285,6 @@ class DeleteTaskUseCase @Inject constructor(
                 return Result.failure(Exception("任务不存在"))
             }
 
-            // 取消闹钟和通知
-            taskAlarmManager.cancelTaskAlarm(taskId)
-            notificationHelper.cancelNotification(taskId)
-
-            // 标记需要同步（软删除标记）
-            syncRepository?.markTaskForSync(taskId)
-
             // 判断是否为重复任务的实例
             val isRecurringInstance = task.templateTaskId != null
 
@@ -257,12 +293,14 @@ class DeleteTaskUseCase @Inject constructor(
                 !isRecurringInstance -> {
                     timber.log.Timber.d("删除普通任务: ${task.title}")
                     repository.deleteTask(taskId)
+                    cancelReminderSideEffects(taskId)
                 }
 
                 // 情况2：重复任务实例 - 仅删除此任务
                 isRecurringInstance && deleteMode == com.nextthing.app.domain.model.DeleteMode.DELETE_THIS_ONLY -> {
                     timber.log.Timber.d("仅删除重复任务实例: ${task.title}")
                     repository.deleteTask(taskId)
+                    cancelReminderSideEffects(taskId)
                 }
 
                 // 情况3：重复任务实例 - 删除所有重复任务
@@ -270,24 +308,27 @@ class DeleteTaskUseCase @Inject constructor(
                     timber.log.Timber.d("删除所有重复任务: ${task.title}")
                     val templateId = task.templateTaskId!!
 
-                    // 获取所有相关实例，取消它们的闹钟
+                    // 先完成可同步的数据库删除，再清理派生的闹钟和通知。
                     val instances = repository.getInstancesByTemplateId(templateId)
-                    instances.forEach { instance ->
-                        taskAlarmManager.cancelTaskAlarm(instance.id)
-                        notificationHelper.cancelNotification(instance.id)
-                        syncRepository?.markTaskForSync(instance.id)
-                    }
-
-                    // 删除template和所有instances
                     repository.deleteTemplateAndAllInstances(templateId)
+                    (instances.map { it.id } + templateId).distinct().forEach(::cancelReminderSideEffects)
                 }
             }
 
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             timber.log.Timber.e(e, "删除任务失败")
             Result.failure(e)
         }
+    }
+
+    private fun cancelReminderSideEffects(taskId: String) {
+        runCatching { taskAlarmManager.cancelTaskAlarm(taskId) }
+            .onFailure { Timber.w(it, "任务已删除，但取消闹钟失败: %s", taskId) }
+        runCatching { notificationHelper.cancelNotification(taskId) }
+            .onFailure { Timber.w(it, "任务已删除，但取消通知失败: %s", taskId) }
     }
 }
 
@@ -307,6 +348,8 @@ class ToggleTaskStatusUseCase @Inject constructor(
             timber.log.Timber.tag("UseCase").d("任务标题: ${task.title}")
             timber.log.Timber.tag("UseCase").d("当前状态: ${task.status}")
 
+            val now = LocalDateTime.now()
+
             // 严格的状态转换规则
             val newStatus = when (task.status) {
                 TaskStatus.PENDING -> TaskStatus.COMPLETED
@@ -317,7 +360,11 @@ class ToggleTaskStatusUseCase @Inject constructor(
                     TaskStatus.PENDING
                 }
                 TaskStatus.COMPLETED -> {
-                    // 已完成的任务可以取消完成（仅支持7天内，此处暂不限制，由UI层控制）
+                    val completedAt = task.completedAt
+                        ?: return Result.failure(IllegalStateException("任务缺少完成时间，无法撤销完成"))
+                    if (completedAt.isBefore(now.minusDays(7))) {
+                        return Result.failure(IllegalStateException("仅支持撤销 7 天内完成的任务"))
+                    }
                     TaskStatus.PENDING
                 }
             }
@@ -326,8 +373,8 @@ class ToggleTaskStatusUseCase @Inject constructor(
 
             val updatedTask = task.copy(
                 status = newStatus,
-                completedAt = if (newStatus == TaskStatus.COMPLETED) LocalDateTime.now() else null,
-                updatedAt = LocalDateTime.now()
+                completedAt = if (newStatus == TaskStatus.COMPLETED) now else null,
+                updatedAt = now
             )
 
             timber.log.Timber.tag("UseCase").d("updatedTask.status: ${updatedTask.status}")
@@ -337,20 +384,25 @@ class ToggleTaskStatusUseCase @Inject constructor(
 
             // 完成任务时取消闹钟；恢复为 PENDING 时重新调度闹钟
             if (newStatus == TaskStatus.COMPLETED) {
-                taskAlarmManager.cancelTaskAlarm(taskId)
-                notificationHelper.cancelNotification(taskId)
+                runCatching { taskAlarmManager.cancelTaskAlarm(taskId) }
+                    .onFailure { Timber.w(it, "任务已完成，但取消闹钟失败: %s", taskId) }
+                runCatching { notificationHelper.cancelNotification(taskId) }
+                    .onFailure { Timber.w(it, "任务已完成，但取消通知失败: %s", taskId) }
                 timber.log.Timber.tag("UseCase").d("🔕 已取消任务闹钟和通知")
             } else if (newStatus == TaskStatus.PENDING &&
                 updatedTask.notificationStrategyId != null &&
                 updatedTask.dueDate != null &&
-                updatedTask.dueDate.isAfter(LocalDateTime.now())) {
-                taskAlarmManager.scheduleTaskAlarm(updatedTask)
+                updatedTask.dueDate.isAfter(now)) {
+                runCatching { taskAlarmManager.scheduleTaskAlarm(updatedTask) }
+                    .onFailure { Timber.w(it, "任务状态已恢复，但精确闹钟调度失败，将由后台通知兜底") }
                 timber.log.Timber.tag("UseCase").d("🔔 已重新调度任务闹钟")
             }
 
             timber.log.Timber.tag("UseCase").d("✅ repository.updateTask() 完成")
             timber.log.Timber.tag("UseCase").d("━━━━━━ ToggleTaskStatus 结束 ━━━━━━")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             timber.log.Timber.tag("UseCase").e(e, "❌ ToggleTaskStatus 异常")
             Result.failure(e)
@@ -375,9 +427,14 @@ class DeferTaskUseCase @Inject constructor(
             val now = LocalDateTime.now()
             val today = now.toLocalDate()
 
-            // 检查是否已过当天 23:59（理论上 PENDING 任务不应有 dueDate 在过去，但做防御性检查）
-            if (task.dueDate != null && task.dueDate.toLocalDate().isBefore(today)) {
-                return Result.failure(IllegalStateException("已过当天，无法延期"))
+            // “延期”语义是把今天未完成的任务移到明天；禁止误改过去或未来任务。
+            task.dueDate?.toLocalDate()?.let { dueDate ->
+                if (dueDate.isBefore(today)) {
+                    return Result.failure(IllegalStateException("已过当天，无法延期"))
+                }
+                if (dueDate.isAfter(today)) {
+                    return Result.failure(IllegalStateException("仅当天未完成的任务可以延期"))
+                }
             }
 
             // 设置截止时间为次日的 23:59:59
@@ -392,12 +449,16 @@ class DeferTaskUseCase @Inject constructor(
             repository.updateTask(updatedTask)
 
             // 取消旧闹钟，并为新 dueDate 重新调度
-            taskAlarmManager.cancelTaskAlarm(taskId)
+            runCatching { taskAlarmManager.cancelTaskAlarm(taskId) }
+                .onFailure { Timber.w(it, "任务已延期，但取消旧闹钟失败: %s", taskId) }
             if (updatedTask.notificationStrategyId != null) {
-                taskAlarmManager.scheduleTaskAlarm(updatedTask)
+                runCatching { taskAlarmManager.scheduleTaskAlarm(updatedTask) }
+                    .onFailure { Timber.w(it, "任务已延期，但精确闹钟调度失败，将由后台通知兜底") }
             }
 
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -437,12 +498,23 @@ class GetUrgentTasksUseCase @Inject constructor(
 }
 
 class DeleteAllTasksUseCase @Inject constructor(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val taskAlarmManager: com.nextthing.app.util.TaskAlarmManager,
+    private val notificationHelper: com.nextthing.app.util.NotificationHelper
 ) {
     suspend operator fun invoke(): Result<Unit> {
         return try {
+            val taskIds = repository.getAllTasks().first().map { it.id }
             repository.deleteAllTasks()
+            taskIds.forEach { taskId ->
+                runCatching { taskAlarmManager.cancelTaskAlarm(taskId) }
+                    .onFailure { Timber.w(it, "任务已清空，但取消闹钟失败: %s", taskId) }
+                runCatching { notificationHelper.cancelNotification(taskId) }
+                    .onFailure { Timber.w(it, "任务已清空，但取消通知失败: %s", taskId) }
+            }
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -450,10 +522,19 @@ class DeleteAllTasksUseCase @Inject constructor(
 }
 
 class DeleteCompletedTasksUseCase @Inject constructor(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val taskAlarmManager: com.nextthing.app.util.TaskAlarmManager,
+    private val notificationHelper: com.nextthing.app.util.NotificationHelper
 ) {
     suspend operator fun invoke() {
+        val taskIds = repository.getTasksByStatus(TaskStatus.COMPLETED).first().map { it.id }
         repository.deleteCompletedTasks()
+        taskIds.forEach { taskId ->
+            runCatching { taskAlarmManager.cancelTaskAlarm(taskId) }
+                .onFailure { Timber.w(it, "已完成任务已清除，但取消闹钟失败: %s", taskId) }
+            runCatching { notificationHelper.cancelNotification(taskId) }
+                .onFailure { Timber.w(it, "已完成任务已清除，但取消通知失败: %s", taskId) }
+        }
     }
 }
 
@@ -472,7 +553,8 @@ class GetEarliestTaskDateUseCase @Inject constructor(
  */
 class GenerateRecurringTasksUseCase @Inject constructor(
     private val repository: TaskRepository,
-    private val taskAlarmManager: com.nextthing.app.util.TaskAlarmManager
+    private val taskAlarmManager: com.nextthing.app.util.TaskAlarmManager,
+    private val taskGeofenceRepository: TaskGeofenceRepository
 ) {
     companion object {
         private const val TAG = "RecurringTask"
@@ -507,18 +589,17 @@ class GenerateRecurringTasksUseCase @Inject constructor(
                 if (shouldGenerateForDate(template, targetDate)) {
                     Timber.tag(TAG).d("  ✅ 需要为 $targetDate 生成任务")
 
-                    // 4. 检查是否已经存在实例
-                    val instanceDate = targetDate.atStartOfDay()
-                    if (!repository.hasInstanceForDate(template.id, instanceDate)) {
-                        Timber.tag(TAG).d("  ✅ 该日期尚未生成实例,开始生成...")
-
-                        // 5. 从模板创建实例任务
-                        val instance = createInstanceFromTemplate(template, targetDate)
-                        repository.insertTask(instance)
+                    // 4. 依靠数据库唯一索引原子插入；并发执行不会 REPLACE 已有实例。
+                    val instance = createInstanceFromTemplate(template, targetDate)
+                    if (repository.insertTaskIfAbsent(instance)) {
+                        inheritTemplateGeofence(template.id, instance.id)
 
                         // 为新实例调度闹钟（同 CreateTaskUseCase 的逻辑）
                         if (instance.notificationStrategyId != null && instance.dueDate != null) {
-                            taskAlarmManager.scheduleTaskAlarm(instance)
+                            runCatching { taskAlarmManager.scheduleTaskAlarm(instance) }
+                                .onFailure { error ->
+                                    Timber.tag(TAG).w(error, "重复任务实例已创建，但精确闹钟调度失败，将由后台通知兜底")
+                                }
                         }
 
                         generatedCount++
@@ -539,6 +620,8 @@ class GenerateRecurringTasksUseCase @Inject constructor(
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
             Result.success(generatedCount)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "❌ 生成重复任务失败")
             Result.failure(e)
@@ -549,57 +632,30 @@ class GenerateRecurringTasksUseCase @Inject constructor(
      * 判断是否应该为指定日期生成任务
      */
     private fun shouldGenerateForDate(template: Task, date: LocalDate): Boolean {
-        val repeatFreq = template.repeatFrequency
+        val startDate = template.dueDate?.toLocalDate() ?: template.createdAt.toLocalDate()
+        return RecurrenceSchedule.shouldGenerate(template.repeatFrequency, startDate, date)
+    }
 
-        return when (repeatFreq.type) {
-            com.nextthing.app.domain.model.RepeatFrequencyType.NONE -> {
-                // 单次任务,不生成重复实例
-                false
-            }
-            com.nextthing.app.domain.model.RepeatFrequencyType.DAILY -> {
-                // 每日任务,总是生成
-                true
-            }
-            com.nextthing.app.domain.model.RepeatFrequencyType.WEEKDAYS -> {
-                // 工作日（周一至周五）
-                val dayOfWeek = date.dayOfWeek.value
-                dayOfWeek in 1..5
-            }
-            com.nextthing.app.domain.model.RepeatFrequencyType.WEEKENDS -> {
-                // 周末（周六、周日）
-                val dayOfWeek = date.dayOfWeek.value
-                dayOfWeek == 6 || dayOfWeek == 7
-            }
-            com.nextthing.app.domain.model.RepeatFrequencyType.LEGAL_HOLIDAY -> {
-                // 法定节假日
-                com.nextthing.app.util.LegalHolidayHelper.isLegalHoliday(date)
-            }
-            com.nextthing.app.domain.model.RepeatFrequencyType.WEEKLY -> {
-                // 每周任务,检查星期几
-                val dayOfWeek = date.dayOfWeek.value // 1=周一, 7=周日
-                repeatFreq.weekdays.contains(dayOfWeek)
-            }
-            com.nextthing.app.domain.model.RepeatFrequencyType.MONTHLY -> {
-                // 每月任务,检查日期
-                val dayOfMonth = date.dayOfMonth
-                val lengthOfMonth = date.lengthOfMonth() // 当月天数
-
-                // 直接匹配
-                if (repeatFreq.monthDays.contains(dayOfMonth)) {
-                    return true
-                }
-
-                // 处理月末日期: 如果用户选择的日期大于当月天数,在当月最后一天生成
-                // 例如: 用户选择31日,2月只有28/29天,则在2月最后一天生成
-                val isLastDayOfMonth = dayOfMonth == lengthOfMonth
-                if (isLastDayOfMonth) {
-                    // 检查是否有任何选择的日期大于当月天数
-                    val hasLargerDay = repeatFreq.monthDays.any { it > lengthOfMonth }
-                    return hasLargerDay
-                }
-
-                false
-            }
+    private suspend fun inheritTemplateGeofence(templateId: String, instanceId: String) {
+        val templateGeofence = taskGeofenceRepository.getByTaskIdOnce(templateId) ?: return
+        val now = LocalDateTime.now()
+        val result = taskGeofenceRepository.insert(
+            templateGeofence.copy(
+                id = java.util.UUID.randomUUID().toString(),
+                taskId = instanceId,
+                lastCheckTime = null,
+                lastCheckResult = null,
+                lastCheckDistance = null,
+                lastCheckUserLatitude = null,
+                lastCheckUserLongitude = null,
+                geofenceDeferCount = 0,
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        result.exceptionOrNull()?.let { error ->
+            if (error is CancellationException) throw error
+            Timber.tag(TAG).w(error, "重复任务实例已创建，但围栏继承失败: instanceId=%s", instanceId)
         }
     }
 
@@ -630,4 +686,4 @@ class GenerateRecurringTasksUseCase @Inject constructor(
             updatedAt = LocalDateTime.now() // 更新时间
         )
     }
-} 
+}

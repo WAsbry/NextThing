@@ -9,8 +9,10 @@ import kotlinx.coroutines.*
  * 用于避免短时间内多次触发相同Toast导致的重叠显示问题
  */
 object ToastHelper {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var currentToast: Toast? = null
     private var debounceJob: Job? = null
+    private var cleanupJob: Job? = null
 
     /**
      * 显示防抖Toast
@@ -27,23 +29,25 @@ object ToastHelper {
     ) {
         // 取消之前的防抖任务
         debounceJob?.cancel()
+        cleanupJob?.cancel()
 
-        // 取消当前显示的Toast
-        currentToast?.cancel()
-        currentToast = null
-
-        // 创建新的防抖任务
-        debounceJob = CoroutineScope(Dispatchers.Main).launch {
+        // 所有 Toast 操作都收敛到同一个 Main scope，避免后台线程调用和游离协程。
+        debounceJob = scope.launch {
+            currentToast?.cancel()
+            currentToast = null
             delay(debounceDelayMs)
 
             // 使用 ApplicationContext 避免内存泄漏
             val appContext = context.applicationContext
-            currentToast = Toast.makeText(appContext, message, duration)
-            currentToast?.show()
+            val toast = Toast.makeText(appContext, message, duration)
+            currentToast = toast
+            toast.show()
 
             // Toast 显示后延迟清理引用，避免内存泄漏
             delay(if (duration == Toast.LENGTH_LONG) 3500L else 2000L)
-            currentToast = null
+            if (currentToast === toast) {
+                currentToast = null
+            }
         }
     }
 
@@ -58,19 +62,18 @@ object ToastHelper {
         message: String,
         duration: Int = Toast.LENGTH_SHORT
     ) {
-        // 取消当前显示的Toast
-        currentToast?.cancel()
-        currentToast = null
-
-        // 使用 ApplicationContext 避免内存泄漏
-        val appContext = context.applicationContext
-        currentToast = Toast.makeText(appContext, message, duration)
-        currentToast?.show()
-
-        // Toast 显示后延迟清理引用，避免内存泄漏
-        CoroutineScope(Dispatchers.Main).launch {
+        debounceJob?.cancel()
+        cleanupJob?.cancel()
+        cleanupJob = scope.launch {
+            currentToast?.cancel()
+            val appContext = context.applicationContext
+            val toast = Toast.makeText(appContext, message, duration)
+            currentToast = toast
+            toast.show()
             delay(if (duration == Toast.LENGTH_LONG) 3500L else 2000L)
-            currentToast = null
+            if (currentToast === toast) {
+                currentToast = null
+            }
         }
     }
 
@@ -79,6 +82,7 @@ object ToastHelper {
      */
     fun cancelAll() {
         debounceJob?.cancel()
+        cleanupJob?.cancel()
         currentToast?.cancel()
         currentToast = null
     }

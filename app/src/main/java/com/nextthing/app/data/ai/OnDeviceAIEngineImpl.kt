@@ -1,16 +1,17 @@
 package com.nextthing.app.data.ai
 
 import android.content.Context
-import android.os.Build
+import android.util.Log
+import com.qualcomm.qti.QnnDelegate
 import com.nextthing.app.domain.model.Accelerator
 import com.nextthing.app.domain.model.BenchmarkResult
 import com.nextthing.app.domain.model.InferenceResult
 import com.nextthing.app.domain.model.ModelConfig
 import com.nextthing.app.domain.model.SingleAcceleratorBenchmark
 import com.nextthing.app.domain.service.OnDeviceAIEngine
+import dagger.hilt.android.qualifiers.ApplicationContext
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.GpuDelegate
-import org.tensorflow.lite.nnapi.NnApiDelegate
 import timber.log.Timber
 import java.io.FileInputStream
 import java.nio.MappedByteBuffer
@@ -22,18 +23,23 @@ import javax.inject.Singleton
  * 端侧 AI 推理引擎实现
  *
  * 基于 LiteRT 1.4.1 Interpreter API
- * 降级链：NPU（NNAPI, API 31+）→ GPU → CPU（4 threads）
+ * 降级链：NPU（Qualcomm QNN HTP）→ GPU → CPU（4 threads）
  */
 @Singleton
 class OnDeviceAIEngineImpl @Inject constructor(
+    @ApplicationContext
     private val context: Context
 ) : OnDeviceAIEngine {
+
+    private companion object {
+        const val SER_LOG_TAG = "SER-Flow"
+    }
 
     private var interpreter: Interpreter? = null
     private var currentConfig: ModelConfig? = null
 
     // Delegate 引用，用于释放
-    private var nnapiDelegate: NnApiDelegate? = null
+    private var qnnDelegate: QnnDelegate? = null
     private var gpuDelegate: GpuDelegate? = null
 
     /**
@@ -50,10 +56,34 @@ class OnDeviceAIEngineImpl @Inject constructor(
     override suspend fun loadModel(config: ModelConfig) {
         release()                                                                                      // 先释放已有模型，防止内存泄漏
         val buffer = loadModelFile(config.modelFileName)                                               // 从 assets 读取 .tflite 到 MappedByteBuffer
-        val options = createInterpreterOptions(config)                                                 // 根据加速器类型创建 Delegate 配置
-        interpreter = Interpreter(buffer, options)                                                     // 创建解释器：加载模型 + 应用硬件配置
-        currentConfig = config                                                                         // 保存当前配置，供 infer 等方法使用
-        Timber.d("模型加载完成: ${config.modelFileName}, 加速器: ${config.accelerator}")                  // 日志：记录加载结果
+        val actualConfig = runCatching {
+            val options = createInterpreterOptions(config)                                             // 根据加速器类型创建 Delegate 配置
+            interpreter = Interpreter(buffer, options)                                                 // 创建解释器：加载模型 + 应用硬件配置
+            config
+        }.getOrElse { error ->
+            if (config.accelerator == Accelerator.CPU) throw error
+            Log.w(SER_LOG_TAG, "${config.accelerator} failed for ${config.modelFileName}, fallback to CPU: ${error.message}", error)
+            Timber.tag("SER-Flow").w(
+                error,
+                "${config.accelerator} 加速器无法运行 ${config.modelFileName}，降级到 CPU"
+            )
+            releaseDelegates()
+            val fallbackConfig = config.copy(accelerator = Accelerator.CPU)
+            val fallbackOptions = createInterpreterOptions(fallbackConfig)
+            interpreter = Interpreter(buffer, fallbackOptions)
+            fallbackConfig
+        }
+        currentConfig = actualConfig                                                                    // 保存当前配置，供 infer 等方法使用
+        val inputShape = interpreter?.getInputTensor(0)?.shape()?.joinToString(prefix = "[", postfix = "]")
+        val outputShape = interpreter?.getOutputTensor(0)?.shape()?.joinToString(prefix = "[", postfix = "]")
+        Log.w(
+            SER_LOG_TAG,
+            "Model loaded: ${actualConfig.modelFileName}, accelerator=${actualConfig.accelerator}, inputShape=$inputShape, outputShape=$outputShape"
+        )
+        Timber.tag("SER-Flow").d(
+            "模型加载完成: ${actualConfig.modelFileName}, 加速器: ${actualConfig.accelerator}, inputShape=$inputShape, outputShape=$outputShape"
+        )
+        Timber.d("模型加载完成: ${actualConfig.modelFileName}, 加速器: ${actualConfig.accelerator}")      // 日志：记录加载结果
     }
 
     /**
@@ -73,7 +103,15 @@ class OnDeviceAIEngineImpl @Inject constructor(
         val config = currentConfig
             ?: throw IllegalStateException("模型配置缺失")                                                // 同上
         val startTime = System.nanoTime()                                                               // 记录开始时间（纳秒级精度）
+        resizeInputTensorIfNeeded(interp, input)
         val output = createOutputContainer(interp)                                                      // 根据模型输出维度创建对应大小的数组容器
+        Log.w(
+            SER_LOG_TAG,
+            "On-device inference start: model=${config.modelFileName}, accelerator=${config.accelerator}, inputTensor=${interp.getInputTensor(0).shape().contentToString()}, outputTensor=${interp.getOutputTensor(0).shape().contentToString()}"
+        )
+        Timber.tag("SER-Flow").d(
+            "端侧推理开始: model=${config.modelFileName}, inputTensor=${interp.getInputTensor(0).shape().contentToString()}, outputTensor=${interp.getOutputTensor(0).shape().contentToString()}, input=${input.describeTensor()}, output=${output.describeTensor()}"
+        )
         interp.run(input, output)                                                                       // 执行推理：input → 模型 → output
         val latencyMs = (System.nanoTime() - startTime) / 1_000_000                                    // 计算耗时，纳秒转毫秒
         return InferenceResult(
@@ -84,7 +122,7 @@ class OnDeviceAIEngineImpl @Inject constructor(
     }
 
     /**
-     * @DESC: 性能测试，用三种加速器（NPU/GPU/CPU）各跑若干次推理，对比延迟
+     * @DESC: 性能测试，用三种推理后端（NNAPI/GPU/CPU）各跑若干次推理，对比延迟
      * 1. 遍历三种 Accelerator，依次加载模型
      * 2. 创建 dummy 输入（全 0.5f，只测速度不关心结果）
      * 3. 预热 5 次（排除首次初始化开销）
@@ -102,7 +140,7 @@ class OnDeviceAIEngineImpl @Inject constructor(
     ): BenchmarkResult {
         val results = mutableListOf<SingleAcceleratorBenchmark>()                                       // 收集三种加速器的测试结果
 
-        for (accelerator in Accelerator.entries) {                                                      // 遍历 NPU → GPU → CPU
+        for (accelerator in Accelerator.entries) {
             val config = ModelConfig(
                 modelFileName = modelFileName,
                 accelerator = accelerator
@@ -111,32 +149,40 @@ class OnDeviceAIEngineImpl @Inject constructor(
             try {
                 loadModel(config)                                                                       // 加载模型（含 Delegate 配置）
                 val interp = interpreter!!                                                              // 非空断言：刚加载完一定不为 null
+                val actualAccelerator = currentConfig?.accelerator ?: accelerator
                 val input = createDummyInput(interp)                                                    // 创建 dummy 输入（全 0.5f）
+                resizeInputTensorIfNeeded(interp, input)
 
                 repeat(5) {                                                                             // 预热 5 次，排除首次初始化开销
                     val output = createOutputContainer(interp)
                     interp.run(input, output)
                 }
 
-                val latencies = mutableListOf<Long>()                                                   // 记录每次推理耗时
-                repeat(iterations) {                                                                    // 正式跑 iterations 次推理
+                val latenciesUs = mutableListOf<Long>()
+                repeat(iterations) {
                     val startTime = System.nanoTime()
                     val output = createOutputContainer(interp)
                     interp.run(input, output)
-                    latencies.add((System.nanoTime() - startTime) / 1_000_000)                         // 纳秒转毫秒
+                    latenciesUs.add((System.nanoTime() - startTime) / 1_000)
                 }
 
                 results.add(
                     SingleAcceleratorBenchmark(
-                        accelerator = accelerator,
-                        latencyMsList = latencies
+                        requestedAccelerator = accelerator,
+                        actualAccelerator = actualAccelerator,
+                        latencyUsList = latenciesUs
                     )
                 )
 
+                val medianUs = latenciesUs.sorted()[latenciesUs.size / 2]
+                val averageUs = latenciesUs.average().toLong()
+                Log.w(
+                    SER_LOG_TAG,
+                    "Benchmark requested=${accelerator.name}, actual=${actualAccelerator.name}: median=${medianUs}us, avg=${averageUs}us"
+                )
                 Timber.d(
-                    "Benchmark ${accelerator.name}: " +
-                            "中位数=${latencies.sorted()[latencies.size / 2]}ms, " +
-                            "平均=${latencies.average().toLong()}ms"
+                    "Benchmark requested=${accelerator.name}, actual=${actualAccelerator.name}: " +
+                            "中位数=${medianUs}us, 平均=${averageUs}us"
                 )
             } catch (e: Exception) {
                 Timber.w(e, "Benchmark ${accelerator.name} 失败，跳过")                                  // 某种加速器失败不影响其他
@@ -150,14 +196,14 @@ class OnDeviceAIEngineImpl @Inject constructor(
 
     /**
      * @DESC: 检测当前设备可用的最高优先级加速器
-     * 1. 按枚举顺序遍历：NPU → GPU → CPU
+     * 1. 按枚举顺序遍历：NNAPI → GPU → CPU
      * 2. 尝试创建对应的 Delegate，第一个成功的就是最佳加速器
      * 3. 全部失败则返回 CPU（CPU 不需要 Delegate，一定能跑）
      *
      * 补充：通过遍历枚举 ordinal 实现降级链，不需要写死 if-else
      */
     override fun detectBestAccelerator(): Accelerator {
-        for (accelerator in Accelerator.entries) {                                                      // 按优先级遍历：NPU → GPU → CPU
+        for (accelerator in Accelerator.entries) {
             if (canCreateDelegate(accelerator)) {                                                       // 尝试创建 Delegate
                 Timber.d("检测到最佳加速器: ${accelerator.name}")
                 return accelerator                                                                      // 第一个成功的就是最佳
@@ -170,13 +216,17 @@ class OnDeviceAIEngineImpl @Inject constructor(
         interpreter?.close()
         interpreter = null
 
-        nnapiDelegate?.close()
-        nnapiDelegate = null
+        releaseDelegates()
+
+        currentConfig = null
+    }
+
+    private fun releaseDelegates() {
+        qnnDelegate?.close()
+        qnnDelegate = null
 
         gpuDelegate?.close()
         gpuDelegate = null
-
-        currentConfig = null
     }
 
     // ========== 私有方法 ==========
@@ -201,26 +251,20 @@ class OnDeviceAIEngineImpl @Inject constructor(
 
     /**
      * @DESC: 根据 ModelConfig 创建 Interpreter.Options，配置对应的硬件 Delegate
-     * 1. NPU → 创建 NNAPI Delegate（要求 API 31+），否则降级 CPU
+     * 1. NPU → 创建 Qualcomm QNN Delegate，并明确指定 HTP Backend
      * 2. GPU → 创建 GPU Delegate，创建失败则降级 CPU
      * 3. CPU → 不加 Delegate，设置线程数
      *
      * @Parma: config — 模型配置，包含加速器类型和线程数
      *
-     * 补充：降级链 NPU → GPU → CPU，确保在任何设备上都能跑
+     * 补充：QNN HTP 或 GPU 无法应用时会降级到 CPU
      */
     private fun createInterpreterOptions(config: ModelConfig): Interpreter.Options {
         return Interpreter.Options().apply {
             when (config.accelerator) {
                 Accelerator.NPU -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        nnapiDelegate = NnApiDelegate()
-                        addDelegate(nnapiDelegate!!)
-                    } else {
-                        // API < 31，NPU 不可靠，降级到 CPU
-                        Timber.w("API < 31, NNAPI 不可靠，降级到 CPU")
-                        setNumThreads(config.numThreads)
-                    }
+                    qnnDelegate = createQnnHtpDelegate()
+                    addDelegate(qnnDelegate!!)
                 }
                 Accelerator.GPU -> {
                     try {
@@ -240,7 +284,7 @@ class OnDeviceAIEngineImpl @Inject constructor(
 
     /**
      * @DESC: 检测能否创建对应加速器的 Delegate（不实际使用，创建后立即释放）
-     * 1. NPU → 要求 API 31+，创建 NNAPI Delegate 验证
+     * 1. NPU → 创建指定 HTP Backend 的 QNN Delegate 验证
      * 2. GPU → 创建 GPU Delegate 验证
      * 3. CPU → 永远返回 true（不需要 Delegate）
      *
@@ -252,11 +296,10 @@ class OnDeviceAIEngineImpl @Inject constructor(
         return try {
             when (accelerator) {
                 Accelerator.NPU -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {                              // API 31+ 才尝试创建 NNAPI Delegate
-                        val delegate = NnApiDelegate()
-                        delegate.close()                                                                // 验证完立即释放
-                        true
-                    } else false                                                                        // API < 31，NPU 不可靠
+                    val delegate = createQnnHtpDelegate()
+                    val available = delegate.isAvailable
+                    delegate.close()
+                    available
                 }
                 Accelerator.GPU -> {
                     val delegate = GpuDelegate()
@@ -268,6 +311,29 @@ class OnDeviceAIEngineImpl @Inject constructor(
         } catch (e: Exception) {
             Timber.w(e, "创建 ${accelerator.name} Delegate 失败")
             false                                                                                       // 创建失败说明设备不支持
+        }
+    }
+
+    private fun createQnnHtpDelegate(): QnnDelegate {
+        val nativeLibraryDir = context.applicationInfo.nativeLibraryDir
+        val options = QnnDelegate.Options().apply {
+            setBackendType(QnnDelegate.Options.BackendType.HTP_BACKEND)
+            setLibraryPath("$nativeLibraryDir/libQnnHtp.so")
+            setSkelLibraryDir(nativeLibraryDir)
+            setHtpPerformanceMode(
+                QnnDelegate.Options.HtpPerformanceMode.HTP_PERFORMANCE_BURST
+            )
+            setHtpPrecision(QnnDelegate.Options.HtpPrecision.HTP_PRECISION_QUANTIZED)
+            setHtpPdSession(QnnDelegate.Options.HtpPdSession.HTP_PD_SESSION_UNSIGNED)
+            setHtpUseConvHmx(QnnDelegate.Options.HtpUseConvHmx.HTP_CONV_HMX_ON)
+            setHtpOptimizationStrategy(
+                QnnDelegate.Options.HtpOptimizationStrategy.HTP_OPTIMIZE_FOR_INFERENCE_O3
+            )
+            setCacheDir(context.codeCacheDir.absolutePath)
+            setModelToken("nextthing_ser_int8_v1")
+        }
+        return QnnDelegate(options).also { delegate ->
+            check(delegate.isAvailable) { "Qualcomm QNN HTP Delegate unavailable" }
         }
     }
 
@@ -309,9 +375,68 @@ class OnDeviceAIEngineImpl @Inject constructor(
                     }
                 }
             }
+            3 -> Array(inputShape[0]) { Array(inputShape[1]) { FloatArray(inputShape[2]) { 0.5f } } }   // 三维：如 [1, frames, features]
             2 -> Array(inputShape[0]) { FloatArray(inputShape[1]) { 0.5f } }                           // 二维：如 [1, 1000]
             1 -> FloatArray(inputShape[0]) { 0.5f }                                                    // 一维：如 [1000]
             else -> FloatArray(inputShape.last()) { 0.5f }                                             // 兜底
+        }
+    }
+
+    private fun resizeInputTensorIfNeeded(interp: Interpreter, input: Any) {
+        val desiredShape = input.tensorShapeOrNull() ?: return
+        val currentShape = interp.getInputTensor(0).shape()
+        if (!currentShape.contentEquals(desiredShape)) {
+            Timber.tag("SER-Flow").d(
+                "调整动态输入: current=${currentShape.contentToString()}, desired=${desiredShape.contentToString()}"
+            )
+            interp.resizeInput(0, desiredShape)
+            interp.allocateTensors()
+        }
+    }
+
+    private fun Any.tensorShapeOrNull(): IntArray? {
+        return when (this) {
+            is FloatArray -> intArrayOf(size)
+            is Array<*> -> {
+                val first = firstOrNull()
+                when (first) {
+                    is FloatArray -> intArrayOf(size, first.size)
+                    is Array<*> -> {
+                        val second = first.firstOrNull()
+                        when (second) {
+                            is FloatArray -> intArrayOf(size, first.size, second.size)
+                            is Array<*> -> {
+                                val third = second.firstOrNull()
+                                if (third is FloatArray) intArrayOf(size, first.size, second.size, third.size) else null
+                            }
+                            else -> null
+                        }
+                    }
+                    else -> null
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun Any.describeTensor(): String {
+        return when (this) {
+            is FloatArray -> "FloatArray(${size})"
+            is Array<*> -> {
+                val first = firstOrNull()
+                when (first) {
+                    is FloatArray -> "Array(${size}){FloatArray(${first.size})}"
+                    is Array<*> -> {
+                        val second = first.firstOrNull()
+                        when (second) {
+                            is FloatArray -> "Array(${size}){Array(${first.size}){FloatArray(${second.size})}}"
+                            else -> "Array(${size}){Array(${first.size}){...}}"
+                        }
+                    }
+                    else -> "Array(${size})"
+                }
+            }
+            else -> this::class.java.simpleName
         }
     }
 }

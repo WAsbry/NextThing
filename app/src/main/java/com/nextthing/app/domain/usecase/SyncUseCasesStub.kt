@@ -51,11 +51,6 @@ class ResolveConflictUseLocalUseCase @Inject constructor(
     private val repository: SyncRepository
 ) {
     suspend operator fun invoke(taskId: String): Result<Unit> {
-        val conflicts = repository.getConflicts()
-        val conflict = conflicts.find { it.taskId == taskId }
-        if (conflict != null) {
-            return Result.success(Unit)
-        }
-        return repository.resolveConflictUseServer(taskId)
+        return repository.resolveConflictUseLocal(taskId)
     }
 }

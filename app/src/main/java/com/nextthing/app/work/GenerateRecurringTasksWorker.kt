@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import com.nextthing.app.domain.usecase.TaskUseCases
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import timber.log.Timber
 import java.time.LocalDate
 
@@ -41,15 +42,18 @@ class GenerateRecurringTasksWorker @AssistedInject constructor(
                     Result.success()
                 },
                 onFailure = { error ->
+                    if (error is CancellationException) throw error
                     Timber.tag(TAG).e("❌ Worker执行失败: ${error.message}")
                     Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    Result.retry()
+                    WorkerFailurePolicy.result(TAG, runAttemptCount)
                 }
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "💥 Worker执行异常")
             Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            Result.retry()
+            WorkerFailurePolicy.result(TAG, runAttemptCount)
         }
     }
 }

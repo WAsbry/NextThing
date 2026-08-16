@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NextThing — 时间选择器方案对比</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#F8F9FC; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:#2D3436; }
+  :root {
+    --primary: #6C5CE7; --primary-dark: #5A4BD1; --primary-light: #A29BFE;
+    --bg-primary: #F8F9FC; --bg-card: #FFFFFF; --bg-secondary: #F1F3F8;
+    --text-primary: #2D3436; --text-secondary: #636E72; --border: #E8ECF0;
+  }
+  .page-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(375px,1fr)); gap:32px; padding:32px; max-width:1600px; margin:0 auto; }
+  .page-title { grid-column:1/-1; text-align:center; padding:24px 0 8px; }
+  .page-title h1 { font-size:28px; font-weight:700; color:var(--primary); }
+  .page-title p { font-size:14px; color:var(--text-secondary); margin-top:8px; }
+  .phone { width:375px; background:var(--bg-primary); border-radius:32px; border:8px solid #1a1a2e; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.15); position:relative; }
+  .phone-inner { display:flex; flex-direction:column; }
+  .status-bar { display:flex; justify-content:space-between; align-items:center; padding:8px 20px; font-size:12px; font-weight:600; color:#fff; background:var(--primary); }
+  .top-nav { height:48px; background:var(--primary); display:flex; align-items:center; justify-content:center; position:relative; }
+  .top-nav .title { color:#fff; font-size:18px; font-weight:600; }
+  .content { flex:1; padding:16px; }
+  .bottom-action { padding:12px 16px; }
+  .pill-bar { display:flex;align-items:center;height:52px;background:var(--primary);border-radius:999px;padding:4px;box-shadow:0 6px 24px rgba(108,92,231,0.35); }
+  .pill-bar .mic { width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;flex-shrink:0;margin-left:4px; }
+  .pill-bar .divider { width:1px;height:28px;background:rgba(255,255,255,0.25);margin:0 8px; }
+  .pill-bar .btn { flex:1;height:44px;border-radius:999px;background:rgba(255,255,255,0.15);color:#fff;font-size:15px;font-weight:600;border:none;margin-right:4px; }
+  .screen-label { text-align:center; padding:12px; font-size:14px; font-weight:600; color:var(--text-secondary); }
+  .screen-label span { display:inline-block; background:#EEF0FF; color:var(--primary); padding:4px 12px; border-radius:12px; }
+
+  /* ===== 方案 A：iOS 风格滚轮 ===== */
+  .ios-picker { display:flex; align-items:center; justify-content:center; gap:0; height:200px; position:relative; overflow:hidden; }
+  .ios-picker::before { content:''; position:absolute; top:0;left:0;right:0;height:70px; background:linear-gradient(to bottom,rgba(255,255,255,1),rgba(255,255,255,0)); z-index:2; pointer-events:none; }
+  .ios-picker::after { content:''; position:absolute; bottom:0;left:0;right:0;height:70px; background:linear-gradient(to top,rgba(255,255,255,1),rgba(255,255,255,0)); z-index:2; pointer-events:none; }
+  .ios-picker .highlight { position:absolute; top:50%; transform:translateY(-50%); left:16px;right:16px; height:44px; border-radius:12px; background:#EEF0FF; z-index:1; border:1.5px solid var(--primary); }
+  .ios-col { width:80px; height:200px; overflow:hidden; position:relative; z-index:3; }
+  .ios-col .items { display:flex; flex-direction:column; align-items:center; transition:transform 0.3s ease; }
+  .ios-col .item { height:44px; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:600; color:var(--text-secondary); opacity:0.3; transition:all 0.2s; }
+  .ios-col .item.active { color:var(--text-primary); opacity:1; font-size:28px; }
+  .ios-separator { font-size:32px; font-weight:700; color:var(--text-primary); z-index:3; margin:0 4px; height:200px; display:flex; align-items:center; }
+  .ios-label { font-size:14px; color:var(--text-secondary); z-index:3; align-self:center; margin-left:4px; }
+
+  /* ===== 方案 B：Material3 时间选择器（时钟表盘） ===== */
+  .material-clock { width:220px; height:220px; border-radius:50%; background:var(--bg-secondary); position:relative; margin:0 auto; border:2px solid var(--border); }
+  .material-clock .center { position:absolute; top:50%;left:50%; transform:translate(-50%,-50%); width:8px;height:8px; border-radius:50%; background:var(--primary); z-index:5; }
+  .material-clock .hand { position:absolute; bottom:50%;left:50%; width:2px; height:80px; background:var(--primary); transform-origin:bottom center; transform:translateX(-50%) rotate(150deg); z-index:4; }
+  .material-clock .number { position:absolute; width:36px;height:36px; border-radius:50%; display:flex;align-items:center;justify-content:center; font-size:14px; font-weight:500; color:var(--text-primary); }
+  .material-clock .number.selected { background:var(--primary); color:#fff; font-weight:700; }
+  .clock-toggle { display:flex; gap:0; margin:16px auto 0; width:fit-content; border-radius:8px; overflow:hidden; border:1.5px solid var(--primary); }
+  .clock-toggle .tab { padding:8px 20px; font-size:14px; font-weight:600; cursor:pointer; background:var(--bg-card); color:var(--primary); }
+  .clock-toggle .tab.active { background:var(--primary); color:#fff; }
+
+  /* ===== 方案 C：数字键盘输入 ===== */
+  .digital-input { display:flex; align-items:center; justify-content:center; gap:8px; padding:20px 0; }
+  .digital-input .segment { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .digital-input .segment .display { width:72px; height:56px; border-radius:14px; background:var(--bg-secondary); border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:700; color:var(--text-primary); position:relative; cursor:pointer; }
+  .digital-input .segment .display.focused { border-color:var(--primary); background:#EEF0FF; box-shadow:0 0 0 3px rgba(108,92,231,0.15); }
+  .digital-input .segment .display .cursor { width:2px; height:28px; background:var(--primary); animation:blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+  .digital-input .colon { font-size:28px; font-weight:700; color:var(--text-primary); margin-top:-20px; }
+  .digital-input .period { display:flex; flex-direction:column; gap:4px; margin-left:8px; }
+  .digital-input .period button { padding:4px 12px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg-card); font-size:12px; font-weight:600; color:var(--text-secondary); cursor:pointer; }
+  .digital-input .period button.active { border-color:var(--primary); background:#EEF0FF; color:var(--primary); }
+  .numpad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; max-width:260px; margin:0 auto; }
+  .numpad button { height:48px; border-radius:12px; border:none; background:var(--bg-secondary); font-size:20px; font-weight:600; color:var(--text-primary); cursor:pointer; transition:all 0.15s; }
+  .numpad button:active { background:var(--primary); color:#fff; transform:scale(0.95); }
+  .numpad button.del { background:transparent; font-size:16px; color:var(--text-secondary); }
+
+  /* ===== 方案 D：滑块 + 快捷时间 ===== */
+  .slider-time { padding:16px 0; }
+  .slider-display { text-align:center; font-size:48px; font-weight:700; color:var(--primary); margin-bottom:4px; }
+  .slider-display .period { font-size:18px; font-weight:500; color:var(--text-secondary); margin-left:4px; }
+  .slider-track { width:100%; height:6px; background:var(--bg-secondary); border-radius:3px; position:relative; margin:16px 0; }
+  .slider-track .fill { height:100%; background:linear-gradient(90deg,var(--primary-light),var(--primary)); border-radius:3px; width:62.5%; }
+  .slider-track .thumb { position:absolute; top:50%; transform:translate(-50%,-50%); width:24px;height:24px; border-radius:50%; background:var(--primary); box-shadow:0 2px 8px rgba(108,92,231,0.4); left:62.5%; }
+  .slider-labels { display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); }
+  .quick-times { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  .quick-times .chip { padding:8px 16px; border-radius:20px; background:var(--bg-secondary); font-size:13px; font-weight:500; color:var(--text-primary); cursor:pointer; border:1.5px solid transparent; }
+  .quick-times .chip.active { background:#EEF0FF; color:var(--primary); border-color:var(--primary); }
+
+  /* ===== 方案 E：竖向齿轮（3D 透视） ===== */
+  .gear-picker { display:flex; align-items:center; justify-content:center; gap:0; height:220px; perspective:600px; }
+  .gear-col { width:90px; height:180px; position:relative; overflow:hidden; }
+  .gear-col::before,.gear-col::after { content:''; position:absolute;left:0;right:0; z-index:3; pointer-events:none; }
+  .gear-col::before { top:0;height:60px; background:linear-gradient(to bottom,rgba(248,249,252,1),rgba(248,249,252,0)); }
+  .gear-col::after { bottom:0;height:60px; background:linear-gradient(to top,rgba(248,249,252,1),rgba(248,249,252,0)); }
+  .gear-col .gear-items { display:flex; flex-direction:column; align-items:center; transform-style:preserve-3d; }
+  .gear-col .gear-item { height:44px; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:600; transition:all 0.3s; }
+  .gear-col .gear-item.far { color:var(--text-secondary); opacity:0.2; transform:scale(0.85); }
+  .gear-col .gear-item.mid { color:var(--text-secondary); opacity:0.5; transform:scale(0.92); }
+  .gear-col .gear-item.active { color:var(--primary); opacity:1; font-size:28px; font-weight:700; }
+  .gear-highlight { position:absolute; top:50%; transform:translateY(-50%); height:44px; border-radius:12px; z-index:1; }
+  .gear-highlight-left { left:12px; right:52%; background:linear-gradient(90deg,transparent,#EEF0FF 20%,#EEF0FF 80%,transparent); }
+  .gear-highlight-right { left:52%; right:12px; background:linear-gradient(90deg,transparent,#EEF0FF 20%,#EEF0FF 80%,transparent); }
+  .gear-sep { font-size:36px; font-weight:700; color:var(--primary); z-index:4; display:flex; align-items:center; height:44px; margin-top:68px; }
+  .gear-label { position:absolute; bottom:16px; font-size:12px; color:var(--text-secondary); font-weight:500; }
+  .gear-label-l { left:25%; transform:translateX(-50%); }
+  .gear-label-r { right:25%; transform:translateX(50%); }
+</style>
+</head>
+<body>
+<div class="page-grid">
+<div class="page-title">
+  <h1>时间选择器方案对比</h1>
+  <p>精确时间展开时的交互组件 — 5 种方案</p>
+</div>
+
+<!-- 方案 A：iOS 风格滚轮 -->
+<div class="screen-label"><span>方案 A：iOS 风格滚轮（推荐）</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="title">选择时间</div></div>
+  <div class="content">
+    <div class="ios-picker">
+      <div class="highlight"></div>
+      <div class="ios-col">
+        <div class="items" style="transform:translateY(-22px);">
+          <div class="item">12</div>
+          <div class="item">13</div>
+          <div class="item">14</div>
+          <div class="item active">15</div>
+          <div class="item">16</div>
+          <div class="item">17</div>
+          <div class="item">18</div>
+        </div>
+      </div>
+      <div class="ios-separator">:</div>
+      <div class="ios-col">
+        <div class="items" style="transform:translateY(-22px);">
+          <div class="item">52</div>
+          <div class="item">53</div>
+          <div class="item">54</div>
+          <div class="item active">55</div>
+          <div class="item">56</div>
+          <div class="item">57</div>
+          <div class="item">58</div>
+        </div>
+      </div>
+      <div class="ios-label">分</div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:20px;">
+      <button style="flex:1;height:44px;border-radius:12px;border:none;background:var(--bg-secondary);color:var(--text-secondary);font-size:14px;font-weight:600;cursor:pointer;">清除</button>
+      <button style="flex:2;height:44px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">确定 15:55</button>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div>
+  </div>
+</div></div>
+
+<!-- 方案 B：Material3 时钟表盘 -->
+<div class="screen-label"><span>方案 B：Material3 时钟表盘</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="title">选择时间</div></div>
+  <div class="content" style="display:flex;flex-direction:column;align-items:center;">
+    <div class="clock-toggle">
+      <div class="tab active">上午</div>
+      <div class="tab">下午</div>
+    </div>
+    <div class="material-clock" style="margin-top:16px;">
+      <div class="center"></div>
+      <div class="hand"></div>
+      <!-- 12 numbers -->
+      <div class="number" style="top:14px;left:50%;transform:translateX(-50%);">12</div>
+      <div class="number" style="top:28px;right:28px;">1</div>
+      <div class="number" style="top:50%;right:14px;transform:translateY(-50%);">2</div>
+      <div class="number" style="bottom:28px;right:28px;">3</div>
+      <div class="number" style="bottom:14px;left:50%;transform:translateX(-50%);">4</div>
+      <div class="number" style="bottom:28px;left:28px;">5</div>
+      <div class="number selected" style="top:50%;left:14px;transform:translateY(-50%);">6</div>
+      <div class="number" style="top:28px;left:28px;">7</div>
+      <div class="number" style="top:28px;left:28px;display:none;">8</div>
+      <div class="number" style="top:22px;left:50%;transform:translateX(-50%) translateX(-50px);">8</div>
+      <div class="number" style="top:14px;right:50%;transform:translateX(30px);">9</div>
+      <div class="number" style="top:18px;right:50%;transform:translateX(60px);">10</div>
+      <div class="number" style="top:22px;right:50%;transform:translateX(90px);">11</div>
+    </div>
+    <div style="text-align:center;margin-top:16px;">
+      <span style="font-size:36px;font-weight:700;color:var(--primary);">06:00</span>
+      <span style="font-size:14px;color:var(--text-secondary);margin-left:4px;">上午</span>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:16px; width:100%;">
+      <button style="flex:1;height:44px;border-radius:12px;border:none;background:var(--bg-secondary);color:var(--text-secondary);font-size:14px;font-weight:600;cursor:pointer;">清除</button>
+      <button style="flex:2;height:44px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">确定 06:00</button>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div>
+  </div>
+</div></div>
+
+<!-- 方案 C：数字键盘输入 -->
+<div class="screen-label"><span>方案 C：数字键盘输入</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="title">输入时间</div></div>
+  <div class="content">
+    <div class="digital-input">
+      <div class="segment">
+        <div class="display focused"><span>1</span><span style="opacity:0.3">5</span><div class="cursor"></div></div>
+      </div>
+      <div class="colon">:</div>
+      <div class="segment">
+        <div class="display"><span style="opacity:0.3">0</span><span style="opacity:0.3">0</span></div>
+      </div>
+      <div class="period">
+        <button class="active">上午</button>
+        <button>下午</button>
+      </div>
+    </div>
+    <div class="numpad">
+      <button>1</button><button>2</button><button>3</button>
+      <button>4</button><button>5</button><button>6</button>
+      <button>7</button><button>8</button><button>9</button>
+      <button class="del">⌫</button><button>0</button><button class="del">清除</button>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:16px;">
+      <button style="flex:1;height:44px;border-radius:12px;border:none;background:var(--bg-secondary);color:var(--text-secondary);font-size:14px;font-weight:600;cursor:pointer;">取消</button>
+      <button style="flex:2;height:44px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">确定 15:00</button>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div>
+  </div>
+</div></div>
+
+<!-- 方案 D：滑块 + 快捷时间 -->
+<div class="screen-label"><span>方案 D：滑块 + 快捷时间</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="title">选择时间</div></div>
+  <div class="content">
+    <div class="slider-time">
+      <div class="slider-display">15:00<span class="period">下午</span></div>
+      <div class="slider-track">
+        <div class="fill"></div>
+        <div class="thumb"></div>
+      </div>
+      <div class="slider-labels">
+        <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text-secondary);margin:16px 0 8px;font-weight:500;">常用时间</div>
+    <div class="quick-times">
+      <div class="chip">08:00</div>
+      <div class="chip">09:00</div>
+      <div class="chip">10:00</div>
+      <div class="chip active">15:00</div>
+      <div class="chip">17:00</div>
+      <div class="chip">19:00</div>
+      <div class="chip">21:00</div>
+      <div class="chip">22:00</div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:20px;">
+      <button style="flex:1;height:44px;border-radius:12px;border:none;background:var(--bg-secondary);color:var(--text-secondary);font-size:14px;font-weight:600;cursor:pointer;">清除</button>
+      <button style="flex:2;height:44px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">确定 15:00</button>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div>
+  </div>
+</div></div>
+
+<!-- 方案 E：3D 透视齿轮 -->
+<div class="screen-label"><span>方案 E：3D 透视齿轮（高级感）</span></div>
+<div class="phone"><div class="phone-inner">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="top-nav"><div class="title">选择时间</div></div>
+  <div class="content" style="position:relative;">
+    <div class="gear-picker">
+      <div class="gear-highlight gear-highlight-left"></div>
+      <div class="gear-highlight gear-highlight-right"></div>
+      <div class="gear-col">
+        <div class="gear-items">
+          <div class="gear-item far">11</div>
+          <div class="gear-item mid">12</div>
+          <div class="gear-item mid">13</div>
+          <div class="gear-item mid">14</div>
+          <div class="gear-item active">15</div>
+          <div class="gear-item mid">16</div>
+          <div class="gear-item mid">17</div>
+          <div class="gear-item far">18</div>
+        </div>
+      </div>
+      <div class="gear-sep">:</div>
+      <div class="gear-col">
+        <div class="gear-items">
+          <div class="gear-item far">45</div>
+          <div class="gear-item mid">50</div>
+          <div class="gear-item mid">52</div>
+          <div class="gear-item mid">54</div>
+          <div class="gear-item active">55</div>
+          <div class="gear-item mid">56</div>
+          <div class="gear-item mid">58</div>
+          <div class="gear-item far">00</div>
+        </div>
+      </div>
+    </div>
+    <div class="gear-label gear-label-l">时</div>
+    <div class="gear-label gear-label-r">分</div>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button style="flex:1;height:44px;border-radius:12px;border:none;background:var(--bg-secondary);color:var(--text-secondary);font-size:14px;font-weight:600;cursor:pointer;">清除</button>
+      <button style="flex:2;height:44px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">确定 15:55</button>
+    </div>
+  </div>
+  <div class="bottom-action">
+    <div class="pill-bar"><div class="mic">🎙</div><div class="divider"></div><button class="btn">创建任务</button></div>
+  </div>
+</div></div>
+
+</div>
+</body>
+</html>

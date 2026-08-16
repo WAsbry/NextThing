@@ -90,7 +90,7 @@ object CategoryMapper {
             sortOrder = sortOrder,
             createdAt = createdAt.toTimestamp(),
             isEnabled = isEnabled,
-            deleted = false
+            deleted = deleted
         )
     }
 
@@ -108,7 +108,8 @@ object CategoryMapper {
             createdAt = createdAt.toLocalDateTime(),
             isEnabled = isEnabled,
             syncStatus = syncStatus,
-            serverUpdatedAt = createdAt
+            serverUpdatedAt = createdAt,
+            deleted = deleted
         )
     }
 

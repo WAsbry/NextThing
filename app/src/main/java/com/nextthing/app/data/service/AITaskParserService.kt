@@ -3,17 +3,11 @@ package com.nextthing.app.data.service
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.nextthing.app.data.preferences.TokenManager
-import com.nextthing.app.data.remote.api.AIChatApi
-import com.nextthing.app.data.remote.dto.AIChatRequest
 import com.nextthing.app.domain.model.AITaskParseResult
 import com.nextthing.app.domain.model.RepeatFrequencyType
 import com.nextthing.app.domain.model.TaskImportanceUrgency
 import com.nextthing.app.domain.service.AITaskParser
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
-import retrofit2.HttpException
+import kotlinx.coroutines.CancellationException
 import timber.log.Timber
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -22,42 +16,35 @@ import javax.inject.Singleton
 
 @Singleton
 class AITaskParserService @Inject constructor(
-    private val aiChatApi: AIChatApi,
-    private val tokenManager: TokenManager,
+    private val aiCompletionClient: AICompletionClient,
     private val gson: Gson
 ) : AITaskParser {
+
+    private companion object {
+        const val MAX_PARSED_TASKS = 20
+        const val MAX_TITLE_CHARS = 200
+        const val MAX_DESCRIPTION_CHARS = 4_000
+        const val MAX_NAME_CHARS = 100
+    }
 
     override suspend fun parseTaskFromText(
         input: String,
         availableCategories: List<String>,
-        availableLocations: List<String>
+        availableLocations: List<String>,
+        voiceContext: String?
     ): Result<List<AITaskParseResult>> {
-        val userId = tokenManager.serverUserId.first()
-        if (userId == null) return Result.failure(IllegalStateException("请先登录"))
-
+        if (input.isBlank()) {
+            return Result.failure(IllegalArgumentException("AI 解析内容不能为空"))
+        }
         return try {
-            val now = LocalDateTime.now()
-            val message = buildMessage(now, input, availableCategories, availableLocations)
-
-            val response = withContext(Dispatchers.IO) {
-                aiChatApi.chat(AIChatRequest(message, textOnly = true))
-            }
-            if (!response.success || response.reply.isNullOrBlank()) {
-                return Result.failure(Exception(response.reply ?: "AI 返回内容为空"))
-            }
-
-            Result.success(parseJsonToResults(response.reply))
+            val message = buildMessage(LocalDateTime.now(), input, availableCategories, availableLocations, voiceContext)
+            val reply = aiCompletionClient.complete(message, textOnly = true).getOrThrow()
+            Result.success(parseJsonToResults(reply))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Timber.tag("AI").e(e, "任务解析失败")
-            val message = when {
-                e is HttpException && e.code() == 401 ->
-                    "登录状态已过期，请重新登录后再试"
-                e is HttpException ->
-                    "AI 服务请求失败（HTTP ${e.code()}）"
-                else ->
-                    "AI 任务解析失败: ${e.message}"
-            }
-            Result.failure(Exception(message))
+            Timber.tag("AI").e(e, "Task parsing failed")
+            Result.failure(Exception(toUserFacingParseError(e)))
         }
     }
 
@@ -65,24 +52,29 @@ class AITaskParserService @Inject constructor(
         now: LocalDateTime,
         input: String,
         categories: List<String>,
-        locations: List<String>
+        locations: List<String>,
+        voiceContext: String?
     ): String {
         val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-        val dayNames = arrayOf("", "周一", "周二", "周三", "周四", "周五", "周六", "周日")
         val tomorrow = now.plusDays(1).toLocalDate()
         val dayAfter = now.plusDays(2).toLocalDate()
 
-        val sb = StringBuilder()
-        sb.appendLine("从以下自然语言中提取结构化任务信息。只返回解析结果，不要执行任何操作。")
-        sb.appendLine("请返回JSON数组：[{\"title\":\"...\",\"description\":\"...\",\"dueDate\":\"yyyy-MM-ddTHH:mm:ss\",\"categoryName\":\"...\",\"importance\":\"IMPORTANT_URGENT/IMPORTANT_NOT_URGENT/NOT_IMPORTANT_URGENT/NOT_IMPORTANT_NOT_URGENT\",\"repeatType\":\"NONE/DAILY/WEEKDAYS/WEEKENDS/WEEKLY/MONTHLY/YEARLY\",\"repeatWeekdays\":[1,3,5],\"locationName\":\"...\",\"confidence\":0.9}]")
-        sb.appendLine()
-        sb.appendLine("当前时间：${now.format(dateFmt)} ${dayNames[now.dayOfWeek.value]}")
-        sb.appendLine("明天：${tomorrow}  后天：${dayAfter}")
-        if (categories.isNotEmpty()) sb.appendLine("可用分类：${categories.joinToString(", ")}")
-        if (locations.isNotEmpty()) sb.appendLine("可用地点：${locations.joinToString(", ")}")
-        sb.appendLine()
-        sb.appendLine("用户输入：$input")
-        return sb.toString()
+        return buildString {
+            appendLine("Extract structured task information from the user's natural-language input.")
+            appendLine("Return only a JSON array. Do not add markdown or explanation.")
+            appendLine("Schema: [{\"title\":\"...\",\"description\":\"...\",\"dueDate\":\"yyyy-MM-ddTHH:mm:ss\",\"categoryName\":\"...\",\"importance\":\"IMPORTANT_URGENT/IMPORTANT_NOT_URGENT/NOT_IMPORTANT_URGENT/NOT_IMPORTANT_NOT_URGENT\",\"repeatType\":\"NONE/DAILY/WEEKDAYS/WEEKENDS/WEEKLY/MONTHLY/YEARLY\",\"repeatWeekdays\":[1,3,5],\"locationName\":\"...\",\"confidence\":0.9}]")
+            appendLine()
+            appendLine("Current time: ${now.format(dateFmt)}")
+            appendLine("Tomorrow: $tomorrow, day after tomorrow: $dayAfter")
+            if (categories.isNotEmpty()) appendLine("Available categories: ${categories.joinToString(", ")}")
+            if (locations.isNotEmpty()) appendLine("Available locations: ${locations.joinToString(", ")}")
+            if (!voiceContext.isNullOrBlank()) {
+                appendLine("Voice context: $voiceContext")
+                appendLine("Use voice context only as a weak signal for importance and reminder urgency. Do not copy it into the task title.")
+            }
+            appendLine()
+            appendLine("User input: $input")
+        }
     }
 
     private fun parseJsonToResults(json: String): List<AITaskParseResult> {
@@ -91,36 +83,79 @@ class AITaskParserService @Inject constructor(
             .removeSuffix("```").trim()
 
         val array = gson.fromJson(cleanJson, JsonArray::class.java)
-        return array.mapNotNull { element ->
-            runCatching { parseSingleResult(element.asJsonObject) }.getOrNull()
+        require(array.size() in 1..MAX_PARSED_TASKS) {
+            "AI 返回任务数量必须在 1 到 $MAX_PARSED_TASKS 之间"
+        }
+        return array.mapIndexed { index, element ->
+            try {
+                require(element.isJsonObject) { "任务必须是 JSON 对象" }
+                parseSingleResult(element.asJsonObject)
+            } catch (error: Exception) {
+                throw IllegalArgumentException("AI 返回的第 ${index + 1} 个任务格式无效", error)
+            }
         }
     }
 
     private fun parseSingleResult(obj: JsonObject): AITaskParseResult {
-        val title = obj.get("title")?.takeIf { !it.isJsonNull }?.asString?.takeIf { it.isNotBlank() } ?: "未命名任务"
-        val description = obj.get("description")?.takeIf { !it.isJsonNull }?.asString
-        val categoryName = obj.get("categoryName")?.takeIf { !it.isJsonNull }?.asString
-        val locationName = obj.get("locationName")?.takeIf { !it.isJsonNull }?.asString
+        val title = obj.get("title")
+            ?.takeIf { !it.isJsonNull }
+            ?.asString
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("任务标题不能为空")
+        require(title.length <= MAX_TITLE_CHARS) { "任务标题过长" }
+
+        val description = obj.get("description")
+            ?.takeIf { !it.isJsonNull }
+            ?.asString
+            ?.trim()
+        require(description == null || description.length <= MAX_DESCRIPTION_CHARS) {
+            "任务描述过长"
+        }
+
+        val categoryName = obj.get("categoryName")
+            ?.takeIf { !it.isJsonNull }
+            ?.asString
+            ?.trim()
+        require(categoryName == null || categoryName.length <= MAX_NAME_CHARS) {
+            "分类名称过长"
+        }
+        val locationName = obj.get("locationName")
+            ?.takeIf { !it.isJsonNull }
+            ?.asString
+            ?.trim()
+        require(locationName == null || locationName.length <= MAX_NAME_CHARS) {
+            "地点名称过长"
+        }
 
         val dueDate = obj.get("dueDate")?.takeIf { !it.isJsonNull }?.asString?.let { ds ->
             runCatching { LocalDateTime.parse(ds, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")) }
                 .recoverCatching { LocalDateTime.parse(ds) }
-                .getOrNull()
+                .getOrElse { throw IllegalArgumentException("截止时间格式无效", it) }
         }
 
         val importance = obj.get("importance")?.takeIf { !it.isJsonNull }?.asString?.let {
-            runCatching { TaskImportanceUrgency.valueOf(it) }.getOrNull()
+            runCatching { TaskImportanceUrgency.valueOf(it) }
+                .getOrElse { error -> throw IllegalArgumentException("重要程度无效", error) }
         }
 
         val repeatType = obj.get("repeatType")?.takeIf { !it.isJsonNull }?.asString?.let {
-            runCatching { RepeatFrequencyType.valueOf(it) }.getOrNull() ?: RepeatFrequencyType.NONE
+            runCatching { RepeatFrequencyType.valueOf(it) }
+                .getOrElse { error -> throw IllegalArgumentException("重复类型无效", error) }
         }
 
         val repeatWeekdays = obj.get("repeatWeekdays")?.takeIf { !it.isJsonNull }?.asJsonArray?.mapNotNull {
             runCatching { it.asInt }.getOrNull()
         }?.toSet()
+        require(repeatWeekdays == null || repeatWeekdays.all { it in 1..7 }) {
+            "重复星期必须在 1 到 7 之间"
+        }
+        if (repeatType == RepeatFrequencyType.WEEKLY) {
+            require(!repeatWeekdays.isNullOrEmpty()) { "每周重复必须指定星期" }
+        }
 
         val confidence = obj.get("confidence")?.takeIf { !it.isJsonNull }?.asFloat ?: 0.5f
+        require(confidence in 0f..1f) { "置信度必须在 0 到 1 之间" }
 
         return AITaskParseResult(
             title = title,
@@ -133,5 +168,20 @@ class AITaskParserService @Inject constructor(
             locationName = locationName,
             confidence = confidence
         )
+    }
+
+    private fun toUserFacingParseError(error: Throwable): String {
+        val message = error.message.orEmpty()
+        return when {
+            message.contains("API Key") ||
+                message.contains("登录状态") ||
+                message.contains("账户余额") ||
+                message.contains("请求过于频繁") ||
+                message.contains("服务暂时不可用") -> message
+            message.contains("401") ->
+                "AI 服务认证失败，请检查 DeepSeek API Key，或重新登录后再试。"
+            else ->
+                "AI 解析失败，请检查 AI 设置或稍后重试。"
+        }
     }
 }

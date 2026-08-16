@@ -134,7 +134,9 @@ fun NextThingApp(
         kotlinx.coroutines.delay(2000)
         try {
             StartupTraceCollector.flushNewToDatabase(startupTraceDao)
-        } catch (_: Exception) { }
+        } catch (error: Exception) {
+            Timber.w(error, "启动打点写入失败")
+        }
     }
 
     // 权限检查和请求
@@ -191,4 +193,4 @@ fun NextThingApp(
     )
 }
 
-// Preview removed as it requires dependency injection 
+// Preview removed as it requires dependency injection

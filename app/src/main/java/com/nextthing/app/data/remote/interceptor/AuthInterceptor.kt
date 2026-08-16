@@ -1,7 +1,6 @@
 package com.nextthing.app.data.remote.interceptor
 
 import com.nextthing.app.data.preferences.TokenManager
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -12,10 +11,12 @@ class AuthInterceptor @Inject constructor(
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
-        val token = runBlocking { tokenManager.accessToken.firstOrNull() }
+        val token = runBlocking { tokenManager.getAccessTokenOnce() }
         val request = original.newBuilder()
-            .header("Accept", "application/json")
             .apply {
+                if (original.header("Accept") == null) {
+                    header("Accept", "application/json")
+                }
                 if (!token.isNullOrBlank()) {
                     header("Authorization", "Bearer $token")
                 }

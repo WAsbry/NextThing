@@ -12,6 +12,7 @@ interface TaskRepository {
 
     // 基础CRUD操作
     suspend fun insertTask(task: Task): String
+    suspend fun insertTaskIfAbsent(task: Task): Boolean
     suspend fun updateTask(task: Task)
     suspend fun deleteTask(taskId: String)
     suspend fun deleteAllTasks()
@@ -41,11 +42,6 @@ interface TaskRepository {
     suspend fun deleteCompletedTasks()
     suspend fun bulkUpdateTaskCategory(taskIds: List<String>, category: Category)
     
-    // 数据同步
-    suspend fun syncTasks(): Result<Unit>
-    suspend fun exportTasks(): Result<String> // 返回导出文件路径
-    suspend fun importTasks(filePath: String): Result<Int> // 返回导入任务数量
-
     // 重复任务相关
     suspend fun getTemplateTasks(): List<Task>
     suspend fun hasInstanceForDate(templateId: String, date: LocalDateTime): Boolean
@@ -57,4 +53,4 @@ interface TaskRepository {
     fun getTasksByDueDateRange(startDate: LocalDateTime, endDate: LocalDateTime): Flow<List<Task>>
     fun getTasksByDueDate(date: LocalDateTime): Flow<List<Task>>
     suspend fun getDatesWithTasksInMonth(year: Int, month: Int): List<LocalDate>
-} 
+}

@@ -1,6 +1,7 @@
 package com.nextthing.app.presentation.screens.repeatcustom
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,19 +10,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextthing.app.domain.model.RepeatFrequencyType
+import com.nextthing.app.R
 import com.nextthing.app.presentation.theme.*
 
 /**
@@ -61,54 +62,48 @@ fun RepeatCustomScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgPrimary)
+            .background(Color(0xFFF7F8FC))
     ) {
-        // ── 顶部导航栏 ──────────────────────────────────
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = BgCard,
-            shadowElevation = 1.dp
+        Row(
+            modifier = Modifier.fillMaxWidth().height(60.dp).background(Color.White).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF5F7FC)).clickable(onClick = onBackPressed),
+                contentAlignment = Alignment.Center
             ) {
-                IconButton(onClick = onBackPressed) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        tint = TextPrimary
-                    )
-                }
-                Text(
-                    text = "自定义重复",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
+                Image(painterResource(R.drawable.icon_detail_back), "返回", Modifier.size(36.dp))
             }
+            Text("自定义重复", Modifier.weight(1f), Color(0xFF0E131D), 18.sp, fontWeight = FontWeight.Bold)
+            val canSave = !isSelectionEmpty(selectedMode, selectedWeekdays, selectedMonthDays)
+            Text(
+                "保存",
+                Modifier.clickable(enabled = canSave) { onSave(selectedMode, selectedWeekdays, selectedMonthDays) },
+                if (canSave) Color(0xFF1A7DFA) else Color(0xFFB6C0CE),
+                18.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
 
         // ── 可滚动内容区 ─────────────────────────────────
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 10.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             // ── Card 1：重复方式切换 ──────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = BgCard)
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFD6E0ED))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Text(
                         text = "重复方式",
                         fontSize = 15.sp,
@@ -118,7 +113,7 @@ fun RepeatCustomScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         ModeChip(
                             label = "按周重复",
@@ -139,10 +134,11 @@ fun RepeatCustomScreen(
             // ── Card 2：日期选择 ──────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = BgCard)
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFD6E0ED))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Text(
                         text = if (selectedMode == RepeatFrequencyType.WEEKLY) "选择星期" else "选择日期",
                         fontSize = 15.sp,
@@ -192,20 +188,20 @@ fun RepeatCustomScreen(
             // ── Card 3：预览 ──────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = BgCard)
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFD6E0ED))
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color(0x1A1A7DFA)), contentAlignment = Alignment.Center) {
+                        Icon(painterResource(R.drawable.icon_repeat_daily), null, tint = Color(0xFF1A7DFA), modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "📋  预览：",
-                        fontSize = 14.sp,
-                        color = TextSecondary
-                    )
-                    Text(
-                        text = buildPreviewText(selectedMode, selectedWeekdays, selectedMonthDays),
+                        text = if (isSelectionEmpty(selectedMode, selectedWeekdays, selectedMonthDays)) "请选择重复日期" else buildPreviewText(selectedMode, selectedWeekdays, selectedMonthDays),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = if (isSelectionEmpty(selectedMode, selectedWeekdays, selectedMonthDays))
@@ -230,40 +226,7 @@ fun RepeatCustomScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // ── 底部保存按钮（固定，不随内容滚动） ────────────
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = BgPrimary,
-            shadowElevation = 4.dp
-        ) {
-            Button(
-                onClick = {
-                    if (isSelectionEmpty(selectedMode, selectedWeekdays, selectedMonthDays)) {
-                        validationError = if (selectedMode == RepeatFrequencyType.WEEKLY)
-                            "请至少选择一个星期"
-                        else
-                            "请至少选择一个日期"
-                    } else {
-                        onSave(selectedMode, selectedWeekdays, selectedMonthDays)
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Primary)
-            ) {
-                Text(
-                    text = "保存",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-            }
+            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }
@@ -279,11 +242,11 @@ private fun ModeChip(
 ) {
     Box(
         modifier = modifier
-            .height(40.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (isSelected) Primary else BgSecondary)
+            .height(44.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) Color(0xFF1A7DFA) else Color(0xFFF5F7FC))
             .then(
-                if (!isSelected) Modifier.border(1.dp, Border, RoundedCornerShape(10.dp))
+                if (!isSelected) Modifier.border(1.dp, Color(0xFFD6E0ED), RoundedCornerShape(8.dp))
                 else Modifier
             )
             .clickable { onClick() },
@@ -303,7 +266,7 @@ private fun WeekdayGrid(
     selectedWeekdays: Set<Int>,
     onToggle: (Int) -> Unit
 ) {
-    val labels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+    val labels = listOf("一", "二", "三", "四", "五", "六", "日")
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -311,30 +274,24 @@ private fun WeekdayGrid(
         labels.forEachIndexed { index, label ->
             val day = index + 1
             val isSelected = selectedWeekdays.contains(day)
-            Column(
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .aspectRatio(0.72f)
+                    .height(40.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (isSelected) Primary else BgSecondary)
+                    .background(if (isSelected) Color(0xFF1A7DFA) else Color.White)
                     .then(
-                        if (!isSelected) Modifier.border(1.dp, Border, RoundedCornerShape(8.dp))
+                        if (!isSelected) Modifier.border(1.dp, Color(0xFFD6E0ED), RoundedCornerShape(8.dp))
                         else Modifier
                     )
                     .clickable { onToggle(day) },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = label.take(1),  // "周"
-                    fontSize = 10.sp,
-                    color = if (isSelected) Color.White.copy(alpha = 0.8f) else TextSecondary
-                )
-                Text(
-                    text = label.drop(1),  // "一"~"日"
+                    text = label,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isSelected) Color.White else TextPrimary
+                    fontWeight = FontWeight.Medium,
+                    color = if (isSelected) Color.White else if (day >= 6) Color(0xFFF2383D) else Color(0xFF0F1726)
                 )
             }
         }
@@ -360,10 +317,10 @@ private fun MonthDayGrid(
                             modifier = Modifier
                                 .weight(1f)
                                 .aspectRatio(1f)
-                                .clip(CircleShape)
-                                .background(if (isSelected) Primary else Color.Transparent)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) Color(0xFF1A7DFA) else Color.White)
                                 .then(
-                                    if (!isSelected) Modifier.border(1.dp, Border, CircleShape)
+                                    if (!isSelected) Modifier.border(1.dp, Color(0xFFD6E0ED), RoundedCornerShape(8.dp))
                                     else Modifier
                                 )
                                 .clickable { onToggle(day) },

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import java.io.IOException
 import javax.inject.Inject
 
 data class LoginUiState(
@@ -73,6 +74,27 @@ class LoginViewModel @Inject constructor(
         }
     }
 
+    fun continueAsLocalUser() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            try {
+                tokenManager.clear()
+                userUseCases.createUser("Local User")
+                _uiState.value = _uiState.value.copy(isLoading = false, isLoginSuccess = true)
+            } catch (e: IOException) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "当前设备无法连接网络，请联网后重试，也可以先进入本地模式。"
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "本地体验启动失败：${e.message ?: "未知错误"}"
+                )
+            }
+        }
+    }
+
     private fun register(username: String, email: String, password: String) {
         val trimmedUsername = username.trim()
         val trimmedEmail = email.trim()
@@ -114,6 +136,11 @@ class LoginViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     errorMessage = parseServerError(e) ?: "注册失败"
+                )
+            } catch (e: IOException) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "当前设备无法连接网络，请联网后重试，也可以先进入本地模式。"
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

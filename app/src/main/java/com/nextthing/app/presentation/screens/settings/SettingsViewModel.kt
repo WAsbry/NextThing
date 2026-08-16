@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nextthing.app.data.preferences.ThemePreferences
 import com.nextthing.app.data.preferences.AIPreferences
-import com.nextthing.app.data.preferences.AIProvider
 import com.nextthing.app.data.preferences.ASRPreferences
 import com.nextthing.app.data.preferences.BriefingPreferences
 import com.nextthing.app.domain.model.ThemeMode
@@ -54,10 +53,7 @@ data class SettingsUiState(
     val actionMessage: String? = null,
     val isLoading: Boolean = false,
     // AI 配置
-    val aiProvider: AIProvider = AIProvider.DEEPSEEK,
     val aiApiKey: String = "",
-    val aiModel: String = "",
-    val showAIConfigDialog: Boolean = false,
     // 语音识别配置（端侧，无需额外配置）
     val showASRConfigDialog: Boolean = false,
     // 导出
@@ -248,39 +244,9 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeAISettings() {
         viewModelScope.launch {
-            aiPreferences.provider.collect { provider ->
-                _uiState.value = _uiState.value.copy(aiProvider = provider)
-            }
-        }
-        viewModelScope.launch {
             aiPreferences.apiKey.collect { key ->
                 _uiState.value = _uiState.value.copy(aiApiKey = key)
             }
-        }
-        viewModelScope.launch {
-            aiPreferences.model.collect { model ->
-                _uiState.value = _uiState.value.copy(aiModel = model)
-            }
-        }
-    }
-
-    fun showAIConfigDialog() {
-        _uiState.value = _uiState.value.copy(showAIConfigDialog = true)
-    }
-
-    fun hideAIConfigDialog() {
-        _uiState.value = _uiState.value.copy(showAIConfigDialog = false)
-    }
-
-    fun saveAIConfig(provider: AIProvider, apiKey: String, model: String) {
-        viewModelScope.launch {
-            aiPreferences.setProvider(provider)
-            aiPreferences.setApiKey(apiKey)
-            aiPreferences.setModel(model)
-            _uiState.value = _uiState.value.copy(
-                showAIConfigDialog = false,
-                actionMessage = if (apiKey.isNotBlank()) "AI 配置已保存" else "AI 配置已清除"
-            )
         }
     }
 
