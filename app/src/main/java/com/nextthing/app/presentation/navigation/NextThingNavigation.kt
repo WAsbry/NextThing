@@ -66,6 +66,7 @@ import com.nextthing.app.presentation.screens.categorymanagement.CategoryManagem
 import com.nextthing.app.presentation.screens.categorymanagement.CategoryEditScreen
 import com.nextthing.app.presentation.screens.categorymanagement.CategoryEditViewModel
 import com.nextthing.app.presentation.screens.repeatcustom.RepeatCustomScreen
+import com.nextthing.app.presentation.screens.sync.SyncConflictScreen
 import com.nextthing.app.presentation.components.BottomNavigationBar
 import androidx.compose.runtime.LaunchedEffect
 import com.nextthing.app.domain.model.RepeatFrequency
@@ -90,6 +91,7 @@ fun NextThingNavigation(
         || currentRoute == Screen.ReminderStrategy.route
         || currentRoute == Screen.ExportData.route
         || currentRoute == Screen.Sync.route
+        || currentRoute == Screen.SyncConflicts.route
         || currentRoute == "geofence_config"
         || currentRoute == Screen.CreateLocation.route
         || currentRoute == "map_picker"
@@ -106,6 +108,10 @@ fun NextThingNavigation(
                 || currentRoute == Screen.AIAssistant.route
                 || currentRoute == Screen.CategoryManagement.route
                 || isMineSubPage
+                || currentRoute?.startsWith("stats_structure") == true
+                || currentRoute?.startsWith("stats_trend") == true
+                || currentRoute?.startsWith("stats_efficiency") == true
+                || currentRoute == "stats_ai"
                 || currentRoute?.startsWith("task_detail") == true
                 || currentRoute?.startsWith("repeat_custom") == true
             if (!hideBottomBar) {
@@ -390,36 +396,69 @@ fun NextThingNavigation(
                 val viewModel: StatsViewModel = hiltViewModel()
                 StatsScreen(
                     viewModel = viewModel,
-                    onNavigateToStatsSection = { section ->
-                        navController.navigate("stats_$section")
+                    onNavigateToStatsSection = { section, timeRange ->
+                        when (section) {
+                            "structure" -> navController.navigate("stats_structure/${timeRange.name}")
+                            "trend" -> navController.navigate("stats_trend/${timeRange.name}")
+                            "efficiency" -> navController.navigate("stats_efficiency/${timeRange.name}")
+                            else -> navController.navigate("stats_$section")
+                        }
                     }
                 )
             }
 
-            composable("stats_structure") {
+            composable(
+                route = "stats_structure/{timeRange}",
+                arguments = listOf(navArgument("timeRange") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val timeRange = runCatching {
+                    com.nextthing.app.presentation.screens.stats.OverviewTimeRange.valueOf(
+                        backStackEntry.arguments?.getString("timeRange")
+                            ?: com.nextthing.app.presentation.screens.stats.OverviewTimeRange.TODAY.name
+                    )
+                }.getOrDefault(com.nextthing.app.presentation.screens.stats.OverviewTimeRange.TODAY)
                 StatsStructureScreen(
+                    initialTimeRange = timeRange,
                     onBackPressed = { navController.popBackStack() }
                 )
             }
 
-            composable("stats_trend") {
+            composable(
+                route = "stats_trend/{timeRange}",
+                arguments = listOf(navArgument("timeRange") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val timeRange = runCatching {
+                    com.nextthing.app.presentation.screens.stats.OverviewTimeRange.valueOf(
+                        backStackEntry.arguments?.getString("timeRange")
+                            ?: com.nextthing.app.presentation.screens.stats.OverviewTimeRange.TODAY.name
+                    )
+                }.getOrDefault(com.nextthing.app.presentation.screens.stats.OverviewTimeRange.TODAY)
                 StatsTrendScreen(
-                    onBackPressed = { navController.popBackStack() },
-                    onNavigateToTrendDetail = { trendType ->
-                        navController.navigate("trend_detail/$trendType")
-                    }
+                    initialTimeRange = timeRange,
+                    onBackPressed = { navController.popBackStack() }
                 )
             }
 
-            composable("stats_efficiency") {
+            composable(
+                route = "stats_efficiency/{timeRange}",
+                arguments = listOf(navArgument("timeRange") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val timeRange = runCatching {
+                    com.nextthing.app.presentation.screens.stats.OverviewTimeRange.valueOf(
+                        backStackEntry.arguments?.getString("timeRange")
+                            ?: com.nextthing.app.presentation.screens.stats.OverviewTimeRange.TODAY.name
+                    )
+                }.getOrDefault(com.nextthing.app.presentation.screens.stats.OverviewTimeRange.TODAY)
                 StatsEfficiencyScreen(
+                    initialTimeRange = timeRange,
                     onBackPressed = { navController.popBackStack() }
                 )
             }
 
             composable("stats_ai") {
                 StatsAIReportScreen(
-                    onBackPressed = { navController.popBackStack() }
+                    onBackPressed = { navController.popBackStack() },
+                    onNavigateToAIConfig = { navController.navigate(Screen.AIConfig.route) }
                 )
             }
 
@@ -518,8 +557,13 @@ fun NextThingNavigation(
 
             composable(Screen.Sync.route) {
                 com.nextthing.app.presentation.screens.sync.SyncScreen(
-                    onBackPressed = { navController.popBackStack() }
+                    onBackPressed = { navController.popBackStack() },
+                    onOpenConflicts = { navController.navigate(Screen.SyncConflicts.route) }
                 )
+            }
+
+            composable(Screen.SyncConflicts.route) {
+                SyncConflictScreen(onBackPressed = { navController.popBackStack() })
             }
 
             composable(Screen.Achievement.route) {
@@ -537,6 +581,16 @@ fun NextThingNavigation(
                 arguments = listOf(navArgument("locationId") { type = NavType.StringType })
             ) {
                 GeofenceLocationDetailScreen(navController = navController)
+            }
+
+            composable(
+                route = "geofence_location_edit/{locationId}",
+                arguments = listOf(navArgument("locationId") { type = NavType.StringType })
+            ) {
+                GeofenceLocationDetailScreen(
+                    navController = navController,
+                    startInEditMode = true
+                )
             }
 
             composable("geofence_location_add") {
@@ -755,4 +809,5 @@ sealed class Screen(val route: String, val title: String, val icon: String) {
     object ExportData : Screen("export_data", "导出数据", "export")
     object Calendar : Screen("calendar", "日历", "calendar")
     object Sync : Screen("sync", "数据同步", "sync")
-} 
+    object SyncConflicts : Screen("sync_conflicts", "处理冲突", "sync")
+}

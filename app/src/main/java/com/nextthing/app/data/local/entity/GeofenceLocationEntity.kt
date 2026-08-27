@@ -38,6 +38,9 @@ data class GeofenceLocationEntity(
      */
     val locationId: String,
 
+    /** 是否启用此地点的地理围栏；默认关闭。 */
+    val isEnabled: Boolean = false,
+
     /**
      * 自定义围栏半径（米）
      * null = 使用全局默认半径（GeofenceConfig.defaultRadius）

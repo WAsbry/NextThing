@@ -109,6 +109,11 @@ class GeofenceCheckServiceImpl @Inject constructor(
             return createDisabledStatus(taskGeofence.snapshotRadius)
         }
 
+        if (!geofenceLocation.isEnabled) {
+            Timber.tag(TAG).d("⏭️ 地点地理围栏已禁用")
+            return createDisabledStatus(taskGeofence.snapshotRadius)
+        }
+
         val targetLocation = geofenceLocation.locationInfo
 
         // 5. 获取用户当前位置（带超时和降级）

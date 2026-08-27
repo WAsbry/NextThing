@@ -2,6 +2,7 @@ package com.nextthing.app.data.service
 
 import com.google.gson.Gson
 import com.nextthing.app.domain.model.Task
+import com.nextthing.app.domain.model.TaskStatus
 import com.nextthing.app.domain.service.AIWeeklyReporter
 import com.nextthing.app.domain.service.WeeklyReport
 import timber.log.Timber
@@ -27,6 +28,13 @@ class AIWeeklyReporterService @Inject constructor(
                     title = obj.get("title")?.asString ?: "本周周报",
                     summary = obj.get("summary")?.asString ?: "",
                     highlights = obj.getAsJsonArray("highlights")?.mapNotNull { runCatching { it.asString }.getOrNull() } ?: emptyList(),
+                    behaviorInsights = if (completedTasks.size >= MIN_BEHAVIOR_SAMPLE_SIZE) {
+                        obj.getAsJsonArray("behaviorInsights")
+                            ?.mapNotNull { runCatching { it.asString }.getOrNull() }
+                            ?: emptyList()
+                    } else {
+                        emptyList()
+                    },
                     improvements = obj.getAsJsonArray("improvements")?.mapNotNull { runCatching { it.asString }.getOrNull() } ?: emptyList(),
                     nextWeekSuggestions = obj.getAsJsonArray("nextWeekSuggestions")?.mapNotNull { runCatching { it.asString }.getOrNull() } ?: emptyList()
                 )
@@ -41,7 +49,9 @@ class AIWeeklyReporterService @Inject constructor(
         val timeFmt = DateTimeFormatter.ofPattern("MM/dd")
         val totalCount = weekTasks.size
         val completedCount = completedTasks.size
-        val pending = weekTasks.filter { it.status.name !in listOf("DONE", "CANCELLED") }
+        val pending = weekTasks.filter {
+            it.status in setOf(TaskStatus.PENDING, TaskStatus.DELAYED, TaskStatus.OVERDUE)
+        }
         val completionRate = if (totalCount > 0) {
             "%.0f%%".format(completedCount.toDouble() / totalCount * 100)
         } else {
@@ -50,8 +60,11 @@ class AIWeeklyReporterService @Inject constructor(
 
         return buildString {
             appendLine("Generate a weekly task report in Chinese.")
-            appendLine("Return only JSON with this schema: {\"title\":\"...\",\"summary\":\"...\",\"highlights\":[\"...\"],\"improvements\":[\"...\"],\"nextWeekSuggestions\":[\"...\"]}")
+            appendLine("Return only JSON with this schema: {\"title\":\"...\",\"summary\":\"...\",\"highlights\":[\"...\"],\"behaviorInsights\":[\"...\"],\"improvements\":[\"...\"],\"nextWeekSuggestions\":[\"...\"]}")
             appendLine("Use an objective but encouraging tone. Keep each list to 1-4 items.")
+            if (completedTasks.size < MIN_BEHAVIOR_SAMPLE_SIZE) {
+                appendLine("There are fewer than $MIN_BEHAVIOR_SAMPLE_SIZE completed tasks. Return an empty behaviorInsights array and do not claim stable behavior patterns.")
+            }
             appendLine()
             appendLine("Stats: total=$totalCount, completed=$completedCount, completionRate=$completionRate")
             if (completedTasks.isNotEmpty()) {
@@ -65,5 +78,9 @@ class AIWeeklyReporterService @Inject constructor(
                 pending.forEach { task -> appendLine("- ${task.title} | status=${task.status.name} | due=${task.dueDate?.format(timeFmt) ?: "none"}") }
             }
         }
+    }
+
+    private companion object {
+        const val MIN_BEHAVIOR_SAMPLE_SIZE = 3
     }
 }

@@ -7,29 +7,79 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.nextthing.app.R
 import com.nextthing.app.domain.model.GeofenceLocation
-import com.nextthing.app.presentation.theme.*
+import com.nextthing.app.presentation.components.geofence.GeofenceEmptyCopy
+import com.nextthing.app.presentation.components.geofence.GeofenceLocationSummary
+import com.nextthing.app.presentation.theme.BgCard
+import com.nextthing.app.presentation.theme.BgPrimary
+import com.nextthing.app.presentation.theme.Border
+import com.nextthing.app.presentation.theme.Primary
+import com.nextthing.app.presentation.theme.TextMuted
+import com.nextthing.app.presentation.theme.TextPrimary
+import com.nextthing.app.presentation.theme.TextSecondary
+import com.nextthing.app.presentation.theme.Warning
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,545 +89,401 @@ fun GeofenceConfigScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // 位置权限请求launcher
     val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestPermission()
     ) { granted ->
         val activity = context as? android.app.Activity
-        val shouldShowRationale = !granted && activity != null &&
-            ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)
         viewModel.onLocationPermissionResult(
             granted = granted,
-            shouldShowRationale = shouldShowRationale
+            shouldShowRationale = !granted && activity != null &&
+                ActivityCompat.shouldShowRequestPermissionRationale(
+                    activity,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                )
         )
-        // 如果位置权限授予成功，自动请求后台权限（Android 10+）
-        if (granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            viewModel.requestBackgroundLocationPermission()
+    }
+
+    val backgroundLocationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val activity = context as? android.app.Activity
+        viewModel.onBackgroundLocationPermissionResult(
+            granted = granted,
+            shouldShowRationale = !granted && activity != null &&
+                ActivityCompat.shouldShowRequestPermissionRationale(
+                    activity,
+                    Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                )
+        )
+    }
+
+    fun openAppSettings() {
+        context.startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", context.packageName, null)
+            }
+        )
+    }
+
+    fun requestForegroundPermission() {
+        if (uiState.locationPermissionState == PermissionState.PERMANENTLY_DENIED) {
+            openAppSettings()
+        } else {
+            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 
-    // 后台位置权限请求launcher（Android 10+）
-    val backgroundLocationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        val activity = context as? android.app.Activity
-        val shouldShowRationale = !granted && activity != null &&
-            ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-        viewModel.onBackgroundLocationPermissionResult(
-            granted = granted,
-            shouldShowRationale = shouldShowRationale
-        )
+    fun requestBackgroundPermission() {
+        if (uiState.backgroundLocationPermissionState == PermissionState.PERMANENTLY_DENIED) {
+            openAppSettings()
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+    }
+
+    LaunchedEffect(uiState.successMessage, uiState.errorMessage) {
+        uiState.successMessage?.let { snackbarHostState.showSnackbar(it) }
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearErrorMessage()
+        }
     }
 
     Scaffold(
+        containerColor = BgPrimary,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("地理围栏", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "地理围栏",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", Modifier.size(24.dp), tint = Color(0xFF0F1726))
+                    IconButton(onClick = navController::popBackStack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = TextPrimary
+                        )
                     }
                 },
-                actions = {
-                    IconButton(onClick = { navController.navigate("geofence_location_add") }) {
-                        Icon(Icons.Default.Add, "添加地点", Modifier.size(24.dp), tint = Color(0xFF1A7DFA))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = BgCard
-                ),
-                windowInsets = WindowInsets(0, 0, 0, 0)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = BgPrimary)
             )
         }
     ) { paddingValues ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(BgPrimary)
-                .padding(paddingValues),
-            contentPadding = PaddingValues(vertical = 12.dp)
+                .padding(paddingValues)
         ) {
-            // 权限请求卡片（如果需要）
-            if (uiState.shouldShowPermissionRequest) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 5.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
                 item {
-                    PermissionRequestCard(
+                    SectionLabel("服务状态")
+                }
+
+                item {
+                    GeofenceServiceCard(
                         uiState = uiState,
-                        onRequestLocationPermission = {
-                            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                        },
-                        onRequestBackgroundPermission = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                            }
-                        },
-                        onOpenSettings = {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
-                            }
-                            context.startActivity(intent)
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-            }
-
-            // 全局开关卡片
-            item {
-                GlobalEnableCard(
-                    uiState = uiState,
-                    onToggle = { viewModel.toggleGlobalEnabled() }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            // 统计信息卡片
-            item {
-                StatisticsCard(
-                    totalLocations = uiState.totalLocationsCount,
-                    frequentLocations = uiState.frequentLocationsCount,
-                    activeTasks = uiState.activeTasksCount,
-                    monthlyChecks = uiState.monthlyCheckCount,
-                    hitRate = uiState.averageHitRate
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            // 常用地点卡片
-            if (uiState.frequentLocations.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "⭐ 常用地点",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        onRequestForegroundPermission = ::requestForegroundPermission,
+                        onRequestBackgroundPermission = ::requestBackgroundPermission,
+                        onToggle = viewModel::toggleGlobalEnabled
                     )
                 }
-                items(uiState.frequentLocations) { location ->
-                    LocationListItem(
-                        location = location,
-                        onToggleFrequent = { viewModel.toggleFrequent(location) },
-                        onDelete = { viewModel.showDeleteConfirmation(location) },
-                        onClick = { navController.navigate("geofence_location_detail/${location.id}") }
-                    )
-                }
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-            }
 
-            // 所有地点列表
-            item {
-                Text(
-                    text = "📍 所有地点 (${uiState.totalLocationsCount})",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                )
-            }
-
-            if (uiState.locations.isEmpty() && !uiState.isLoading) {
                 item {
-                    EmptyLocationState(
+                    LocationsSectionHeader(
+                        count = uiState.totalLocationsCount,
+                        showAddAction = uiState.locations.isNotEmpty(),
                         onAddClick = { navController.navigate("geofence_location_add") }
                     )
                 }
-            } else {
-                items(uiState.locations) { location ->
-                    LocationListItem(
-                        location = location,
-                        onToggleFrequent = { viewModel.toggleFrequent(location) },
-                        onDelete = { viewModel.showDeleteConfirmation(location) },
-                        onClick = { navController.navigate("geofence_location_detail/${location.id}") }
+
+                if (uiState.locations.isEmpty() && !uiState.isLoading) {
+                    item {
+                        GeofenceEmptyState(
+                            onAddClick = { navController.navigate("geofence_location_add") }
+                        )
+                    }
+                } else {
+                    items(
+                        items = uiState.locations.sortedByDescending { it.isFrequent },
+                        key = { it.id }
+                    ) { location ->
+                        GeofenceLocationItem(
+                            location = location,
+                            defaultRadius = uiState.defaultRadius,
+                            onClick = {
+                                navController.navigate("geofence_location_detail/${location.id}")
+                            }
+                        )
+                    }
+                }
+
+                item {
+                    SectionLabel("围栏设置")
+                }
+
+                item {
+                    AdvancedSettingsCard(
+                        isExpanded = uiState.showAdvancedSettings,
+                        onToggle = viewModel::toggleAdvancedSettings,
+                        defaultRadius = uiState.defaultRadius,
+                        onRadiusChange = viewModel::updateDefaultRadius,
+                        accuracyThreshold = uiState.locationAccuracyThreshold,
+                        onAccuracyChange = viewModel::updateLocationAccuracyThreshold,
+                        notifyWhenOutside = uiState.notifyWhenOutside,
+                        onNotifyToggle = viewModel::toggleNotifyWhenOutside
                     )
                 }
             }
 
-            // 高级设置
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                AdvancedSettingsCard(
-                    isExpanded = uiState.showAdvancedSettings,
-                    onToggle = { viewModel.toggleAdvancedSettings() },
-                    defaultRadius = uiState.defaultRadius,
-                    onRadiusChange = { viewModel.updateDefaultRadius(it) },
-                    accuracyThreshold = uiState.locationAccuracyThreshold,
-                    onAccuracyChange = { viewModel.updateLocationAccuracyThreshold(it) },
-                    notifyWhenOutside = uiState.notifyWhenOutside,
-                    onNotifyToggle = { viewModel.toggleNotifyWhenOutside() }
-                )
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(BgPrimary.copy(alpha = 0.78f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Primary)
+                }
             }
         }
 
-        // 加载指示器
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(BgPrimary.copy(alpha = 0.7f)),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        }
-
-        // 成功消息
-        uiState.successMessage?.let { message ->
-            LaunchedEffect(message) {
-                // 自动清除消息由 ViewModel 处理
-            }
-            Snackbar(
-                modifier = Modifier.padding(16.dp),
-                containerColor = Color(0xFF4CAF50)
-            ) {
-                Text(message)
-            }
-        }
-
-        // 错误消息
-        uiState.errorMessage?.let { message ->
-            Snackbar(
-                modifier = Modifier.padding(16.dp),
-                action = {
-                    TextButton(onClick = { viewModel.clearErrorMessage() }) {
-                        Text("关闭")
-                    }
-                },
-                containerColor = Color(0xFFF44336)
-            ) {
-                Text(message)
-            }
-        }
-
-        // 删除确认对话框
         if (uiState.showDeleteConfirmation) {
+            val locationName = uiState.locationToDelete?.locationInfo?.locationName
+                ?.ifEmpty { "未命名地点" }
+                ?: "该地点"
             AlertDialog(
-                onDismissRequest = { viewModel.cancelDelete() },
-                title = { Text("确认删除") },
+                onDismissRequest = viewModel::cancelDelete,
+                shape = RoundedCornerShape(8.dp),
+                containerColor = BgCard,
+                title = { Text("删除地点？", color = TextPrimary) },
                 text = {
-                    Text("确定要删除此地点吗?关联的任务地理围栏也会被删除。")
+                    Text(
+                        text = "删除“$locationName”后，已关联任务的地理围栏也会被移除。",
+                        color = TextSecondary
+                    )
                 },
                 confirmButton = {
                     TextButton(
-                        onClick = { viewModel.confirmDelete() },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF44336))
-                    ) {
-                        Text("删除")
-                    }
+                        onClick = viewModel::confirmDelete,
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFD32F2F))
+                    ) { Text("删除") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { viewModel.cancelDelete() }) {
-                        Text("取消")
-                    }
+                    TextButton(onClick = viewModel::cancelDelete) { Text("取消") }
                 }
             )
         }
     }
 }
 
-// ========== 组件 ==========
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = TextPrimary,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+    )
+}
 
 @Composable
-private fun GlobalEnableCard(
+private fun LocationsSectionHeader(
+    count: Int,
+    showAddAction: Boolean,
+    onAddClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 16.dp, top = 8.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "地点（$count）",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary
+        )
+        Spacer(Modifier.weight(1f))
+        if (showAddAction) {
+            TextButton(onClick = onAddClick) {
+                Text("添加地点", color = Primary, fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeofenceServiceCard(
     uiState: GeofenceConfigUiState,
+    onRequestForegroundPermission: () -> Unit,
+    onRequestBackgroundPermission: () -> Unit,
     onToggle: () -> Unit
 ) {
-    val isEnabled = uiState.isGlobalEnabled
-    val hasPermission = uiState.hasLocationPermission
-    val canToggle = hasPermission
+    val needsForeground = !uiState.hasLocationPermission
+    val needsBackground = uiState.hasLocationPermission &&
+        !uiState.hasBackgroundLocationPermission &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+    val title = when {
+        needsForeground -> "需要位置权限"
+        needsBackground -> "还需后台定位权限"
+        else -> "地理围栏服务"
+    }
+    val description = when {
+        needsForeground -> "开启位置权限后，才能判断你是否到达或离开地点"
+        needsBackground -> "继续授权后，应用退到后台也能正常触发提醒"
+        uiState.isGlobalEnabled -> "已开启 · 到达和离开地点时提醒"
+        else -> "已关闭 · 现有地点和任务绑定会保留"
+    }
+
+    val actionLabel = if (needsForeground) "去授权" else "继续授权"
+    val serviceEnabled = !needsForeground && !needsBackground && uiState.isGlobalEnabled
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, if (serviceEnabled) Primary.copy(alpha = 0.45f) else Border),
         colors = CardDefaults.cardColors(
-            containerColor = when {
-                !hasPermission -> Color(0xFFFFEBEE) // 浅红色 - 无权限
-                !isEnabled -> Color(0xFFFFF3E0)     // 浅橙色 - 已禁用
-                else -> Color(0xFFE8F5E9)           // 浅绿色 - 已启用
-            }
+            containerColor = if (serviceEnabled) Primary.copy(alpha = 0.08f) else BgCard
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp)
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // 主要开关行
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "🛡️",
-                            fontSize = 24.sp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "地理围栏全局开关",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = when {
-                            !hasPermission -> "⚠️ 缺少位置权限"
-                            !isEnabled -> "地理围栏已禁用"
-                            else -> "✅ 地理围栏运行中"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = when {
-                            !hasPermission -> Color(0xFFC62828)
-                            !isEnabled -> Color(0xFFE65100)
-                            else -> Color(0xFF2E7D32)
-                        },
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                Switch(
-                    checked = isEnabled,
-                    onCheckedChange = { if (canToggle) onToggle() },
-                    enabled = canToggle,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF4CAF50),
-                        disabledCheckedThumbColor = Color.White,
-                        disabledCheckedTrackColor = Color(0xFFBDBDBD),
-                        disabledUncheckedThumbColor = Color.White,
-                        disabledUncheckedTrackColor = Color(0xFFE0E0E0)
-                    )
-                )
-            }
-
-            // 系统地理围栏状态
-            if (hasPermission) {
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Border)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            color = if (needsForeground || needsBackground) {
+                                Warning.copy(alpha = 0.12f)
+                            } else {
+                                Primary.copy(alpha = 0.10f)
+                            },
+                            shape = RoundedCornerShape(8.dp)
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
-                        Text(
-                            text = "系统地理围栏",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = if (uiState.systemGeofencesActive) "●" else "○",
-                                color = if (uiState.systemGeofencesActive) Color(0xFF4CAF50) else Color(0xFFBDBDBD),
-                                fontSize = 12.sp
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (uiState.systemGeofencesActive) "活跃" else "未活跃",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (uiState.systemGeofencesActive) Color(0xFF4CAF50) else TextSecondary,
-                                fontWeight = if (uiState.systemGeofencesActive) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
+                    Icon(
+                        painter = painterResource(R.drawable.icon_mine_geofence),
+                        contentDescription = null,
+                        tint = if (needsForeground || needsBackground) Warning else Primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
 
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "已注册围栏",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
+                if (!needsForeground && !needsBackground) {
+                    Switch(
+                        checked = uiState.isGlobalEnabled,
+                        onCheckedChange = { onToggle() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Primary
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "${uiState.systemGeofencesRegistered} 个",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Primary,
-                            fontWeight = FontWeight.Bold
-                        )
+                    )
+                } else {
+                    TextButton(
+                        onClick = if (needsForeground) onRequestForegroundPermission else onRequestBackgroundPermission
+                    ) {
+                        Text(actionLabel, color = Primary, fontWeight = FontWeight.Medium)
                     }
                 }
-            }
-
-            // 无权限提示
-            if (!hasPermission) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "💡 开关已禁用，请先授予位置权限",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFC62828),
-                    lineHeight = 18.sp
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun StatisticsCard(
-    totalLocations: Int,
-    frequentLocations: Int,
-    activeTasks: Int,
-    monthlyChecks: Int,
-    hitRate: Float
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = BgCard)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp)
-        ) {
-            // 第一行：3个统计项
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                StatItem("📍", totalLocations.toString(), "总地点")
-                StatItem("⭐", frequentLocations.toString(), "常用")
-                StatItem("✅", activeTasks.toString(), "活跃任务")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = Border)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 第二行：2个统计项
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                StatItem("📊", monthlyChecks.toString(), "本月检查")
-                StatItem(
-                    "🎯",
-                    if (monthlyChecks > 0) "${(hitRate * 100).toInt()}%" else "无数据",
-                    "命中率"
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatItem(icon: String, value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = icon, fontSize = 24.sp)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = Primary
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary
-        )
-    }
-}
-
-@Composable
-private fun LocationListItem(
+private fun GeofenceLocationItem(
     location: GeofenceLocation,
-    onToggleFrequent: () -> Unit,
-    onDelete: () -> Unit,
+    defaultRadius: Int,
     onClick: () -> Unit
 ) {
     Card(
-        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
+            .padding(horizontal = 20.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Border),
         colors = CardDefaults.cardColors(containerColor = BgCard)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = location.locationInfo.locationName.ifEmpty { "未命名地点" },
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = TextPrimary
-                    )
-                    if (location.isFrequent) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "⭐", fontSize = 12.sp)
-                    }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = buildString {
-                        append("📍 ${location.locationInfo.address.take(30)}")
-                        if (location.locationInfo.address.length > 30) append("...")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(Primary.copy(alpha = 0.10f), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.icon_mine_geofence),
+                    contentDescription = null,
+                    tint = Primary,
+                    modifier = Modifier.size(23.dp)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row {
-                    Text(
-                        text = "半径: ${location.customRadius ?: "默认"}m",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(
-                        text = "使用: ${location.usageCount}次",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                }
             }
+            Spacer(Modifier.width(10.dp))
+            GeofenceLocationSummary(
+                location = location,
+                defaultRadius = defaultRadius,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "查看地点详情",
+                tint = TextMuted
+            )
         }
     }
 }
 
 @Composable
-private fun EmptyLocationState(onAddClick: () -> Unit) {
+private fun GeofenceEmptyState(
+    onAddClick: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(32.dp),
+            .padding(horizontal = 20.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "📍", fontSize = 64.sp)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "还没有地理围栏地点",
-            style = MaterialTheme.typography.titleMedium,
-            color = TextPrimary
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "点击右上角 ➕ 添加常用地点",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+        GeofenceEmptyCopy()
+        Spacer(Modifier.height(14.dp))
         Button(
             onClick = onAddClick,
+            shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Primary)
         ) {
-            Text("添加地点")
+            Text("新建地点")
         }
     }
 }
@@ -596,118 +502,88 @@ private fun AdvancedSettingsCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Border),
         colors = CardDefaults.cardColors(containerColor = BgCard)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // 标题栏
+        Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onToggle() }
-                    .padding(20.dp),
+                    .clickable(onClick = onToggle)
+                    .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "⚙️ 高级设置",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = if (isExpanded) "▲" else "▼",
-                    color = TextSecondary
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Primary.copy(alpha = 0.10f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.icon_geofence_settings),
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "高级设置",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "默认半径、定位精度与离开提醒",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+                Icon(
+                    imageVector = if (isExpanded) {
+                        Icons.Default.KeyboardArrowUp
+                    } else {
+                        Icons.Default.KeyboardArrowDown
+                    },
+                    contentDescription = if (isExpanded) "收起高级设置" else "展开高级设置",
+                    tint = TextMuted
                 )
             }
 
-            // 展开的内容
             if (isExpanded) {
                 HorizontalDivider(color = Border)
-
-                // 默认半径
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "默认半径",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = "${defaultRadius}米",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Slider(
-                        value = defaultRadius.toFloat(),
-                        onValueChange = { onRadiusChange(it.toInt()) },
-                        valueRange = 50f..5000f,
-                        steps = 98, // (5000-50)/50 - 1
-                        colors = SliderDefaults.colors(
-                            thumbColor = Primary,
-                            activeTrackColor = Primary
-                        )
-                    )
-                }
-
+                SliderSetting(
+                    title = "默认围栏半径",
+                    valueText = "$defaultRadius 米",
+                    value = defaultRadius.toFloat(),
+                    valueRange = 50f..5000f,
+                    steps = 98,
+                    onValueChange = { onRadiusChange(it.toInt()) }
+                )
                 HorizontalDivider(color = Border)
-
-                // 精度阈值
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "位置精度阈值",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = "${accuracyThreshold}米",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Slider(
-                        value = accuracyThreshold.toFloat(),
-                        onValueChange = { onAccuracyChange(it.toInt()) },
-                        valueRange = 10f..500f,
-                        steps = 48, // (500-10)/10 - 1
-                        colors = SliderDefaults.colors(
-                            thumbColor = Primary,
-                            activeTrackColor = Primary
-                        )
-                    )
-                }
-
+                SliderSetting(
+                    title = "定位精度阈值",
+                    valueText = "$accuracyThreshold 米",
+                    value = accuracyThreshold.toFloat(),
+                    valueRange = 10f..500f,
+                    steps = 48,
+                    onValueChange = { onAccuracyChange(it.toInt()) }
+                )
                 HorizontalDivider(color = Border)
-
-                // 离开通知
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onNotifyToggle() }
-                        .padding(20.dp),
+                        .clickable(onClick = onNotifyToggle)
+                        .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
+                        Text("离开地点时通知", color = TextPrimary)
                         Text(
-                            text = "离开地点时通知",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = "在围栏外也发送提醒",
+                            "离开围栏后也发送提醒",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -726,172 +602,26 @@ private fun AdvancedSettingsCard(
     }
 }
 
-// ========== 权限请求组件 ==========
-
-/**
- * 权限请求卡片
- */
 @Composable
-private fun PermissionRequestCard(
-    uiState: GeofenceConfigUiState,
-    onRequestLocationPermission: () -> Unit,
-    onRequestBackgroundPermission: () -> Unit,
-    onOpenSettings: () -> Unit
+private fun SliderSetting(
+    title: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFFFF3E0) // 淡橙色背景，表示需要注意
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp)
-        ) {
-            // 标题
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "⚠️",
-                    fontSize = 24.sp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "需要位置权限",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE65100)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 说明文字
-            Text(
-                text = "地理围栏功能需要访问您的位置信息，以便在您进入或离开特定区域时发送提醒。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary,
-                lineHeight = 20.sp
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 位置权限按钮
-            if (!uiState.hasLocationPermission) {
-                Button(
-                    onClick = {
-                        when (uiState.locationPermissionState) {
-                            PermissionState.PERMANENTLY_DENIED -> onOpenSettings()
-                            else -> onRequestLocationPermission()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFF9800)
-                    )
-                ) {
-                    Text(
-                        text = if (uiState.locationPermissionState == PermissionState.PERMANENTLY_DENIED) {
-                            "去设置中开启"
-                        } else {
-                            "授予位置权限"
-                        }
-                    )
-                }
-
-                if (uiState.locationPermissionState == PermissionState.DENIED) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "💡 位置权限被拒绝，地理围栏功能将无法使用",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFE65100)
-                    )
-                } else if (uiState.locationPermissionState == PermissionState.PERMANENTLY_DENIED) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "💡 权限被永久拒绝，请在系统设置中手动开启",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFD32F2F)
-                    )
-                }
-            }
-
-            // 后台位置权限按钮（Android 10+）
-            if (uiState.hasLocationPermission && !uiState.hasBackgroundLocationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = Color(0xFFFFCC80))
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "后台位置权限",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFE65100)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "为了在应用在后台运行时也能监控地理围栏，需要授予\"始终允许\"访问位置的权限。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextPrimary,
-                    lineHeight = 18.sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Button(
-                    onClick = {
-                        when (uiState.backgroundLocationPermissionState) {
-                            PermissionState.PERMANENTLY_DENIED -> onOpenSettings()
-                            else -> onRequestBackgroundPermission()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFF9800)
-                    )
-                ) {
-                    Text(
-                        text = if (uiState.backgroundLocationPermissionState == PermissionState.PERMANENTLY_DENIED) {
-                            "去设置中开启"
-                        } else {
-                            "授予后台位置权限"
-                        }
-                    )
-                }
-
-                if (uiState.backgroundLocationPermissionState == PermissionState.DENIED) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "💡 没有后台权限，应用在后台时无法监控地理围栏",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFE65100)
-                    )
-                } else if (uiState.backgroundLocationPermissionState == PermissionState.PERMANENTLY_DENIED) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "💡 权限被永久拒绝，请在系统设置中选择\"始终允许\"",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFD32F2F)
-                    )
-                }
-            }
-
-            // 权限说明
-            if (uiState.hasFullPermissions) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "✅", fontSize = 16.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "所有必需权限已授予",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF4CAF50),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
+    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(title, color = TextPrimary, modifier = Modifier.weight(1f))
+            Text(valueText, color = Primary, fontWeight = FontWeight.Medium)
         }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps,
+            colors = SliderDefaults.colors(thumbColor = Primary, activeTrackColor = Primary)
+        )
     }
 }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.nextthing.app.domain.model.Category
 import com.nextthing.app.domain.model.Task
+import com.nextthing.app.data.service.AIRouteMode
 import com.nextthing.app.presentation.theme.*
 import com.nextthing.app.presentation.components.TaskItemCard
 import com.nextthing.app.presentation.components.CategoryIconView
@@ -82,7 +84,7 @@ private val Category.pastelColor: Color
 @Composable
 fun StatsScreen(
     viewModel: StatsViewModel = hiltViewModel(),
-    onNavigateToStatsSection: (String) -> Unit = {}
+    onNavigateToStatsSection: (String, OverviewTimeRange) -> Unit = { _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -91,7 +93,10 @@ fun StatsScreen(
             .fillMaxSize()
             .background(BgPrimary)
     ) {
-        StatsTopBar()
+        StatsTopBar(
+            selectedTimeRange = uiState.selectedOverviewTimeRange,
+            onTimeRangeSelected = viewModel::selectOverviewTimeRange
+        )
 
         LazyColumn(
             modifier = Modifier
@@ -99,13 +104,16 @@ fun StatsScreen(
                 .weight(1f),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            item { StatsHomeContent(uiState, viewModel, onNavigateToStatsSection) }
+            item { StatsHomeContent(uiState, onNavigateToStatsSection) }
         }
     }
 }
 
 @Composable
-private fun StatsTopBar() {
+private fun StatsTopBar(
+    selectedTimeRange: OverviewTimeRange,
+    onTimeRangeSelected: (OverviewTimeRange) -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = BgCard,
@@ -125,6 +133,14 @@ private fun StatsTopBar() {
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                OverviewTimeRangeChips(
+                    selectedTimeRange = selectedTimeRange,
+                    onTimeRangeSelected = onTimeRangeSelected,
+                    modifier = Modifier.width(156.dp)
+                )
             }
             HorizontalDivider(thickness = 0.5.dp, color = Border)
         }
@@ -134,77 +150,146 @@ private fun StatsTopBar() {
 @Composable
 fun StatsStructureScreen(
     viewModel: StatsViewModel = hiltViewModel(),
+    initialTimeRange: OverviewTimeRange = OverviewTimeRange.TODAY,
     onBackPressed: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(initialTimeRange) {
+        viewModel.selectCategoryTimeRange(initialTimeRange)
+    }
+    val categoryRangeReady = uiState.selectedCategoryTimeRange == initialTimeRange
+    val showEmptyState = categoryRangeReady && uiState.categoryStats.isEmpty()
 
     StatsDetailScaffold(
         title = "任务结构",
-        subtitle = "看任务分布是否偏科",
+        subtitle = null,
+        contentTopPadding = 5.dp,
+        contentSpacing = 5.dp,
+        centerContent = showEmptyState,
         onBackPressed = onBackPressed
     ) {
-        CategoryContent(uiState = uiState, viewModel = viewModel)
+        if (categoryRangeReady) {
+            if (showEmptyState) {
+                CategoryStructureEmptyState(uiState.selectedCategoryTimeRange)
+            } else {
+                CategoryContent(uiState = uiState)
+            }
+        }
     }
 }
 
 @Composable
 fun StatsTrendScreen(
     viewModel: StatsViewModel = hiltViewModel(),
-    onBackPressed: () -> Unit,
-    onNavigateToTrendDetail: (String) -> Unit = {}
+    initialTimeRange: OverviewTimeRange = OverviewTimeRange.TODAY,
+    onBackPressed: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(initialTimeRange) {
+        viewModel.selectOverviewTimeRange(initialTimeRange)
+        viewModel.selectTrendTimeRange(initialTimeRange)
+    }
+    val rangeReady = uiState.selectedOverviewTimeRange == initialTimeRange &&
+        uiState.selectedTrendTimeRange == initialTimeRange
+    val comparison = uiState.weekComparison
+    val showEmptyState = rangeReady && comparison != null &&
+        comparison.thisWeekTotalTasks == 0 && comparison.lastWeekTotalTasks == 0
 
     StatsDetailScaffold(
         title = "趋势分析",
-        subtitle = "看执行状态是在变好还是变差",
+        subtitle = null,
+        contentTopPadding = 5.dp,
+        contentSpacing = 5.dp,
+        centerContent = showEmptyState,
         onBackPressed = onBackPressed
     ) {
-        TrendContent(
-            uiState = uiState,
-            viewModel = viewModel,
-            onNavigateToTrendDetail = onNavigateToTrendDetail
-        )
+        if (rangeReady) {
+            if (showEmptyState) {
+                TrendEmptyState(initialTimeRange)
+            } else {
+                TrendContent(uiState = uiState)
+            }
+        }
     }
 }
 
 @Composable
 fun StatsEfficiencyScreen(
     viewModel: StatsViewModel = hiltViewModel(),
+    initialTimeRange: OverviewTimeRange = OverviewTimeRange.TODAY,
     onBackPressed: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(initialTimeRange) {
+        viewModel.selectOverviewTimeRange(initialTimeRange)
+        viewModel.selectEfficiencyTimeRange(initialTimeRange)
+    }
+    val rangeReady = uiState.selectedOverviewTimeRange == initialTimeRange &&
+        uiState.selectedEfficiencyTimeRange == initialTimeRange
+    val hasBasicData = uiState.efficiencySummary.completedWithDeadlineCount >= 3
 
     StatsDetailScaffold(
         title = "效率诊断",
-        subtitle = "看拖延、热力和效率建议",
+        subtitle = null,
+        trailingText = initialTimeRange.displayName,
+        contentTopPadding = 5.dp,
+        contentSpacing = 5.dp,
+        centerContent = rangeReady && !hasBasicData,
         onBackPressed = onBackPressed
     ) {
-        EfficiencyContent(uiState = uiState, viewModel = viewModel)
+        if (rangeReady) {
+            if (hasBasicData) {
+                EfficiencyContent(uiState = uiState)
+            } else {
+                EfficiencyInsufficientState(uiState.efficiencySummary)
+            }
+        }
     }
 }
 
 @Composable
 fun StatsAIReportScreen(
     viewModel: StatsViewModel = hiltViewModel(),
-    onBackPressed: () -> Unit
+    onBackPressed: () -> Unit,
+    onNavigateToAIConfig: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(Unit) {
+        viewModel.prepareAIReportContext()
+    }
+    val centerContent = !uiState.aiReportContextLoaded ||
+        uiState.isAIReportContextLoading ||
+        uiState.isGeneratingReport ||
+        (uiState.weeklyReport == null && uiState.aiReportWeekTaskCount == 0)
 
     StatsDetailScaffold(
         title = "AI 周报",
-        subtitle = "把行为模式和改进建议整理出来",
+        subtitle = null,
+        trailingText = "本周",
+        contentTopPadding = 5.dp,
+        contentSpacing = 5.dp,
+        centerContent = centerContent,
         onBackPressed = onBackPressed
     ) {
-        AIInsightContent(uiState = uiState, viewModel = viewModel)
+        AIWeeklyReportContent(
+            uiState = uiState,
+            onGenerate = viewModel::generateWeeklyReport,
+            onNavigateToAIConfig = onNavigateToAIConfig,
+            onRetryContext = viewModel::prepareAIReportContext,
+            exportWeeklyReport = viewModel::exportWeeklyReport
+        )
     }
 }
 
 @Composable
 private fun StatsDetailScaffold(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     onBackPressed: () -> Unit,
+    trailingText: String? = null,
+    contentTopPadding: androidx.compose.ui.unit.Dp = 12.dp,
+    contentSpacing: androidx.compose.ui.unit.Dp = 16.dp,
+    centerContent: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
@@ -239,29 +324,56 @@ private fun StatsDetailScaffold(
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold
                 )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            if (!trailingText.isNullOrBlank()) {
                 Text(
-                    text = subtitle,
+                    text = trailingText,
                     color = TextSecondary,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(end = 10.dp)
                 )
             }
             }
         }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 56.dp)
-        ) {
-            item {
+        if (centerContent) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
                     content = content
                 )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentPadding = PaddingValues(top = contentTopPadding, bottom = 24.dp)
+            ) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                        content = content
+                    )
+                }
             }
         }
     }
@@ -561,17 +673,17 @@ private fun HeaderSignalCard(
 @Composable
 private fun OverviewTimeRangeChips(
     selectedTimeRange: OverviewTimeRange,
-    onTimeRangeSelected: (OverviewTimeRange) -> Unit
+    onTimeRangeSelected: (OverviewTimeRange) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp)
+        modifier = modifier
+            .height(40.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(BgSecondary)
-            .border(1.dp, Color(0xFF29293A).copy(alpha = 0.23f), RoundedCornerShape(8.dp))
+            .background(BgCard)
+            .border(1.dp, Border, RoundedCornerShape(8.dp))
             .padding(2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         listOf(
             OverviewTimeRange.TODAY,
@@ -583,16 +695,16 @@ private fun OverviewTimeRangeChips(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(if (selected) Primary else Color.Transparent)
+                    .background(if (selected) Primary.copy(alpha = 0.10f) else Color.Transparent)
                     .clickable { onTimeRangeSelected(range) }
-                    .padding(vertical = 8.dp),
+                    .fillMaxHeight(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = range.displayName,
-                    color = if (selected) Color.White else StatsSub,
-                    fontSize = 12.sp,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                    color = if (selected) Primary else StatsSub,
+                    fontSize = 14.sp,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
                 )
             }
         }
@@ -659,39 +771,35 @@ private fun StatsTabRow(
 @Composable
 private fun StatsHomeContent(
     uiState: StatsUiState,
-    viewModel: StatsViewModel,
-    onNavigateToStatsSection: (String) -> Unit
+    onNavigateToStatsSection: (String, OverviewTimeRange) -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 5.dp),
+        verticalArrangement = Arrangement.Top
     ) {
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OverviewTimeRangeChips(
-            selectedTimeRange = uiState.selectedOverviewTimeRange,
-            onTimeRangeSelected = { viewModel.selectOverviewTimeRange(it) }
-        )
-
         ExecutionSummaryCard(uiState)
 
-        OverviewMetricStrip(uiState = uiState)
+        Spacer(modifier = Modifier.height(10.dp))
 
-        StatsTrendPreview(uiState)
-
-        StatsAnalysisEntryGrid(onNavigateToStatsSection = onNavigateToStatsSection)
+        StatsAnalysisEntryGrid(
+            selectedTimeRange = uiState.selectedOverviewTimeRange,
+            onNavigateToStatsSection = onNavigateToStatsSection
+        )
     }
 }
 
 @Composable
 private fun StatsAnalysisEntryGrid(
-    onNavigateToStatsSection: (String) -> Unit
+    selectedTimeRange: OverviewTimeRange,
+    onNavigateToStatsSection: (String, OverviewTimeRange) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Text(
             text = "专项分析",
@@ -703,22 +811,22 @@ private fun StatsAnalysisEntryGrid(
         StatsAnalysisEntryCard(
             title = "任务结构",
             description = "查看分类分布与任务构成",
-            onClick = { onNavigateToStatsSection("structure") }
+            onClick = { onNavigateToStatsSection("structure", selectedTimeRange) }
         )
         StatsAnalysisEntryCard(
             title = "趋势分析",
             description = "查看完成趋势与任务积压变化",
-            onClick = { onNavigateToStatsSection("trend") }
+            onClick = { onNavigateToStatsSection("trend", selectedTimeRange) }
         )
         StatsAnalysisEntryCard(
             title = "效率诊断",
             description = "分析拖延、活跃时段与执行效率",
-            onClick = { onNavigateToStatsSection("efficiency") }
+            onClick = { onNavigateToStatsSection("efficiency", selectedTimeRange) }
         )
         StatsAnalysisEntryCard(
             title = "AI 周报",
             description = "汇总行为变化与改进建议",
-            onClick = { onNavigateToStatsSection("ai") }
+            onClick = { onNavigateToStatsSection("ai", selectedTimeRange) }
         )
     }
 }
@@ -747,7 +855,7 @@ private fun StatsAnalysisEntryCard(
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text(
                     text = title,
@@ -812,7 +920,27 @@ private fun OverviewContent(uiState: StatsUiState, viewModel: StatsViewModel) {
 @Composable
 private fun ExecutionSummaryCard(uiState: StatsUiState) {
     val rangeName = uiState.selectedOverviewTimeRange.displayName
-    val progress = (uiState.overviewCompletionRate / 100f).coerceIn(0f, 1f)
+    val previousRangeName = when (uiState.selectedOverviewTimeRange) {
+        OverviewTimeRange.TODAY -> "昨日"
+        OverviewTimeRange.THIS_WEEK -> "上周"
+        OverviewTimeRange.THIS_MONTH -> "上月"
+        OverviewTimeRange.ALL -> "上期"
+    }
+    val comparison = uiState.weekComparison
+    val comparisonChange = comparison?.completionRateChange ?: 0f
+    val hasComparison = comparison != null && comparison.lastWeekTotalTasks > 0
+    val comparisonText = when {
+        !hasComparison -> "暂无对比"
+        comparisonChange > 0.5f -> "较$previousRangeName ↑${comparisonChange.roundToInt()}个百分点"
+        comparisonChange < -0.5f -> "较$previousRangeName ↓${abs(comparisonChange).roundToInt()}个百分点"
+        else -> "较$previousRangeName 持平"
+    }
+    val comparisonColor = when {
+        !hasComparison -> TextMuted
+        comparisonChange > 0.5f -> Success
+        comparisonChange < -0.5f -> Danger
+        else -> TextMuted
+    }
 
     Card(
         modifier = Modifier
@@ -826,7 +954,7 @@ private fun ExecutionSummaryCard(uiState: StatsUiState) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -840,39 +968,57 @@ private fun ExecutionSummaryCard(uiState: StatsUiState) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "完成率",
-                    color = TextMuted,
-                    fontSize = 12.sp
+                    text = comparisonText,
+                    color = comparisonColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
+
             if (uiState.overviewTotalTasks == 0) {
-                Text("该时间范围内暂无任务", color = TextSecondary, fontSize = 15.sp)
-                Text("创建任务后，这里会展示执行进度。", color = TextMuted, fontSize = 12.sp)
+                Text(
+                    text = "${rangeName}暂无任务",
+                    color = TextSecondary,
+                    fontSize = 15.sp
+                )
             } else {
-                Row(verticalAlignment = Alignment.Bottom) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
                     Text(
                         text = "${uiState.overviewCompletionRate.toInt()}%",
                         color = Primary,
-                        fontSize = 36.sp,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Black
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "已完成 ${uiState.overviewCompletedTasks} / ${uiState.overviewTotalTasks} 项",
                         color = TextSecondary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(bottom = 5.dp)
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
                 }
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(99.dp)),
-                    color = Primary,
-                    trackColor = BgSecondary
-                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "逾期 ${uiState.coreMetricOverdue} 项",
+                        color = Danger,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "重要紧急 ${uiState.coreMetricImportantUrgent} 项",
+                        color = Warning,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
@@ -1554,45 +1700,251 @@ private fun StructureContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        CategoryContent(uiState = uiState, viewModel = viewModel)
-        TrendContent(
-            uiState = uiState,
-            viewModel = viewModel,
-            onNavigateToTrendDetail = onNavigateToTrendDetail
-        )
+        CategoryContent(uiState = uiState)
+        TrendContent(uiState = uiState)
     }
 }
 
 // ==================== 分类统计页面 ====================
 @Composable
-private fun CategoryContent(uiState: StatsUiState, viewModel: StatsViewModel) {
+private fun CategoryContent(uiState: StatsUiState) {
+    val categoryStats = uiState.categoryStats.values
+        .sortedWith(compareByDescending<CategoryStatsData> { it.totalCount }.thenBy { it.category.displayName })
+
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        // 分类双层饼图（带时间维度选择）
-        CategoryDoublePieChart(
-            categoryStats = uiState.categoryStats.values.toList(),
-            selectedCategory = uiState.selectedCategory,
-            onCategorySelected = { category -> viewModel.selectCategory(category) },
-            selectedTimeRange = uiState.selectedCategoryTimeRange,
-            onTimeRangeSelected = { timeRange -> viewModel.selectCategoryTimeRange(timeRange) }
-        )
-
-        // 分类效率排行榜
-        if (uiState.categoryEfficiencyRanking.isNotEmpty()) {
-            CategoryEfficiencyRanking(
-                ranking = uiState.categoryEfficiencyRanking,
+        if (categoryStats.isNotEmpty()) {
+            CategoryDistributionCard(
+                categoryStats = categoryStats,
                 selectedTimeRange = uiState.selectedCategoryTimeRange
             )
+            CategoryPerformanceCard(categoryStats = categoryStats)
         }
+    }
+}
 
-        // 分类×星期热力图
-        if (uiState.categoryWeekdayHeatmap.isNotEmpty()) {
-            CategoryWeekdayHeatmap(
-                heatmapData = uiState.categoryWeekdayHeatmap
+@Composable
+private fun CategoryStructureEmptyState(selectedTimeRange: OverviewTimeRange) {
+    Text(
+        text = "${selectedTimeRange.displayName}暂无任务",
+        color = TextSecondary,
+        fontSize = 16.sp,
+        fontWeight = FontWeight.Medium
+    )
+}
+
+@Composable
+private fun CategoryDistributionCard(
+    categoryStats: List<CategoryStatsData>,
+    selectedTimeRange: OverviewTimeRange
+) {
+    val totalTasks = categoryStats.sumOf { it.totalCount }.coerceAtLeast(1)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "分类分布",
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${selectedTimeRange.displayName} · 共 $totalTasks 项",
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(BgSecondary)
+            ) {
+                categoryStats.forEach { stat ->
+                    Box(
+                        modifier = Modifier
+                            .weight(stat.totalCount.toFloat())
+                            .fillMaxHeight()
+                            .background(stat.category.color.copy(alpha = 0.72f))
+                    )
+                }
+            }
+
+            categoryStats.forEachIndexed { index, stat ->
+                CategoryDistributionRow(stat = stat, totalTasks = totalTasks)
+                if (index != categoryStats.lastIndex) {
+                    HorizontalDivider(thickness = 0.5.dp, color = Border)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryDistributionRow(
+    stat: CategoryStatsData,
+    totalTasks: Int
+) {
+    val share = stat.totalCount.toFloat() / totalTasks
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(stat.category.color.copy(alpha = 0.72f), CircleShape)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        CategoryInitialBadge(category = stat.category)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stat.category.displayName,
+            modifier = Modifier.weight(1f),
+            color = TextPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = "${stat.totalCount}项",
+            color = TextSecondary,
+            fontSize = 13.sp
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = "${(share * 100).roundToInt()}%",
+            modifier = Modifier.width(36.dp),
+            color = TextSecondary,
+            fontSize = 13.sp,
+            textAlign = TextAlign.End
+        )
+    }
+}
+
+@Composable
+private fun CategoryPerformanceCard(categoryStats: List<CategoryStatsData>) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "分类表现",
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            categoryStats.forEachIndexed { index, stat ->
+                CategoryPerformanceRow(stat = stat)
+                if (index != categoryStats.lastIndex) {
+                    HorizontalDivider(thickness = 0.5.dp, color = Border)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryPerformanceRow(stat: CategoryStatsData) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CategoryInitialBadge(category = stat.category)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = stat.category.displayName,
+                modifier = Modifier.weight(1f),
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "已完成 ${stat.completedCount} / ${stat.totalCount} 项",
+                color = TextSecondary,
+                fontSize = 13.sp
             )
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "完成率 ${stat.completionRate.roundToInt()}%",
+                color = TextSecondary,
+                fontSize = 12.sp
+            )
+            Text(
+                text = "逾期 ${stat.overdueCount} 项",
+                color = if (stat.overdueCount > 0) Danger else TextMuted,
+                fontSize = 12.sp,
+                fontWeight = if (stat.overdueCount > 0) FontWeight.Medium else FontWeight.Normal
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryInitialBadge(category: Category) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(category.pastelColor.copy(alpha = 0.32f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = category.displayName.take(1),
+            color = category.color,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -1601,38 +1953,406 @@ private fun CategoryContent(uiState: StatsUiState, viewModel: StatsViewModel) {
 // ==================== 趋势统计页面 ====================
 @Composable
 private fun TrendContent(
-    uiState: StatsUiState,
-    viewModel: StatsViewModel,
-    onNavigateToTrendDetail: (String) -> Unit = {}
+    uiState: StatsUiState
 ) {
+    val timeRange = uiState.selectedOverviewTimeRange
+    val window = remember(timeRange) { buildTrendWindow(timeRange) }
+    val currentExecution = remember(uiState.allWeeklyTrend, window) {
+        uiState.allWeeklyTrend.filter { it.date in window.currentStart..window.currentEnd }
+    }
+    val previousExecution = remember(uiState.allWeeklyTrend, window) {
+        uiState.allWeeklyTrend.filter { it.date in window.previousStart..window.previousEnd }
+    }
+    val currentOverdue = remember(uiState.overdueTrend, window) {
+        uiState.overdueTrend.filter { it.date in window.currentStart..window.currentEnd }
+    }
+    val previousOverdue = remember(uiState.overdueTrend, window) {
+        uiState.overdueTrend.filter { it.date in window.previousStart..window.previousEnd }
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        // 公共时间维度选择器
-        TrendTimeRangeSelector(
-            selectedTimeRange = uiState.selectedTrendTimeRange,
-            onTimeRangeSelected = { viewModel.selectTrendTimeRange(it) }
+        ExecutionChangeCard(
+            uiState = uiState,
+            currentData = currentExecution,
+            previousData = previousExecution,
+            window = window
         )
+        OverdueChangeCard(
+            currentData = currentOverdue,
+            previousData = previousOverdue,
+            window = window
+        )
+    }
+}
 
-        // 1. 任务完成趋势折线图（含7日移动平均线）
-        WeeklyTrendChart(uiState, onNavigateToTrendDetail)
+private data class TrendWindow(
+    val currentStart: java.time.LocalDate,
+    val currentEnd: java.time.LocalDate,
+    val previousStart: java.time.LocalDate,
+    val previousEnd: java.time.LocalDate,
+    val previousLabel: String
+)
 
-        // 2. 完成率走势
-        if (uiState.completionRateTrend.isNotEmpty()) {
-            CompletionRateTrendChart(data = uiState.completionRateTrend, onNavigateToDetail = onNavigateToTrendDetail)
+private fun buildTrendWindow(timeRange: OverviewTimeRange): TrendWindow {
+    val today = java.time.LocalDate.now()
+    return when (timeRange) {
+        OverviewTimeRange.TODAY -> TrendWindow(
+            currentStart = today,
+            currentEnd = today,
+            previousStart = today.minusDays(1),
+            previousEnd = today.minusDays(1),
+            previousLabel = "昨日"
+        )
+        OverviewTimeRange.THIS_WEEK -> {
+            val currentStart = today.with(java.time.DayOfWeek.MONDAY)
+            val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(currentStart, today)
+            val previousStart = currentStart.minusWeeks(1)
+            TrendWindow(
+                currentStart = currentStart,
+                currentEnd = today,
+                previousStart = previousStart,
+                previousEnd = previousStart.plusDays(elapsedDays),
+                previousLabel = "上周"
+            )
+        }
+        OverviewTimeRange.THIS_MONTH -> {
+            val currentStart = today.withDayOfMonth(1)
+            val previousStart = currentStart.minusMonths(1)
+            val previousLastDay = previousStart.withDayOfMonth(previousStart.lengthOfMonth())
+            val candidatePreviousEnd = previousStart.plusDays((today.dayOfMonth - 1).toLong())
+            val alignedPreviousEnd = if (candidatePreviousEnd.isAfter(previousLastDay)) {
+                previousLastDay
+            } else {
+                candidatePreviousEnd
+            }
+            TrendWindow(
+                currentStart = currentStart,
+                currentEnd = today,
+                previousStart = previousStart,
+                previousEnd = alignedPreviousEnd,
+                previousLabel = "上月"
+            )
+        }
+        OverviewTimeRange.ALL -> TrendWindow(
+            currentStart = today.minusDays(29),
+            currentEnd = today,
+            previousStart = today.minusDays(59),
+            previousEnd = today.minusDays(30),
+            previousLabel = "上一周期"
+        )
+    }
+}
+
+@Composable
+private fun TrendEmptyState(timeRange: OverviewTimeRange) {
+    Text(
+        text = "${timeRange.displayName}暂无趋势数据",
+        color = TextSecondary,
+        fontSize = 16.sp,
+        fontWeight = FontWeight.Medium
+    )
+}
+
+@Composable
+private fun ExecutionChangeCard(
+    uiState: StatsUiState,
+    currentData: List<DailyTrendData>,
+    previousData: List<DailyTrendData>,
+    window: TrendWindow
+) {
+    val comparison = uiState.weekComparison
+    val change = comparison?.completionRateChange ?: 0f
+    val hasPreviousData = comparison?.lastWeekTotalTasks?.let { it > 0 } == true
+    val changeText = when {
+        !hasPreviousData -> "暂无同期数据"
+        change > 0.5f -> "较${window.previousLabel} ↑ ${change.roundToInt()} 个百分点"
+        change < -0.5f -> "较${window.previousLabel} ↓ ${abs(change).roundToInt()} 个百分点"
+        else -> "较${window.previousLabel}基本持平"
+    }
+    val changeColor = when {
+        !hasPreviousData -> TextMuted
+        change > 0.5f -> Success
+        change < -0.5f -> Danger
+        else -> TextMuted
+    }
+
+    TrendCardContainer {
+        TrendCardHeader(title = "执行变化", rangeName = uiState.selectedOverviewTimeRange.displayName)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            TrendMetric(label = "已完成", value = "${uiState.overviewCompletedTasks} / ${uiState.overviewTotalTasks} 项")
+            TrendMetric(
+                label = "完成率",
+                value = "${uiState.overviewCompletionRate.roundToInt()}%",
+                valueColor = Primary,
+                horizontalAlignment = Alignment.End
+            )
+        }
+        Text(
+            text = changeText,
+            color = changeColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+        ComparisonTrendSection(
+            currentValues = currentData.map { it.completedCount },
+            previousValues = previousData.map { it.completedCount },
+            labels = currentData.map { trendDateLabel(it.date, uiState.selectedOverviewTimeRange) },
+            currentLabel = uiState.selectedOverviewTimeRange.displayName,
+            previousLabel = window.previousLabel,
+            currentColor = Primary,
+            emptyText = "暂无足够数据生成趋势"
+        )
+    }
+}
+
+@Composable
+private fun OverdueChangeCard(
+    currentData: List<DailyOverdueTrendData>,
+    previousData: List<DailyOverdueTrendData>,
+    window: TrendWindow
+) {
+    val currentOverdue = currentData.lastOrNull()?.overdueCount ?: 0
+    val previousOverdue = previousData.lastOrNull()?.overdueCount ?: 0
+    val change = currentOverdue - previousOverdue
+    val changeText = when {
+        previousData.isEmpty() -> "暂无同期数据"
+        change > 0 -> "较${window.previousLabel} +$change 项"
+        change < 0 -> "较${window.previousLabel} $change 项"
+        else -> "较${window.previousLabel}持平"
+    }
+    val changeColor = when {
+        previousData.isEmpty() -> TextMuted
+        change > 0 -> Danger
+        change < 0 -> Success
+        else -> TextMuted
+    }
+    val rangeName = when {
+        window.currentStart == window.currentEnd -> "今日"
+        window.currentStart.dayOfMonth == 1 && window.currentStart.month == window.currentEnd.month -> "本月"
+        else -> "本周"
+    }
+
+    TrendCardContainer {
+        TrendCardHeader(title = "逾期变化", rangeName = rangeName)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TrendMetric(label = "当前逾期", value = "$currentOverdue 项", valueColor = if (currentOverdue > 0) Danger else TextPrimary)
+            Text(
+                text = changeText,
+                color = changeColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        ComparisonTrendSection(
+            currentValues = currentData.map { it.overdueCount },
+            previousValues = previousData.map { it.overdueCount },
+            labels = currentData.map { trendDateLabel(it.date, rangeNameToTimeRange(rangeName)) },
+            currentLabel = rangeName,
+            previousLabel = window.previousLabel,
+            currentColor = Danger,
+            emptyText = "当前周期暂无逾期变化"
+        )
+    }
+}
+
+private fun rangeNameToTimeRange(rangeName: String): OverviewTimeRange = when (rangeName) {
+    "今日" -> OverviewTimeRange.TODAY
+    "本月" -> OverviewTimeRange.THIS_MONTH
+    else -> OverviewTimeRange.THIS_WEEK
+}
+
+@Composable
+private fun TrendCardContainer(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun TrendCardHeader(title: String, rangeName: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(text = rangeName, color = TextMuted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun TrendMetric(
+    label: String,
+    value: String,
+    valueColor: Color = TextPrimary,
+    horizontalAlignment: Alignment.Horizontal = Alignment.Start
+) {
+    Column(
+        horizontalAlignment = horizontalAlignment,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(text = label, color = TextMuted, fontSize = 12.sp)
+        Text(text = value, color = valueColor, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ComparisonTrendSection(
+    currentValues: List<Int>,
+    previousValues: List<Int>,
+    labels: List<String>,
+    currentLabel: String,
+    previousLabel: String,
+    currentColor: Color,
+    emptyText: String
+) {
+    val hasEnoughPoints = maxOf(currentValues.size, previousValues.size) >= 2
+    val hasVisibleValue = currentValues.any { it > 0 } || previousValues.any { it > 0 }
+
+    if (!hasEnoughPoints || !hasVisibleValue) {
+        Text(text = emptyText, color = TextMuted, fontSize = 13.sp)
+        return
+    }
+
+    ComparisonLineChart(
+        currentValues = currentValues,
+        previousValues = previousValues,
+        labels = labels,
+        currentColor = currentColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp)
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ComparisonTrendLegendItem(label = currentLabel, color = currentColor)
+        Spacer(modifier = Modifier.width(20.dp))
+        ComparisonTrendLegendItem(label = previousLabel, color = TextMuted)
+    }
+}
+
+@Composable
+private fun ComparisonTrendLegendItem(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .width(18.dp)
+                .height(3.dp)
+                .background(color, RoundedCornerShape(2.dp))
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text = label, color = TextSecondary, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun ComparisonLineChart(
+    currentValues: List<Int>,
+    previousValues: List<Int>,
+    labels: List<String>,
+    currentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val maxValue = (currentValues + previousValues).maxOrNull()?.coerceAtLeast(1) ?: 1
+    val pointCount = maxOf(currentValues.size, previousValues.size).coerceAtLeast(2)
+    val gridColor = Border.copy(alpha = 0.55f)
+    val previousColor = TextMuted
+
+    Column(modifier = modifier) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            repeat(3) { index ->
+                val y = size.height * index / 2f
+                drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+            }
+
+            fun drawSeries(values: List<Int>, color: Color, dashed: Boolean) {
+                if (values.size < 2) return
+                val path = Path()
+                values.forEachIndexed { index, value ->
+                    val x = size.width * index / (pointCount - 1).toFloat()
+                    val y = size.height - (value.toFloat() / maxValue) * size.height
+                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(
+                    path = path,
+                    color = color,
+                    style = Stroke(
+                        width = if (dashed) 2f else 3f,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                        pathEffect = if (dashed) {
+                            androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                        } else null
+                    )
+                )
+            }
+
+            drawSeries(previousValues, previousColor, dashed = true)
+            drawSeries(currentValues, currentColor, dashed = false)
         }
 
-        // 3. 平均完成周期（Cycle Time）
-        if (uiState.cycleTimeTrend.isNotEmpty()) {
-            CycleTimeTrendChart(data = uiState.cycleTimeTrend, onNavigateToDetail = onNavigateToTrendDetail)
+        val visibleLabels = when {
+            labels.size <= 7 -> labels
+            labels.isEmpty() -> emptyList()
+            else -> listOf(labels.first(), labels[labels.size / 2], labels.last())
         }
-
-        // 4. 累积流图（CFD）
-        if (uiState.cumulativeFlow.isNotEmpty()) {
-            CumulativeFlowChart(data = uiState.cumulativeFlow, onNavigateToDetail = onNavigateToTrendDetail)
+        if (visibleLabels.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                visibleLabels.forEach { label ->
+                    Text(text = label, color = TextMuted, fontSize = 10.sp)
+                }
+            }
         }
     }
+}
+
+private fun trendDateLabel(date: java.time.LocalDate, timeRange: OverviewTimeRange): String = when (timeRange) {
+    OverviewTimeRange.TODAY -> date.format(DateTimeFormatter.ofPattern("M/d"))
+    OverviewTimeRange.THIS_WEEK -> when (date.dayOfWeek) {
+        java.time.DayOfWeek.MONDAY -> "一"
+        java.time.DayOfWeek.TUESDAY -> "二"
+        java.time.DayOfWeek.WEDNESDAY -> "三"
+        java.time.DayOfWeek.THURSDAY -> "四"
+        java.time.DayOfWeek.FRIDAY -> "五"
+        java.time.DayOfWeek.SATURDAY -> "六"
+        java.time.DayOfWeek.SUNDAY -> "日"
+    }
+    OverviewTimeRange.THIS_MONTH -> date.dayOfMonth.toString()
+    OverviewTimeRange.ALL -> date.format(DateTimeFormatter.ofPattern("M/d"))
 }
 
 @Composable
@@ -2080,41 +2800,275 @@ private fun TrendLegendItem(label: String, color: Color) {
 
 // ==================== 效率统计页面 ====================
 @Composable
-private fun EfficiencyContent(uiState: StatsUiState, viewModel: StatsViewModel) {
+private fun EfficiencyContent(uiState: StatsUiState) {
+    val summary = uiState.efficiencySummary
+    val hasTimePattern = summary.completedCount >= 5 && summary.activeDayCount >= 3
+
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        if (uiState.completedTasks == 0) {
-            EfficiencyReadinessCard(uiState = uiState)
-        } else {
-            // 1. 效率雷达图（六维度评分 + 蛛网结构）
-            uiState.procrastinationRadar?.let {
-            ProcrastinationRadarCard(
-                radarData = it,
-                selectedTimeRange = uiState.selectedEfficiencyTimeRange,
-                onTimeRangeSelected = { range -> viewModel.selectEfficiencyTimeRange(range) }
+        EfficiencyOverviewCard(
+            summary = summary,
+            rangeName = uiState.selectedEfficiencyTimeRange.displayName
+        )
+        if (hasTimePattern) {
+            CompletionTimeDistributionCard(
+                heatmapData = uiState.timeHeatmap,
+                completedCount = summary.completedCount
             )
+        }
+        EvidenceBasedEfficiencyAdviceCard(
+            summary = summary,
+            heatmapData = if (hasTimePattern) uiState.timeHeatmap else emptyList()
+        )
+    }
+}
+
+@Composable
+private fun EfficiencyInsufficientState(summary: EfficiencySummaryData) {
+    val current = summary.completedWithDeadlineCount.coerceAtMost(3)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(horizontal = 28.dp)
+    ) {
+        Text(
+            text = "数据不足，暂不能生成效率诊断",
+            color = TextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = "再完成 ${3 - current} 个带截止时间的任务后，可分析准时率和完成耗时",
+            color = TextSecondary,
+            fontSize = 13.sp,
+            lineHeight = 20.sp,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = "当前 $current / 3",
+            color = Primary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+private fun EfficiencyOverviewCard(
+    summary: EfficiencySummaryData,
+    rangeName: String
+) {
+    EfficiencyDiagnosticCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("效率概览", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(rangeName, color = TextMuted, fontSize = 12.sp)
+        }
+        Row(modifier = Modifier.fillMaxWidth()) {
+            EfficiencyMetric(
+                label = "准时完成率",
+                value = "${summary.onTimeRate.roundToInt()}%",
+                valueColor = if (summary.overdueCompletedCount > 0) Danger else Success,
+                modifier = Modifier.weight(1f)
+            )
+            EfficiencyMetricDivider()
+            EfficiencyMetric(
+                label = "平均完成耗时",
+                value = formatEfficiencyDuration(summary.averageCompletionMinutes),
+                modifier = Modifier.weight(1f)
+            )
+            EfficiencyMetricDivider()
+            EfficiencyMetric(
+                label = "超期完成",
+                value = "${summary.overdueCompletedCount} 项",
+                valueColor = if (summary.overdueCompletedCount > 0) Danger else TextPrimary,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Text(
+            text = "基于 ${summary.completedWithDeadlineCount} 个带截止时间的已完成任务",
+            color = TextMuted,
+            fontSize = 11.sp
+        )
+    }
+}
+
+@Composable
+private fun EfficiencyMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    valueColor: Color = TextPrimary
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(label, color = TextMuted, fontSize = 11.sp, maxLines = 1)
+        Text(value, color = valueColor, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+@Composable
+private fun EfficiencyMetricDivider() {
+    Box(
+        modifier = Modifier
+            .padding(horizontal = 8.dp)
+            .width(1.dp)
+            .height(42.dp)
+            .background(Border)
+    )
+}
+
+private data class CompactTimeSlot(
+    val label: String,
+    val slots: Set<TimeSlot>
+)
+
+private val compactTimeSlots = listOf(
+    CompactTimeSlot("上午", setOf(TimeSlot.DAWN, TimeSlot.MORNING)),
+    CompactTimeSlot("下午", setOf(TimeSlot.AFTERNOON)),
+    CompactTimeSlot("晚间", setOf(TimeSlot.EVENING)),
+    CompactTimeSlot("深夜", setOf(TimeSlot.NIGHT, TimeSlot.MIDNIGHT))
+)
+
+@Composable
+private fun CompletionTimeDistributionCard(
+    heatmapData: List<TimeHeatmapData>,
+    completedCount: Int
+) {
+    val counts = remember(heatmapData) {
+        compactTimeSlots.associateWith { compactSlot ->
+            (1..7).associateWith { day ->
+                heatmapData
+                    .filter { it.dayOfWeek == day && it.timeSlot in compactSlot.slots }
+                    .sumOf { it.completedCount }
             }
         }
+    }
+    val maxCount = counts.values.flatMap { it.values }.maxOrNull()?.coerceAtLeast(1) ?: 1
+    val peak = counts.flatMap { (slot, dayCounts) ->
+        dayCounts.map { (day, count) -> Triple(slot, day, count) }
+    }.maxByOrNull { it.third }
 
-        // 2. 黄金时段热力图
-        if (uiState.timeHeatmap.isNotEmpty()) {
-            TimeHeatmapCard(
-                heatmapData = uiState.timeHeatmap,
-                stats = uiState.timeHeatmapStats,
-                selectedTimeRange = uiState.selectedEfficiencyTimeRange,
-                onTimeRangeSelected = { range -> viewModel.selectEfficiencyTimeRange(range) }
+    EfficiencyDiagnosticCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("完成时段分布", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("基于 $completedCount 个任务", color = TextMuted, fontSize = 11.sp)
+        }
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Spacer(modifier = Modifier.width(44.dp))
+            listOf("一", "二", "三", "四", "五", "六", "日").forEach { day ->
+                Text(
+                    text = day,
+                    color = TextSecondary,
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        compactTimeSlots.forEach { slot ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(slot.label, color = TextSecondary, fontSize = 10.sp, modifier = Modifier.width(44.dp))
+                (1..7).forEach { day ->
+                    val count = counts[slot]?.get(day) ?: 0
+                    val alpha = if (count == 0) 0f else 0.15f + 0.75f * count / maxCount.toFloat()
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1.2f)
+                            .padding(2.dp)
+                            .background(
+                                if (count == 0) BgSecondary else Primary.copy(alpha = alpha),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .border(1.dp, Border, RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (count > 0) {
+                            Text(
+                                text = count.toString(),
+                                color = if (alpha > 0.55f) Color.White else TextPrimary,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (peak != null && peak.third > 0) {
+            val dayName = listOf("", "周一", "周二", "周三", "周四", "周五", "周六", "周日")[peak.second]
+            Text(
+                text = "任务完成主要集中在${dayName}${peak.first.label}",
+                color = TextSecondary,
+                fontSize = 12.sp
             )
         }
-
-        // 3. 效率周对比卡
-        EfficiencyComparisonCard(uiState = uiState)
-
-        // 4. 效率建议卡
-        EfficiencyAdviceCard(uiState = uiState)
-
     }
+}
+
+@Composable
+private fun EvidenceBasedEfficiencyAdviceCard(
+    summary: EfficiencySummaryData,
+    heatmapData: List<TimeHeatmapData>
+) {
+    val advice = when {
+        summary.overdueCompletedCount > 0 ->
+            "${summary.completedWithDeadlineCount} 个带截止时间的已完成任务中，有 ${summary.overdueCompletedCount} 个超期。建议为同类任务预留缓冲时间，并提前设置提醒。"
+        summary.averageCompletionMinutes >= 24 * 60 ->
+            "任务平均完成耗时超过 1 天。建议把耗时较长的任务拆成更小的步骤，降低启动和持续推进的难度。"
+        heatmapData.isNotEmpty() ->
+            "本周期未发现明显准时风险，可以继续记录完成时间，观察稳定的任务节奏。"
+        else ->
+            "本周期暂未发现明显效率风险。继续完成任务后，可进一步识别稳定的完成时段。"
+    }
+
+    EfficiencyDiagnosticCard {
+        Text("诊断建议", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(advice, color = TextSecondary, fontSize = 13.sp, lineHeight = 20.sp)
+    }
+}
+
+@Composable
+private fun EfficiencyDiagnosticCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = content
+        )
+    }
+}
+
+private fun formatEfficiencyDuration(minutes: Double): String = when {
+    minutes <= 0.0 -> "--"
+    minutes < 60.0 -> "${minutes.roundToInt()} 分钟"
+    minutes < 24 * 60 -> "${String.format("%.1f", minutes / 60.0)} 小时"
+    else -> "${String.format("%.1f", minutes / (24.0 * 60.0))} 天"
 }
 
 @Composable
@@ -6047,214 +7001,330 @@ private fun TaskListBottomSheet(
 }
 
 // ══════════════════════════════════════════
-//  AI 洞察页面
+//  AI 周报页面
 // ══════════════════════════════════════════
 
 @Composable
-private fun AIInsightContent(
+private fun AIWeeklyReportContent(
     uiState: StatsUiState,
-    viewModel: StatsViewModel
+    onGenerate: () -> Unit,
+    onNavigateToAIConfig: () -> Unit,
+    onRetryContext: () -> Unit,
+    exportWeeklyReport: () -> String?
 ) {
-    val context = LocalContext.current
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Spacer(modifier = Modifier.height(4.dp))
-
-        AIActionCard(
-            title = "行为模式分析",
-            description = "从完成时间、延期、分类和节奏里找出稳定模式。",
-            accent = Color(0xFF4F63E7),
-            actionText = if (uiState.isAnalyzingBehavior) "分析中..." else "分析我的行为模式",
-            loading = uiState.isAnalyzingBehavior,
-            onAction = { viewModel.analyzeBehavior() }
-        ) {
-            val insight = uiState.behaviorInsight
-            if (insight == null) {
-                AIEmptyHint("分析后会显示高效时段、易积压节点和可复用习惯。")
-            } else {
-                if (insight.patterns.isNotEmpty()) {
-                    AIResultBlock(
-                        title = "发现的模式",
-                        items = insight.patterns,
-                        accent = Color(0xFF4F63E7)
-                    )
-                }
-                if (insight.suggestions.isNotEmpty()) {
-                    AIResultBlock(
-                        title = "改进建议",
-                        items = insight.suggestions,
-                        accent = Success
-                    )
-                }
-            }
+    when {
+        !uiState.aiReportContextLoaded || uiState.isAIReportContextLoading -> {
+            AIReportLoadingState("正在准备本周任务数据…")
         }
-
-        AIActionCard(
-            title = "本周周报",
-            description = "把本周表现整理成摘要、亮点、待改进和下周建议。",
-            accent = Color(0xFF0F9DB2),
-            actionText = if (uiState.isGeneratingReport) "生成中..." else "生成本周周报",
-            loading = uiState.isGeneratingReport,
-            onAction = { viewModel.generateWeeklyReport() }
-        ) {
-            val report = uiState.weeklyReport
-            if (report == null) {
-                AIEmptyHint("生成后会在这里展示可复制的周报内容。")
-            } else {
-                Surface(
-                    color = Color(0xFF0F9DB2).copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(report.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F9DB2))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(report.summary, fontSize = 13.sp, color = TextPrimary, lineHeight = 19.sp)
-                    }
-                }
-
-                AIResultBlock("本周亮点", report.highlights, Warning)
-                AIResultBlock("待改进", report.improvements, Color(0xFFFF9800))
-                AIResultBlock("下周建议", report.nextWeekSuggestions, Success)
-
-                OutlinedButton(
-                    onClick = {
-                        val exportText = viewModel.exportWeeklyReport() ?: return@OutlinedButton
-                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("周报", exportText))
-                        android.widget.Toast.makeText(context, "周报已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF0F9DB2))
-                ) {
-                    Text("复制周报到剪贴板", color = Color(0xFF0F9DB2))
-                }
-            }
+        uiState.isGeneratingReport -> {
+            AIReportLoadingState("正在整理本周任务…")
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-@Composable
-private fun AIActionCard(
-    title: String,
-    description: String,
-    accent: Color,
-    actionText: String,
-    loading: Boolean,
-    onAction: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = BgCard),
-        border = BorderStroke(1.dp, Border.copy(alpha = 0.65f))
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(description, fontSize = 12.sp, lineHeight = 18.sp, color = TextSecondary)
-                }
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(accent)
-                )
-            }
-
-            Button(
-                onClick = onAction,
-                enabled = !loading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = accent,
-                    disabledContainerColor = accent.copy(alpha = 0.52f)
-                )
-            ) {
-                if (loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text(actionText, color = Color.White, fontWeight = FontWeight.Bold)
-            }
-
-            content()
+        uiState.weeklyReport != null -> {
+            AIReportResult(
+                uiState = uiState,
+                onRegenerate = onGenerate,
+                exportWeeklyReport = exportWeeklyReport
+            )
+        }
+        uiState.aiReportWeekTaskCount == 0 && uiState.aiReportErrorMessage != null -> {
+            AIReportErrorState(
+                message = uiState.aiReportErrorMessage,
+                onRetry = onRetryContext
+            )
+        }
+        uiState.aiReportWeekTaskCount == 0 -> {
+            AIReportEmptyState()
+        }
+        else -> {
+            AIReportLaunchCard(
+                uiState = uiState,
+                onGenerate = onGenerate,
+                onNavigateToAIConfig = onNavigateToAIConfig
+            )
         }
     }
 }
 
 @Composable
-private fun AIEmptyHint(text: String) {
-    Surface(
-        color = BgSecondary,
-        shape = RoundedCornerShape(12.dp)
-    ) {
+private fun AIReportLaunchCard(
+    uiState: StatsUiState,
+    onGenerate: () -> Unit,
+    onNavigateToAIConfig: () -> Unit
+) {
+    val routeStatus = uiState.aiRouteStatus
+    val isUnavailable = routeStatus?.mode == AIRouteMode.Unavailable
+
+    AIReportCard {
         Text(
-            text = text,
+            text = "本周回顾",
+            color = TextPrimary,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = formatAIReportWeekRange(uiState.aiReportWeekStart, uiState.aiReportWeekEnd),
+            color = TextSecondary,
+            fontSize = 13.sp
+        )
+        Text(
+            text = "将基于本周 ${uiState.aiReportWeekTaskCount} 项任务生成周报，其中已完成 ${uiState.aiReportCompletedCount} 项。",
+            color = TextPrimary,
+            fontSize = 14.sp,
+            lineHeight = 21.sp
+        )
+        HorizontalDivider(thickness = 1.dp, color = Border)
+        Text(
+            text = "AI 服务：${routeStatus?.userLabel ?: "状态未知"}",
+            color = if (isUnavailable) Danger else TextSecondary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+        if (!isUnavailable) {
+            Text(
+                text = "任务标题、分类、状态和时间将发送给当前配置的 AI 服务，用于生成本周周报。",
+                color = TextMuted,
+                fontSize = 11.sp,
+                lineHeight = 17.sp
+            )
+        }
+        uiState.aiReportErrorMessage?.let { message ->
+            AIReportInlineError(message)
+        }
+        Button(
+            onClick = if (isUnavailable) onNavigateToAIConfig else onGenerate,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .height(48.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Primary)
+        ) {
+            Text(
+                text = if (isUnavailable) "去配置 AI" else "生成本周周报",
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun AIReportResult(
+    uiState: StatsUiState,
+    onRegenerate: () -> Unit,
+    exportWeeklyReport: () -> String?
+) {
+    val context = LocalContext.current
+    val report = uiState.weeklyReport ?: return
+
+    AIReportCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = report.title.ifBlank { "本周周报" },
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = formatAIReportWeekRange(uiState.aiReportWeekStart, uiState.aiReportWeekEnd),
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+            }
+            IconButton(
+                onClick = {
+                    val exportText = exportWeeklyReport() ?: return@IconButton
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("周报", exportText))
+                    android.widget.Toast.makeText(context, "周报已复制到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "复制周报",
+                    tint = Primary
+                )
+            }
+        }
+        HorizontalDivider(thickness = 1.dp, color = Border)
+        Text(
+            text = report.summary,
+            color = TextPrimary,
+            fontSize = 14.sp,
+            lineHeight = 21.sp
+        )
+        AIReportSection("本周亮点", report.highlights)
+        AIReportSection("行为洞察", report.behaviorInsights)
+        if (uiState.aiReportCompletedCount < 3) {
+            Text(
+                text = "已完成任务少于 3 项，本次不生成稳定行为模式判断。",
+                color = TextMuted,
+                fontSize = 11.sp,
+                lineHeight = 17.sp
+            )
+        }
+        AIReportSection("待改进", report.improvements)
+        AIReportSection("下周建议", report.nextWeekSuggestions)
+        HorizontalDivider(thickness = 1.dp, color = Border)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onRegenerate) {
+                Text("重新生成", color = Primary, fontWeight = FontWeight.Medium)
+            }
+        }
+        Text(
+            text = "由 ${uiState.aiRouteStatus?.userLabel ?: "当前 AI 服务"} 生成，请结合实际情况判断。",
+            color = TextMuted,
+            fontSize = 11.sp,
+            lineHeight = 17.sp
+        )
+    }
+}
+
+@Composable
+private fun AIReportSection(title: String, items: List<String>) {
+    if (items.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text(
+            text = title,
+            color = TextPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        items.forEach { item ->
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = "•",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text(
+                    text = item,
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AIReportCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun AIReportInlineError(message: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Danger.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Danger.copy(alpha = 0.28f))
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            color = Danger,
             fontSize = 12.sp,
-            color = TextSecondary,
             lineHeight = 18.sp
         )
     }
 }
 
 @Composable
-private fun AIResultBlock(
-    title: String,
-    items: List<String>,
-    accent: Color
-) {
-    if (items.isEmpty()) return
-
-    Surface(
-        color = accent.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(12.dp)
+private fun AIReportLoadingState(message: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        CircularProgressIndicator(
+            modifier = Modifier.size(28.dp),
+            color = Primary,
+            strokeWidth = 3.dp
+        )
+        Text(message, color = TextSecondary, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun AIReportEmptyState() {
+    Column(
+        modifier = Modifier.padding(horizontal = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "本周暂无任务",
+            color = TextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = "创建并推进任务后，再来生成本周周报。",
+            color = TextSecondary,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun AIReportErrorState(message: String, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.padding(horizontal = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = "周报数据加载失败",
+            color = TextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = message,
+            color = TextSecondary,
+            fontSize = 13.sp,
+            lineHeight = 20.sp,
+            textAlign = TextAlign.Center
+        )
+        OutlinedButton(
+            onClick = onRetry,
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, Border),
+            modifier = Modifier.heightIn(min = 48.dp)
         ) {
-            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = accent)
-            items.forEach { item ->
-                Row(verticalAlignment = Alignment.Top) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 7.dp)
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(accent)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(item, fontSize = 13.sp, color = TextPrimary, lineHeight = 19.sp)
-                }
-            }
+            Text("重新加载", color = Primary)
         }
     }
+}
+
+private fun formatAIReportWeekRange(start: java.time.LocalDate?, end: java.time.LocalDate?): String {
+    if (start == null || end == null) return "本周"
+    val formatter = DateTimeFormatter.ofPattern("M月d日")
+    return "${start.format(formatter)}－${end.format(formatter)}"
 }

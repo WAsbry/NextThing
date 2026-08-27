@@ -6,6 +6,7 @@ import timber.log.Timber
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
@@ -324,12 +325,20 @@ object TaskWorkScheduler {
         Timber.i("Cancelled briefing work")
     }
 
-    fun triggerImmediateBriefing(context: Context) {
-        val request = OneTimeWorkRequestBuilder<DailyBriefingWorker>().build()
+    fun triggerImmediateBriefing(
+        context: Context,
+        type: com.nextthing.app.domain.service.AIBriefingGenerator.BriefingType
+    ): UUID {
+        val request = OneTimeWorkRequestBuilder<DailyBriefingWorker>()
+            .setInputData(workDataOf(DailyBriefingWorker.KEY_BRIEFING_TYPE to type.name))
+            .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
-            "immediate_briefing", ExistingWorkPolicy.REPLACE, request
+            "immediate_briefing_${type.name.lowercase()}",
+            ExistingWorkPolicy.REPLACE,
+            request
         )
-        Timber.d("Triggered immediate briefing")
+        Timber.d("Triggered immediate ${type.name.lowercase()} briefing")
+        return request.id
     }
 
     /**

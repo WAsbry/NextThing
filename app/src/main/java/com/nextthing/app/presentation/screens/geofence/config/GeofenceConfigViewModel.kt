@@ -177,37 +177,10 @@ class GeofenceConfigViewModel @Inject constructor(
 
                 launch {
                     geofenceUseCases.getGeofenceLocations().collect { locations ->
-                        // 计算月度统计
-                        val monthlyCheckCount = locations.sumOf { it.monthlyCheckCount }
-                        val averageHitRate = if (locations.isNotEmpty()) {
-                            locations.map { it.getHitRate() }.average().toFloat()
-                        } else {
-                            0f
-                        }
-
-                        // 计算系统地理围栏状态
-                        val hasPermission = geofenceManager.hasLocationPermission()
-                        val systemActive = _uiState.value.isGlobalEnabled && hasPermission
-
                         _uiState.update {
                             it.copy(
                                 locations = locations,
-                                totalLocationsCount = locations.size,
-                                monthlyCheckCount = monthlyCheckCount,
-                                averageHitRate = averageHitRate,
-                                systemGeofencesRegistered = locations.size,
-                                systemGeofencesActive = systemActive
-                            )
-                        }
-                    }
-                }
-
-                launch {
-                    geofenceUseCases.getGeofenceLocations.getFrequent().collect { frequentLocations ->
-                        _uiState.update {
-                            it.copy(
-                                frequentLocations = frequentLocations,
-                                frequentLocationsCount = frequentLocations.size
+                                totalLocationsCount = locations.size
                             )
                         }
                     }
@@ -274,22 +247,20 @@ class GeofenceConfigViewModel @Inject constructor(
                     showErrorMessage("请先授予位置权限")
                     return@launch
                 }
+                if (!geofenceManager.hasBackgroundLocationPermission()) {
+                    showErrorMessage("请先授予后台位置权限")
+                    return@launch
+                }
 
                 val newValue = !_uiState.value.isGlobalEnabled
                 val result = geofenceUseCases.updateGeofenceConfig.updateGlobalEnabled(newValue)
 
                 if (result.isSuccess) {
-                    val hasPermission = geofenceManager.hasLocationPermission()
-                    val systemActive = newValue && hasPermission
-
                     _uiState.update {
-                        it.copy(
-                            isGlobalEnabled = newValue,
-                            systemGeofencesActive = systemActive
-                        )
+                        it.copy(isGlobalEnabled = newValue)
                     }
                     showSuccessMessage(if (newValue) "已启用地理围栏" else "已禁用地理围栏")
-                    Timber.tag(TAG).d("✅ 全局开关已更新: $newValue, 系统活跃: $systemActive")
+                    Timber.tag(TAG).d("✅ 全局开关已更新: $newValue")
                 } else {
                     showErrorMessage("更新失败")
                     Timber.tag(TAG).e("❌ 更新全局开关失败")

@@ -101,6 +101,12 @@ class SettingsViewModel @Inject constructor(
         observeBriefingSettings()
     }
 
+    fun refreshPageData() {
+        loadUserInfo()
+        loadStatistics()
+        loadAchievements()
+    }
+
     // ── 主题 ──────────────────────────────────────────────
 
     private fun observeThemeMode() {
@@ -185,7 +191,7 @@ class SettingsViewModel @Inject constructor(
     private fun loadAchievements() {
         viewModelScope.launch {
             try {
-                val (achievements, _) = achievementUseCases.checkAndUnlock()
+                val achievements = achievementUseCases.getAchievements()
                 val unlockedCount = achievements.count { it.isUnlocked }
                 // 从成就数据中取连续打卡天数（STREAK_100 的 currentValue 就是实际天数）
                 val streakDays = achievements

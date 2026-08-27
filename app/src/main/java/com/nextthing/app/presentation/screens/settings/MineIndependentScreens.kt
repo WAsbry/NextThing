@@ -3,6 +3,8 @@ package com.nextthing.app.presentation.screens.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -30,15 +32,25 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -59,18 +71,29 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.nextthing.app.data.export.ExportFormat
 import com.nextthing.app.R
 import com.nextthing.app.data.export.TaskExporter
 import com.nextthing.app.data.preferences.BriefingPreferences
+import com.nextthing.app.domain.service.AIBriefingGenerator.BriefingType
 import com.nextthing.app.domain.model.NotificationStrategy
 import com.nextthing.app.domain.model.SoundSetting
 import com.nextthing.app.domain.repository.NotificationStrategyRepository
 import com.nextthing.app.util.NotificationHelper
 import com.nextthing.app.work.TaskWorkScheduler
+import com.nextthing.app.presentation.theme.BgCard
+import com.nextthing.app.presentation.theme.BgPrimary
+import com.nextthing.app.presentation.theme.Border
+import com.nextthing.app.presentation.theme.Primary
+import com.nextthing.app.presentation.theme.TextMuted
+import com.nextthing.app.presentation.theme.TextPrimary
+import com.nextthing.app.presentation.theme.TextSecondary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,7 +101,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.LocalDateTime
 import javax.inject.Inject
@@ -120,6 +146,7 @@ private fun Modifier.mineSubPageBackground(): Modifier = drawBehind {
     )
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun MineSubPageScaffold(
     title: String,
@@ -127,18 +154,37 @@ private fun MineSubPageScaffold(
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit
 ) {
     Scaffold(
-        containerColor = MinePageBgMid,
-        contentWindowInsets = WindowInsets(0.dp)
+        containerColor = BgPrimary,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = title,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackPressed) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = BgCard)
+            )
+        }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .mineSubPageBackground()
-                .statusBarsPadding(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 28.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 28.dp)
         ) {
-            item { MineSubTopBar(title = title, onBackPressed = onBackPressed) }
             content()
         }
     }
@@ -180,20 +226,13 @@ private fun MineSubTopBar(title: String, onBackPressed: () -> Unit) {
 
 @Composable
 private fun MineSubHero(title: String, subtitle: String, tag: String, color: Color = MinePagePrimary) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(color, MinePagePrimary2, Color(0xFF16A8B8))))
-            .padding(16.dp)
-    ) {
-        Column {
-            Text(tag, color = Color.White.copy(alpha = 0.78f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 8.dp))
-            Text(subtitle, color = Color.White.copy(alpha = 0.82f), fontSize = 12.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 6.dp))
-        }
-    }
+    Text(
+        text = subtitle,
+        color = TextSecondary,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        modifier = Modifier.padding(bottom = 4.dp)
+    )
 }
 
 @Composable
@@ -215,9 +254,9 @@ private fun MineCard(modifier: Modifier = Modifier, content: @Composable () -> U
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color.White.copy(alpha = 0.84f))
-            .border(1.dp, MinePagePrimary.copy(alpha = 0.09f), RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(BgCard)
+            .border(1.dp, Border, RoundedCornerShape(8.dp))
     ) {
         content()
     }
@@ -247,26 +286,33 @@ private fun SegmentedOption(
     Box(
         modifier = modifier
             .height(38.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Color.White else Color.Transparent)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) Primary.copy(alpha = 0.12f) else Color.Transparent)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            color = if (selected) MinePagePrimary else MinePageSub,
+            color = if (selected) Primary else TextSecondary,
             fontSize = 12.sp,
             fontWeight = FontWeight.Black
         )
     }
 }
 
+enum class BriefingGenerationState { IDLE, RUNNING, SUCCESS, ERROR }
+
 data class BriefingSettingsUiState(
     val enabled: Boolean = false,
     val morningHour: Int = 8,
     val morningMinute: Int = 0,
     val eveningHour: Int = 21,
-    val eveningMinute: Int = 0
+    val eveningMinute: Int = 0,
+    val isLoading: Boolean = true,
+    val generationState: BriefingGenerationState = BriefingGenerationState.IDLE,
+    val generationType: BriefingType? = null,
+    val message: String? = null,
+    val needsNotificationSettings: Boolean = false
 )
 
 @HiltViewModel
@@ -286,34 +332,149 @@ class BriefingSettingsViewModel @Inject constructor(
                 briefingPreferences.eveningHour,
                 briefingPreferences.eveningMinute
             ) { enabled, morningHour, morningMinute, eveningHour, eveningMinute ->
-                BriefingSettingsUiState(enabled, morningHour, morningMinute, eveningHour, eveningMinute)
-            }.collect { _uiState.value = it }
+                BriefingSettingsUiState(
+                    enabled = enabled,
+                    morningHour = morningHour,
+                    morningMinute = morningMinute,
+                    eveningHour = eveningHour,
+                    eveningMinute = eveningMinute,
+                    isLoading = false
+                )
+            }.collect { latest ->
+                _uiState.update { current ->
+                    latest.copy(
+                        generationState = current.generationState,
+                        generationType = current.generationType,
+                        message = current.message,
+                        needsNotificationSettings = current.needsNotificationSettings
+                    )
+                }
+            }
         }
     }
 
     fun setEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            briefingPreferences.setEnabled(enabled)
-            applySchedule(_uiState.value.copy(enabled = enabled))
+            if (enabled && !NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                _uiState.update {
+                    it.copy(
+                        message = "请先开启通知权限",
+                        needsNotificationSettings = true
+                    )
+                }
+                return@launch
+            }
+            runCatching {
+                briefingPreferences.setEnabled(enabled)
+                applySchedule(_uiState.value.copy(enabled = enabled))
+            }.onSuccess {
+                _uiState.update { it.copy(message = if (enabled) "早晚报已开启" else "早晚报已关闭") }
+            }.onFailure { error ->
+                Timber.e(error, "更新早晚报开关失败")
+                _uiState.update { it.copy(message = "设置保存失败，请重试") }
+            }
         }
     }
 
     fun setMorningTime(hour: Int, minute: Int) {
         viewModelScope.launch {
-            briefingPreferences.setMorningTime(hour, minute)
-            applySchedule(_uiState.value.copy(morningHour = hour, morningMinute = minute))
+            runCatching {
+                briefingPreferences.setMorningTime(hour, minute)
+                applySchedule(_uiState.value.copy(morningHour = hour, morningMinute = minute))
+            }.onSuccess {
+                _uiState.update { it.copy(message = "早报时间已更新") }
+            }.onFailure { error ->
+                Timber.e(error, "更新早报时间失败")
+                _uiState.update { it.copy(message = "时间保存失败，请重试") }
+            }
         }
     }
 
     fun setEveningTime(hour: Int, minute: Int) {
         viewModelScope.launch {
-            briefingPreferences.setEveningTime(hour, minute)
-            applySchedule(_uiState.value.copy(eveningHour = hour, eveningMinute = minute))
+            runCatching {
+                briefingPreferences.setEveningTime(hour, minute)
+                applySchedule(_uiState.value.copy(eveningHour = hour, eveningMinute = minute))
+            }.onSuccess {
+                _uiState.update { it.copy(message = "晚报时间已更新") }
+            }.onFailure { error ->
+                Timber.e(error, "更新晚报时间失败")
+                _uiState.update { it.copy(message = "时间保存失败，请重试") }
+            }
         }
     }
 
-    fun triggerNow() {
-        TaskWorkScheduler.triggerImmediateBriefing(context)
+    fun triggerNow(type: BriefingType) {
+        val state = _uiState.value
+        if (!state.enabled) {
+            _uiState.update { it.copy(message = "请先开启早晚报") }
+            return
+        }
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            _uiState.update {
+                it.copy(message = "请先开启通知权限", needsNotificationSettings = true)
+            }
+            return
+        }
+        if (state.generationState == BriefingGenerationState.RUNNING) return
+
+        val workId = TaskWorkScheduler.triggerImmediateBriefing(context, type)
+        _uiState.update {
+            it.copy(
+                generationState = BriefingGenerationState.RUNNING,
+                generationType = type,
+                message = null
+            )
+        }
+        viewModelScope.launch {
+            runCatching {
+                val workManager = WorkManager.getInstance(context)
+                var workInfo: WorkInfo
+                do {
+                    workInfo = withContext(Dispatchers.IO) {
+                        workManager.getWorkInfoById(workId).get()
+                    }
+                    if (!workInfo.state.isFinished) delay(250)
+                } while (!workInfo.state.isFinished)
+                workInfo
+            }.onSuccess { workInfo ->
+                val succeeded = workInfo.state == WorkInfo.State.SUCCEEDED
+                _uiState.update {
+                    it.copy(
+                        generationState = if (succeeded) BriefingGenerationState.SUCCESS else BriefingGenerationState.ERROR,
+                        generationType = null,
+                        message = if (succeeded) {
+                            "${type.displayName()}已生成，请在通知中查看"
+                        } else {
+                            "${type.displayName()}生成失败，请重试"
+                        }
+                    )
+                }
+            }.onFailure { error ->
+                Timber.e(error, "观察简报生成状态失败")
+                _uiState.update {
+                    it.copy(
+                        generationState = BriefingGenerationState.ERROR,
+                        generationType = null,
+                        message = "简报生成失败，请重试"
+                    )
+                }
+            }
+        }
+    }
+
+    fun consumeMessage() {
+        _uiState.update {
+            it.copy(
+                message = null,
+                needsNotificationSettings = false,
+                generationState = if (it.generationState == BriefingGenerationState.RUNNING) {
+                    BriefingGenerationState.RUNNING
+                } else {
+                    BriefingGenerationState.IDLE
+                }
+            )
+        }
     }
 
     private fun applySchedule(state: BriefingSettingsUiState) {
@@ -326,135 +487,347 @@ class BriefingSettingsViewModel @Inject constructor(
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun BriefingSettingsScreen(
     onBackPressed: () -> Unit,
     viewModel: BriefingSettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    var editingType by remember { mutableStateOf<BriefingType?>(null) }
 
-    MineSubPageScaffold(title = "智能早晚报", onBackPressed = onBackPressed) {
-        item {
-            MineSubHero(
-                title = "智能早晚报",
-                subtitle = "基于任务状态生成早报和晚报，帮助你在一天开始和结束时快速校准计划。",
-                tag = if (uiState.enabled) "已开启" else "未开启",
-                color = Color(0xFFFF7A1A)
+    LaunchedEffect(uiState.message) {
+        val message = uiState.message ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = if (uiState.needsNotificationSettings) "前往设置" else null
+        )
+        if (result == SnackbarResult.ActionPerformed && uiState.needsNotificationSettings) {
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
             )
         }
+        viewModel.consumeMessage()
+    }
 
-        item {
-            MineSectionTitle("开关状态")
-            MineCard {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("启用智能早晚报", color = MinePageInk, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                        Text("开启后会按设定时间生成提醒内容", color = MinePageSub, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-                    }
-                    Switch(
-                        checked = uiState.enabled,
-                        onCheckedChange = viewModel::setEnabled,
-                        colors = SwitchDefaults.colors(checkedTrackColor = MinePagePrimary)
-                    )
+    editingType?.let { type ->
+        BriefingTimeDialog(
+            title = if (type == BriefingType.MORNING) "设置早报时间" else "设置晚报时间",
+            initialHour = if (type == BriefingType.MORNING) uiState.morningHour else uiState.eveningHour,
+            initialMinute = if (type == BriefingType.MORNING) uiState.morningMinute else uiState.eveningMinute,
+            onDismiss = { editingType = null },
+            onConfirm = { hour, minute ->
+                if (type == BriefingType.MORNING) {
+                    viewModel.setMorningTime(hour, minute)
+                } else {
+                    viewModel.setEveningTime(hour, minute)
                 }
+                editingType = null
             }
-        }
+        )
+    }
 
-        item {
-            MineSectionTitle("推送时间", if (uiState.enabled) "正在生效" else "关闭中")
-            MineCard {
-                TimeSettingRow(
-                    title = "早报",
-                    subtitle = "一天开始时提醒今日重点",
-                    hour = uiState.morningHour,
-                    minute = uiState.morningMinute,
-                    onTimeChange = viewModel::setMorningTime
-                )
-                HorizontalDivider(color = MinePageLine)
-                TimeSettingRow(
-                    title = "晚报",
-                    subtitle = "一天结束时回顾完成情况",
-                    hour = uiState.eveningHour,
-                    minute = uiState.eveningMinute,
-                    onTimeChange = viewModel::setEveningTime
-                )
-            }
-        }
+    Scaffold(
+        containerColor = BgPrimary,
+        contentWindowInsets = WindowInsets(0.dp),
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .statusBarsPadding()
+        ) {
+            BriefingTopBar(onBackPressed)
+            if (uiState.isLoading) {
+                BriefingLoadingState()
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    item {
+                        BriefingCard {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("早晚报提醒", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "每天定时生成任务规划与回顾",
+                                        color = TextSecondary,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                                Switch(
+                                    checked = uiState.enabled,
+                                    onCheckedChange = viewModel::setEnabled,
+                                    colors = SwitchDefaults.colors(checkedTrackColor = Primary)
+                                )
+                            }
+                        }
+                    }
 
-        item {
-            Button(
-                onClick = viewModel::triggerNow,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp)
-                    .height(48.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MinePagePrimary)
-            ) {
-                Text("立即生成一次早晚报", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    item { BriefingSectionTitle("推送安排", if (uiState.enabled) "正在生效" else "开启后生效") }
+                    item {
+                        BriefingCard {
+                            BriefingTimeRow(
+                                title = "早报",
+                                subtitle = "规划今日重点",
+                                time = formatBriefingTime(uiState.morningHour, uiState.morningMinute),
+                                iconRes = R.drawable.icon_briefing_morning,
+                                onClick = { editingType = BriefingType.MORNING }
+                            )
+                            HorizontalDivider(color = Border, modifier = Modifier.padding(start = 58.dp))
+                            BriefingTimeRow(
+                                title = "晚报",
+                                subtitle = "回顾完成情况",
+                                time = formatBriefingTime(uiState.eveningHour, uiState.eveningMinute),
+                                iconRes = R.drawable.icon_briefing_evening,
+                                onClick = { editingType = BriefingType.EVENING }
+                            )
+                        }
+                    }
+
+                    item { BriefingSectionTitle("测试简报") }
+                    item {
+                        BriefingCard {
+                            Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    BriefingGenerateButton(
+                                        text = "生成早报",
+                                        loading = uiState.generationState == BriefingGenerationState.RUNNING && uiState.generationType == BriefingType.MORNING,
+                                        enabled = uiState.enabled && uiState.generationState != BriefingGenerationState.RUNNING,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { viewModel.triggerNow(BriefingType.MORNING) }
+                                    )
+                                    BriefingGenerateButton(
+                                        text = "生成晚报",
+                                        loading = uiState.generationState == BriefingGenerationState.RUNNING && uiState.generationType == BriefingType.EVENING,
+                                        enabled = uiState.enabled && uiState.generationState != BriefingGenerationState.RUNNING,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { viewModel.triggerNow(BriefingType.EVENING) }
+                                    )
+                                }
+                                if (!uiState.enabled) {
+                                    Text(
+                                        "开启早晚报后可测试生成",
+                                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        color = TextMuted,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TimeSettingRow(
+private fun BriefingTopBar(onBackPressed: () -> Unit) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBackPressed, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = TextPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Text(
+                "智能早晚报",
+                modifier = Modifier.padding(start = 5.dp),
+                color = TextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        HorizontalDivider(color = Border)
+    }
+}
+
+@Composable
+private fun BriefingSectionTitle(title: String, trailing: String? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        trailing?.let { Text(it, color = TextMuted, fontSize = 12.sp) }
+    }
+}
+
+@Composable
+private fun BriefingCard(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(BgCard)
+            .border(1.dp, Border, RoundedCornerShape(8.dp))
+    ) { content() }
+}
+
+@Composable
+private fun BriefingTimeRow(
     title: String,
     subtitle: String,
-    hour: Int,
-    minute: Int,
-    onTimeChange: (Int, Int) -> Unit
+    time: String,
+    iconRes: Int,
+    onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 13.dp),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .height(52.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = MinePageInk, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            Text(subtitle, color = MinePageSub, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+        Box(
+            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(Primary.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = Primary,
+                modifier = Modifier.size(22.dp)
+            )
         }
-        TimeStepper(value = hour, range = 0..23, onChange = { onTimeChange(it, minute) })
-        Text(":", color = MinePageMuted, fontSize = 16.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 4.dp))
-        TimeStepper(value = minute, range = 0..59, onChange = { onTimeChange(hour, it) })
+        Spacer(Modifier.size(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        Text(time, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.size(8.dp))
+        Icon(
+            painter = painterResource(R.drawable.icon_detail_chevron),
+            contentDescription = "修改${title}时间",
+            tint = TextMuted,
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
 @Composable
-private fun TimeStepper(value: Int, range: IntRange, onChange: (Int) -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MinePagePrimary.copy(alpha = 0.08f)),
-        verticalAlignment = Alignment.CenterVertically
+private fun BriefingGenerateButton(
+    text: String,
+    loading: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.height(48.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, if (enabled) Primary else Border),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary)
     ) {
-        Text(
-            "-",
-            modifier = Modifier
-                .clickable { onChange(if (value == range.first) range.last else value - 1) }
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            color = MinePagePrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Black
-        )
-        Text(value.toString().padStart(2, '0'), color = MinePageDeep, fontSize = 12.sp, fontWeight = FontWeight.Black)
-        Text(
-            "+",
-            modifier = Modifier
-                .clickable { onChange(if (value == range.last) range.first else value + 1) }
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            color = MinePagePrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Black
-        )
+        if (loading) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Primary)
+            Spacer(Modifier.size(8.dp))
+            Text("正在生成", fontWeight = FontWeight.SemiBold)
+        } else {
+            Text(text, fontWeight = FontWeight.SemiBold)
+        }
     }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun BriefingTimeDialog(
+    title: String,
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int, Int) -> Unit
+) {
+    val timePickerState = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+        is24Hour = true
+    )
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            color = BgCard,
+            border = BorderStroke(1.dp, Border)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    title,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(12.dp))
+                TimePicker(state = timePickerState)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Border)
+                    ) { Text("取消", color = TextSecondary) }
+                    Spacer(Modifier.size(8.dp))
+                    Button(
+                        onClick = { onConfirm(timePickerState.hour, timePickerState.minute) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                    ) { Text("确定", color = Color.White) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BriefingLoadingState() {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        repeat(3) { index ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(if (index == 1) 145.dp else 78.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Border.copy(alpha = 0.5f))
+            )
+        }
+    }
+}
+
+private fun formatBriefingTime(hour: Int, minute: Int): String =
+    "%02d:%02d".format(hour, minute)
+
+private fun BriefingType.displayName(): String = when (this) {
+    BriefingType.MORNING -> "早报"
+    BriefingType.EVENING -> "晚报"
 }
 
 data class ReminderStrategyUiState(
@@ -831,10 +1204,23 @@ fun ExportDataScreen(
                     .fillMaxWidth()
                     .padding(top = 16.dp)
                     .height(48.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MinePagePrimary)
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Primary)
             ) {
-                Text(if (uiState.isExporting) "导出中..." else "导出并分享", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                if (uiState.isExporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                }
+                Text(
+                    if (uiState.isExporting) "导出中..." else "导出并分享",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }
@@ -858,11 +1244,13 @@ private fun ExportFormatRow(
             Text(format.displayName, color = MinePageInk, fontSize = 14.sp, fontWeight = FontWeight.Black)
             Text(format.extension.uppercase(), color = MinePageSub, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
-        Text(
-            text = if (selected) "已选择" else "选择",
-            color = if (selected) MinePagePrimary else MinePageMuted,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Black
+        RadioButton(
+            selected = selected,
+            onClick = onClick,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = Primary,
+                unselectedColor = TextMuted
+            )
         )
     }
 }

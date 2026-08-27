@@ -1,11 +1,9 @@
 package com.nextthing.app.presentation.screens.settings
 
-import android.app.Activity
-import android.content.Context
 import android.content.Intent
-import android.content.ContextWrapper
 import android.net.Uri
 import com.nextthing.app.R
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
@@ -21,20 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.nextthing.app.domain.model.ThemeMode
@@ -45,47 +37,6 @@ import androidx.compose.ui.window.DialogProperties
 import com.nextthing.app.data.preferences.AIPreferences
 import com.nextthing.app.presentation.theme.*
 import kotlinx.coroutines.launch
-
-private val MineStatusBar = Color(0xFFF4EFFF)
-private val MineBgStart = Color(0xFFF4EFFF)
-private val MineBgMid = Color(0xFFF7F3FF)
-private val MineBgEnd = Color(0xFFFBFAFF)
-private val MineInk = Color(0xFF202331)
-private val MineDeep = Color(0xFF2F2850)
-private val MineSub = Color(0xFF656B78)
-private val MineProfileSub = Color(0xFF7B7391)
-private val MineMuted = Color(0xFFA6ACB8)
-private val MineLine = Color(0xFFEEF0F5)
-
-private fun Modifier.mineControlPanelBackground(): Modifier = drawBehind {
-    drawRect(
-        brush = Brush.horizontalGradient(
-            colors = listOf(MineBgStart, MineBgMid, MineBgEnd),
-            startX = 0f,
-            endX = size.width
-        )
-    )
-    drawRect(
-        brush = Brush.radialGradient(
-            colors = listOf(Color(0xFFB06DFF).copy(alpha = 0.18f), Color.Transparent),
-            center = Offset(size.width * 0.14f, size.height * 0.04f),
-            radius = size.width * 0.45f
-        )
-    )
-    drawRect(
-        brush = Brush.radialGradient(
-            colors = listOf(Color(0xFF7057F5).copy(alpha = 0.12f), Color.Transparent),
-            center = Offset(size.width * 0.92f, size.height * 0.18f),
-            radius = size.width * 0.48f
-        )
-    )
-}
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
 
 @Composable
 fun SettingsScreen(
@@ -105,26 +56,10 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val view = LocalView.current
 
-    DisposableEffect(view) {
-        val window = context.findActivity()?.window
-        val previousStatusBarColor = window?.statusBarColor
-        val previousLightStatusBar = window?.let {
-            WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars
-        }
-        window?.statusBarColor = MineStatusBar.toArgb()
-        window?.let {
-            WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = true
-        }
-        onDispose {
-            window?.let {
-                previousStatusBarColor?.let { color -> it.statusBarColor = color }
-                previousLightStatusBar?.let { light ->
-                    WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = light
-                }
-            }
-        }
+    // 每次重新进入“我的”页面都刷新一次数据库快照，避免二级页面修改后状态滞后。
+    LaunchedEffect(Unit) {
+        viewModel.refreshPageData()
     }
 
     // 帮助弹窗状态
@@ -225,89 +160,96 @@ fun SettingsScreen(
         ThemeMode.SYSTEM  -> "跟随系统"
         ThemeMode.LIGHT   -> "浅色模式"
         ThemeMode.DARK    -> "深色模式"
-        ThemeMode.WEATHER -> "跟随天气"
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MineBgMid,
+        containerColor = BgPrimary,
         // 外层 NavHost 已处理系统 insets，内层不重复添加
         contentWindowInsets = WindowInsets(0.dp)
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .mineControlPanelBackground()
+                .background(BgPrimary)
                 .padding(innerPadding)
         ) {
-
-            UserProfileCard(
-                username = uiState.username,
-                avatarUri = uiState.avatarUri,
-                usageDays = uiState.usageDays,
-                completedCount = uiState.completedCount,
-                pendingCount = uiState.pendingCount,
-                streakDays = uiState.streakDays,
-                achievements = uiState.recentAchievements,
-                unlockedCount = uiState.unlockedAchievementsCount,
-                totalCount = uiState.totalAchievementsCount,
-                onUserClick = onNavigateToUserInfo,
-                onAchievementClick = onNavigateToAchievement,
-                onAvatarClick = onNavigateToUserInfo
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "我的",
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(bottom = 56.dp, top = 0.dp)
+                contentPadding = PaddingValues(bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
 
             item {
-                SectionHeader(title = "AI 增强", subtitle = "配置与自动化")
+                UserProfileCard(
+                    username = uiState.username,
+                    avatarUri = uiState.avatarUri,
+                    usageDays = uiState.usageDays,
+                    unlockedCount = uiState.unlockedAchievementsCount,
+                    totalCount = uiState.totalAchievementsCount,
+                    onUserClick = onNavigateToUserInfo,
+                    onAchievementClick = onNavigateToAchievement
+                )
+            }
+
+            item {
+                SectionHeader(title = "智能服务")
             }
 
             item {
                 SettingsGroupCard {
                     SettingsRow(
-                        icon = "AI",
-                        iconBgColor = Color(0xFF4F63E7),
+                        iconRes = R.drawable.icon_mine_ai,
                         title = "AI 智能助手",
                         subtitle = if (uiState.aiApiKey.isNotBlank())
-                            "DeepSeek · 已配置"
-                        else "填写 DeepSeek API Key",
+                            "DeepSeek · 已启用"
+                        else "DeepSeek · 未配置",
                         onClick = onNavigateToAIConfig
                     )
                     RowDivider()
                     SettingsRow(
-                        icon = "BR",
-                        iconBgColor = Color(0xFFFF7A1A),
+                        iconRes = R.drawable.icon_mine_briefing,
                         title = "智能早晚报",
                         subtitle = if (uiState.briefingEnabled)
                             "已开启 · 早报 ${String.format("%02d:%02d", uiState.morningHour, uiState.morningMinute)} / 晚报 ${String.format("%02d:%02d", uiState.eveningHour, uiState.eveningMinute)}"
-                        else "基于任务状态生成早报和晚报",
+                        else "未开启",
                         onClick = onNavigateToBriefing
                     )
                 }
             }
 
             item {
-                SectionHeader(title = "任务增强", subtitle = "触发与提醒")
+                SectionHeader(title = "任务与提醒")
             }
 
             item {
                 SettingsGroupCard {
                     SettingsRow(
-                        icon = "LOC",
-                        iconBgColor = Color(0xFF2196F3),
+                        iconRes = R.drawable.icon_mine_geofence,
                         title = "地理围栏",
-                        subtitle = if (uiState.geofenceCount > 0) "${uiState.geofenceCount} 个地点 · 到达/离开提醒" else "地点触发、到达离开提醒",
+                        subtitle = "${uiState.geofenceCount} 个地点 · 到达/离开提醒",
                         onClick = onNavigateToGeofence
                     )
                     RowDivider()
                     SettingsRow(
-                        icon = "REM",
-                        iconBgColor = Color(0xFFF08A35),
+                        iconRes = R.drawable.icon_mine_reminder,
                         title = "提醒策略",
                         subtitle = "声音、震动、提前提醒与通知方式",
                         onClick = onNavigateToReminderStrategy
@@ -316,22 +258,20 @@ fun SettingsScreen(
             }
 
             item {
-                SectionHeader(title = "偏好设置", subtitle = "显示与主题")
+                SectionHeader(title = "使用偏好")
             }
 
             item {
                 SettingsGroupCard {
                     SettingsRow(
-                        icon = "THE",
-                        iconBgColor = Color(0xFF9C27B0),
+                        iconRes = R.drawable.icon_mine_theme,
                         title = "主题设置",
-                        subtitle = "当前：$themeModeLabel",
+                        subtitle = themeModeLabel,
                         onClick = onNavigateToThemeSettings
                     )
                     RowDivider()
                     SettingsRow(
-                        icon = "VIEW",
-                        iconBgColor = Color(0xFF00897B),
+                        iconRes = R.drawable.icon_mine_view,
                         title = "视图偏好",
                         subtitle = "折叠视图、显示模式",
                         onClick = onNavigateToViewPreferences
@@ -340,31 +280,25 @@ fun SettingsScreen(
             }
 
             item {
-                SectionHeader(title = "数据管理", subtitle = "同步与导出")
+                SectionHeader(title = "数据管理")
             }
 
             item {
                 SettingsGroupCard {
                     SettingsRow(
-                        icon = "SYNC",
-                        iconBgColor = Color(0xFF1565C0),
+                        iconRes = R.drawable.icon_mine_sync,
                         title = "数据同步",
                         subtitle = "同步状态、立即同步与冲突处理",
                         onClick = onNavigateToSync
                     )
                     RowDivider()
                     SettingsRow(
-                        icon = "OUT",
-                        iconBgColor = Color(0xFF42A5F5),
+                        iconRes = R.drawable.icon_mine_export,
                         title = "导出数据",
-                        subtitle = "选择时间范围，导出 Excel / CSV / Markdown",
+                        subtitle = "Excel / CSV / Markdown",
                         onClick = onNavigateToExportData
                     )
                 }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
             }
         }
         }
@@ -380,34 +314,28 @@ private fun UserProfileCard(
     username: String,
     avatarUri: Uri?,
     usageDays: Int,
-    completedCount: Int,
-    pendingCount: Int,
-    streakDays: Int,
-    achievements: List<com.nextthing.app.domain.model.AchievementProgress>,
     unlockedCount: Int,
     totalCount: Int,
     onUserClick: () -> Unit,
-    onAchievementClick: () -> Unit,
-    onAvatarClick: () -> Unit = {}
+    onAchievementClick: () -> Unit
 ) {
-    // 每个分类中已解锁的最高等级成就
-    val bestBadges = remember(achievements) {
-        achievements
-            .filter { it.isUnlocked }
-            .groupBy { it.type.category }
-            .mapValues { (_, list) -> list.maxByOrNull { it.type.tier.ordinal }!! }
-            .entries
-            .sortedBy { it.key.ordinal }
-            .map { it.value }
-    }
-
-    Box(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onUserClick)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 val avatarShape = CircleShape
                 val presetPainter = painterResource(R.drawable.preset_avatar)
                 AsyncImage(
@@ -417,163 +345,65 @@ private fun UserProfileCard(
                     error = presetPainter,
                     fallback = presetPainter,
                     modifier = Modifier
-                        .size(58.dp)
-                        .clip(avatarShape)
-                        .clickable(onClick = onAvatarClick),
+                        .size(56.dp)
+                        .clip(avatarShape),
                     contentScale = ContentScale.Crop
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
                 Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(onClick = onUserClick)
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = username,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            color = MineDeep
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        HonorTitleChip(text = "见习掌控师")
-                    }
-
-                    Spacer(modifier = Modifier.height(7.dp))
-
-                    AchievementPreview(modifier = Modifier.clickable(onClick = onAchievementClick))
+                    Text(
+                        text = username,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "使用 NextThing $usageDays 天",
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        maxLines = 1
+                    )
                 }
+
+                SettingsChevron()
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            RowDivider()
 
             Row(
                 modifier = Modifier
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    .fillMaxWidth()
+                    .clickable(onClick = onAchievementClick)
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                AssetStat(value = "$completedCount", label = "已完成", hint = "累计推进")
-                AssetStat(
-                    value = "$streakDays",
-                    label = "连续天数",
-                    hint = if (streakDays > 0) "习惯积累" else "习惯还未形成"
+                SettingsIcon(
+                    iconRes = R.drawable.icon_mine_achievement,
+                    contentDescription = "我的成就"
                 )
-                AssetStat(value = "$pendingCount", label = "待办任务", hint = "当前队列")
-                AssetStat(value = "$usageDays", label = "使用天数", hint = "开始积累")
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "我的成就",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "$unlockedCount / $totalCount",
+                    fontSize = 13.sp,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                SettingsChevron()
             }
         }
-    }
-}
-
-@Composable
-private fun AchievementPreview(
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .height(28.dp)
-            .width(78.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy((-5).dp)
-    ) {
-        AchievementMedal(bgColor = Color(0xFF7657FF), isMain = false)
-        AchievementMedal(bgColor = Color(0xFFF1A832), isMain = true)
-        AchievementMedal(bgColor = Color(0xFF20B4C6), isMain = false)
-    }
-}
-
-@Composable
-private fun AchievementMedal(bgColor: Color, isMain: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .background(
-                if (isMain) {
-                    Brush.sweepGradient(
-                        listOf(
-                            Color(0xFFFFE68A),
-                            Color(0xFFF1A832),
-                            Color(0xFF7657FF),
-                            Color(0xFF20B4C6),
-                            Color(0xFFFFE68A)
-                        )
-                    )
-                } else {
-                    Brush.linearGradient(listOf(Color.White.copy(alpha = 0.72f), bgColor))
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = "★", fontSize = 10.sp, color = Color(0xFFFFF4BC), fontWeight = FontWeight.Black)
-    }
-}
-
-@Composable
-private fun HonorTitleChip(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(
-                        Color(0xFF3A276B),
-                        Color(0xFF6B4EE8),
-                        Color(0xFF2B2052)
-                    )
-                )
-            )
-            .padding(start = 12.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
-    ) {
-        Text(
-            text = text,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Black,
-            color = Color(0xFFF9E7A9)
-        )
-    }
-}
-
-@Composable
-private fun RowScope.AssetStat(value: String, label: String, hint: String) {
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(15.dp))
-            .background(Color.White.copy(alpha = 0.54f))
-            .padding(horizontal = 4.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = MineProfileSub,
-            maxLines = 1
-        )
-        Text(
-            text = value,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Black,
-            color = MineDeep
-        )
-        Text(
-            text = hint,
-            fontSize = 9.sp,
-            color = Color(0xFF8C85A0),
-            maxLines = 1
-        )
-    }
-}
-
-private fun getBadgeTierBg(tier: com.nextthing.app.domain.model.AchievementTier): Color {
-    return when (tier) {
-        com.nextthing.app.domain.model.AchievementTier.BRONZE -> Color(0xFFCD7F32).copy(alpha = 0.2f)
-        com.nextthing.app.domain.model.AchievementTier.SILVER -> Color(0xFFC0C0C0).copy(alpha = 0.3f)
-        com.nextthing.app.domain.model.AchievementTier.GOLD -> Color(0xFFFFD700).copy(alpha = 0.25f)
-        com.nextthing.app.domain.model.AchievementTier.DIAMOND -> Color(0xFF00BCD4).copy(alpha = 0.2f)
     }
 }
 
@@ -582,28 +412,18 @@ private fun getBadgeTierBg(tier: com.nextthing.app.domain.model.AchievementTier)
 // ──────────────────────────────────────────────────────────
 
 @Composable
-private fun SectionHeader(title: String, subtitle: String? = null) {
-    Row(
+private fun SectionHeader(title: String) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 5.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom
+            .padding(start = 10.dp, end = 10.dp, top = 5.dp)
     ) {
         Text(
             text = title,
             fontSize = 15.sp,
-            fontWeight = FontWeight.Black,
-            color = MineInk
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary
         )
-        if (subtitle != null) {
-            Text(
-                text = subtitle,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MineMuted
-            )
-        }
     }
 }
 
@@ -612,10 +432,10 @@ private fun SettingsGroupCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.78f)),
-        border = BorderStroke(1.dp, Color(0xFF7057F5).copy(alpha = 0.09f)),
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(content = content)
@@ -624,11 +444,10 @@ private fun SettingsGroupCard(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun SettingsRow(
-    icon: String,
-    iconBgColor: Color,
+    @DrawableRes iconRes: Int,
     title: String,
     subtitle: String,
-    titleColor: Color = MineInk,
+    titleColor: Color = TextPrimary,
     showArrow: Boolean = true,
     showSwitch: Boolean = false,
     switchChecked: Boolean = false,
@@ -639,39 +458,26 @@ private fun SettingsRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 11.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(iconBgColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = icon,
-                fontSize = if (icon.length > 2) 8.sp else 11.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                maxLines = 1
-            )
-        }
+        SettingsIcon(iconRes = iconRes, contentDescription = title)
 
-        Spacer(modifier = Modifier.width(14.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = titleColor
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
-                fontSize = 11.sp,
-                color = MineSub
+                fontSize = 12.sp,
+                color = TextSecondary,
+                maxLines = 1
             )
         }
 
@@ -705,22 +511,48 @@ private fun SettingsRow(
         }
 
         if (showArrow) {
-            Text(
-                text = "›",
-                fontSize = 20.sp,
-                color = MineMuted,
-                fontWeight = FontWeight.Light
-            )
+            SettingsChevron()
         }
     }
 }
 
 @Composable
+private fun SettingsIcon(
+    @DrawableRes iconRes: Int,
+    contentDescription: String
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Primary.copy(alpha = 0.10f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
+            tint = Primary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun SettingsChevron() {
+    Icon(
+        painter = painterResource(R.drawable.icon_detail_chevron),
+        contentDescription = null,
+        tint = TextMuted,
+        modifier = Modifier.size(16.dp)
+    )
+}
+
+@Composable
 private fun RowDivider() {
     HorizontalDivider(
-        modifier = Modifier.padding(start = 68.dp, end = 16.dp),
-        color = MineLine,
-        thickness = 0.5.dp
+        modifier = Modifier.padding(start = 60.dp, end = 12.dp),
+        color = Border,
+        thickness = 1.dp
     )
 }
 

@@ -31,20 +31,12 @@ data class GeofenceConfigUiState(
     val batteryOptimization: Boolean = true,
     val notifyWhenOutside: Boolean = false,
 
-    // 系统地理围栏状态
-    val systemGeofencesRegistered: Int = 0,          // 系统已注册的地理围栏数量
-    val systemGeofencesActive: Boolean = false,       // 系统地理围栏是否活跃
-
     // 地点列表
     val locations: List<GeofenceLocation> = emptyList(),
-    val frequentLocations: List<GeofenceLocation> = emptyList(),
 
-    // 统计信息
+    // 当前页面只保留地点管理需要的运行摘要
     val totalLocationsCount: Int = 0,
-    val frequentLocationsCount: Int = 0,
     val activeTasksCount: Int = 0,
-    val monthlyCheckCount: Int = 0,      // 本月检查次数
-    val averageHitRate: Float = 0f,      // 平均命中率（0.0~1.0）
 
     // UI 状态
     val isLoading: Boolean = true,

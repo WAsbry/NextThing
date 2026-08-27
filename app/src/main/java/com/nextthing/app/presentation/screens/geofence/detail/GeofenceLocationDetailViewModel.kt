@@ -27,10 +27,14 @@ data class GeofenceLocationDetailUiState(
     val editLatitude: Double = 0.0,
     val editLongitude: Double = 0.0,
     val editAddress: String = "",
+    val editGeofenceEnabled: Boolean = false,
+    val editCustomRadius: Int? = null,
+    val editIsFrequent: Boolean = false,
     val isSaving: Boolean = false,
 
     // 全局配置
-    val defaultRadius: Int = 200  // 全局默认半径
+    val defaultRadius: Int = 200,
+    val isGlobalEnabled: Boolean = false
 )
 
 @HiltViewModel
@@ -57,9 +61,15 @@ class GeofenceLocationDetailViewModel @Inject constructor(
     private fun loadDefaultRadius() {
         viewModelScope.launch {
             try {
-                val config = geofenceUseCases.getGeofenceConfig().first()
-                config?.let {
-                    _uiState.update { state -> state.copy(defaultRadius = it.defaultRadius) }
+                geofenceUseCases.getGeofenceConfig().collect { config ->
+                    config?.let {
+                        _uiState.update { state ->
+                            state.copy(
+                                defaultRadius = it.defaultRadius,
+                                isGlobalEnabled = it.isGlobalEnabled
+                            )
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "加载全局配置失败，使用默认值 200")
@@ -112,37 +122,19 @@ class GeofenceLocationDetailViewModel @Inject constructor(
     }
 
     fun updateCustomRadius(radius: Int?) {
-        viewModelScope.launch {
-            try {
-                val location = _uiState.value.location ?: return@launch
-                val updated = location.copy(customRadius = radius)
-
-                val result = geofenceUseCases.updateGeofenceLocation(updated)
-                if (result.isSuccess) {
-                    Timber.tag(TAG).d("✅ 半径已更新: $radius")
-                } else {
-                    Timber.tag(TAG).e("❌ 更新半径失败")
-                }
-            } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "更新半径异常")
-            }
-        }
+        _uiState.update { it.copy(editCustomRadius = radius) }
     }
 
     fun toggleFrequent() {
-        viewModelScope.launch {
-            try {
-                val location = _uiState.value.location ?: return@launch
-                val result = geofenceUseCases.updateGeofenceLocation.updateFrequent(
-                    location.id,
-                    !location.isFrequent
-                )
-                if (result.isSuccess) {
-                    Timber.tag(TAG).d("✅ 常用标记已更新")
-                }
-            } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "更新常用标记异常")
-            }
+        _uiState.update { it.copy(editIsFrequent = !it.editIsFrequent) }
+    }
+
+    fun updateGeofenceEnabled(enabled: Boolean) {
+        _uiState.update {
+            it.copy(
+                editGeofenceEnabled = enabled,
+                editCustomRadius = if (enabled) it.editCustomRadius ?: 200 else null
+            )
         }
     }
 
@@ -184,7 +176,10 @@ class GeofenceLocationDetailViewModel @Inject constructor(
                 editLocationName = location.locationInfo.locationName,
                 editLatitude = location.locationInfo.latitude,
                 editLongitude = location.locationInfo.longitude,
-                editAddress = location.locationInfo.address
+                editAddress = location.locationInfo.address,
+                editGeofenceEnabled = location.isEnabled,
+                editCustomRadius = location.customRadius,
+                editIsFrequent = location.isFrequent
             )
         }
         Timber.tag(TAG).d("📝 进入编辑模式")
@@ -210,7 +205,7 @@ class GeofenceLocationDetailViewModel @Inject constructor(
         Timber.tag(TAG).d("📍 位置已更新: ($lat, $lng)")
     }
 
-    fun saveChanges() {
+    fun saveChanges(onSaved: () -> Unit = {}) {
         viewModelScope.launch {
             try {
                 _uiState.update { it.copy(isSaving = true) }
@@ -271,6 +266,9 @@ class GeofenceLocationDetailViewModel @Inject constructor(
 
                 val updatedGeofenceLocation = currentLocation.copy(
                     locationInfo = updatedLocationInfo,
+                    isEnabled = editState.editGeofenceEnabled,
+                    customRadius = if (editState.editGeofenceEnabled) editState.editCustomRadius else null,
+                    isFrequent = editState.editIsFrequent,
                     updatedAt = java.time.LocalDateTime.now()
                 )
 
@@ -313,6 +311,7 @@ class GeofenceLocationDetailViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(isEditMode = false, isSaving = false)
                     }
+                    onSaved()
                 } else {
                     Timber.tag(TAG).e("❌ 更新 GeofenceLocation 失败")
                     Timber.tag(TAG).d("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")

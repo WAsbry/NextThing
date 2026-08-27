@@ -17,7 +17,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.rememberNavController
 import com.nextthing.app.data.preferences.ThemePreferences
 import com.nextthing.app.domain.model.ThemeMode
-import com.nextthing.app.domain.model.WeatherCondition
 import com.nextthing.app.presentation.navigation.NextThingNavigation
 import com.nextthing.app.performance.StartupTracker
 import com.nextthing.app.presentation.theme.NextThingB1Theme
@@ -86,18 +85,9 @@ class MainActivity : ComponentActivity() {
             StartupTracker.record("setContent")
             // 首帧用默认值快速渲染，异步收集 DataStore Flow 避免阻塞
             var themeMode by remember { mutableStateOf(ThemeMode.SYSTEM) }
-            var weatherCondition by remember { mutableStateOf(WeatherCondition.UNKNOWN) }
-            var weatherCustomPrimaries by remember { mutableStateOf<Map<WeatherCondition, Long>>(emptyMap()) }
-
             LaunchedEffect(Unit) { themePreferences.themeMode.collect { themeMode = it } }
-            LaunchedEffect(Unit) { themePreferences.currentWeatherCondition.collect { weatherCondition = it } }
-            LaunchedEffect(Unit) { themePreferences.weatherCustomPrimaries.collect { weatherCustomPrimaries = it } }
 
-            NextThingB1Theme(
-                themeMode = themeMode,
-                weatherCondition = weatherCondition,
-                weatherCustomPrimaries = weatherCustomPrimaries
-            ) {
+            NextThingB1Theme(themeMode = themeMode) {
                 CompositionLocalProvider(LocalPermissionLauncher provides locationPermissionLauncher) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),

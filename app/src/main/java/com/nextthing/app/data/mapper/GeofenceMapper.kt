@@ -51,6 +51,7 @@ fun GeofenceLocationEntity.toDomain(locationInfo: LocationInfo): GeofenceLocatio
     return GeofenceLocation(
         id = id,
         locationInfo = locationInfo,
+        isEnabled = isEnabled,
         customRadius = customRadius,
         isFrequent = isFrequent,
         usageCount = usageCount,
@@ -71,6 +72,7 @@ fun GeofenceLocation.toEntity(): GeofenceLocationEntity {
     return GeofenceLocationEntity(
         id = id,
         locationId = locationInfo.id, // 只存储ID
+        isEnabled = isEnabled,
         customRadius = customRadius,
         isFrequent = isFrequent,
         usageCount = usageCount,

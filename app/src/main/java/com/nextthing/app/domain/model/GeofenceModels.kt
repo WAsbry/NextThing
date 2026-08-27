@@ -24,6 +24,7 @@ data class GeofenceConfig(
 data class GeofenceLocation(
     val id: String = UUID.randomUUID().toString(),
     val locationInfo: LocationInfo, // 复用现有的地点信息
+    val isEnabled: Boolean = false,
     val customRadius: Int? = null,
     val isFrequent: Boolean = false,
     val usageCount: Int = 0,

@@ -18,7 +18,8 @@ data class AchievementUiState(
     val unlockedCount: Int = 0,
     val totalCount: Int = AchievementType.entries.size,
     val isLoading: Boolean = false,
-    val newlyUnlocked: List<AchievementType> = emptyList()
+    val newlyUnlocked: List<AchievementType> = emptyList(),
+    val errorMessage: String? = null
 )
 
 @HiltViewModel
@@ -35,7 +36,7 @@ class AchievementViewModel @Inject constructor(
 
     private fun loadAchievements() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
             try {
                 // 检查并解锁达标成就，同时获取全量进度（一次计算）
                 val (achievements, newlyUnlocked) = achievementUseCases.checkAndUnlock()
@@ -49,9 +50,16 @@ class AchievementViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 Timber.e(e, "加载成就失败")
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "请稍后重试"
+                )
             }
         }
+    }
+
+    fun retry() {
+        loadAchievements()
     }
 
     fun clearNewlyUnlocked() {

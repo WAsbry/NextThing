@@ -113,4 +113,12 @@ class SyncViewModel @Inject constructor(
                 }
         }
     }
+
+    fun resolveConflictUseLocal(taskId: String) {
+        viewModelScope.launch {
+            syncUseCases.resolveConflictUseLocal(taskId)
+                .onSuccess { loadConflicts() }
+                .onFailure { error -> Timber.tag(TAG).e(error, "解决冲突失败：保留本地版本") }
+        }
+    }
 }

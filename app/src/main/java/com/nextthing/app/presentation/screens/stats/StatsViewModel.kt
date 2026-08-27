@@ -2,6 +2,9 @@ package com.nextthing.app.presentation.screens.stats
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nextthing.app.data.service.AICompletionClient
+import com.nextthing.app.data.service.AIRouteMode
+import com.nextthing.app.data.service.AIRouteStatus
 import com.nextthing.app.domain.usecase.TaskUseCases
 import com.nextthing.app.domain.model.Category
 import com.nextthing.app.domain.model.TaskStatus
@@ -55,7 +58,7 @@ data class StatsUiState(
     val notImportantNotUrgentCount: Int = 0,
     // 智能洞察
     val insights: List<InsightData> = emptyList(),
-    val selectedOverviewTimeRange: OverviewTimeRange = OverviewTimeRange.THIS_WEEK, // 概览时间维度
+    val selectedOverviewTimeRange: OverviewTimeRange = OverviewTimeRange.TODAY, // 概览时间维度
     // 核心指标（根据时间维度动态计算）
     val coreMetricPending: Int = 0,           // 待办任务数
     val coreMetricImportantUrgent: Int = 0,   // 重要紧急任务数
@@ -88,6 +91,7 @@ data class StatsUiState(
     val weeklyTrend: List<DailyTrendData> = emptyList(),
     val allWeeklyTrend: List<DailyTrendData> = emptyList(), // 新增：保存完整未过滤的趋势数据
     val overviewTrend: List<DailyTrendData> = emptyList(),
+    val overdueTrend: List<DailyOverdueTrendData> = emptyList(),
     val monthlyTrend: List<WeeklyTrendData> = emptyList(),
     val trendViewMode: TrendViewMode = TrendViewMode.WEEK,
     // 新增：时间范围选择器
@@ -98,6 +102,7 @@ data class StatsUiState(
     val selectedTrendTimeRange: OverviewTimeRange = OverviewTimeRange.THIS_WEEK,
     // 新增：效率页面时间维度选择
     val selectedEfficiencyTimeRange: OverviewTimeRange = OverviewTimeRange.ALL,
+    val efficiencySummary: EfficiencySummaryData = EfficiencySummaryData(),
     // 新增：月历热力图（GitHub风格）
     val calendarHeatmap: List<CalendarHeatmapData> = emptyList(),
     val allCalendarHeatmap: List<CalendarHeatmapData> = emptyList(), // 保存完整未过滤的热力图数据
@@ -137,13 +142,18 @@ data class StatsUiState(
     val isAISummaryLoading: Boolean = false,
     val aiSummaryError: String? = null,
     val aiSummaryTimeRange: OverviewTimeRange? = null,
-    // AI 洞察 - 行为分析
-    val behaviorInsight: com.nextthing.app.domain.service.BehaviorInsight? = null,
-    val isAnalyzingBehavior: Boolean = false,
-    // AI 洞察 - 周报
+    // AI 周报
     val weeklyReport: com.nextthing.app.domain.service.WeeklyReport? = null,
     val isGeneratingReport: Boolean = false,
     val reportExportText: String? = null,
+    val aiRouteStatus: AIRouteStatus? = null,
+    val aiReportContextLoaded: Boolean = false,
+    val isAIReportContextLoading: Boolean = false,
+    val aiReportWeekStart: LocalDate? = null,
+    val aiReportWeekEnd: LocalDate? = null,
+    val aiReportWeekTaskCount: Int = 0,
+    val aiReportCompletedCount: Int = 0,
+    val aiReportErrorMessage: String? = null,
     // UI 状态
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
@@ -169,6 +179,11 @@ data class DailyTrendData(
     val createdCount: Int,
     val completedCount: Int,
     val completionRate: Float
+)
+
+data class DailyOverdueTrendData(
+    val date: LocalDate,
+    val overdueCount: Int
 )
 
 data class WeeklyTrendData(
@@ -358,6 +373,22 @@ data class TimeHeatmapStats(
     val leastProductiveCount: Int
 )
 
+data class EfficiencySummaryData(
+    val completedCount: Int = 0,
+    val completedWithDeadlineCount: Int = 0,
+    val onTimeCompletedCount: Int = 0,
+    val overdueCompletedCount: Int = 0,
+    val averageCompletionMinutes: Double = 0.0,
+    val activeDayCount: Int = 0
+) {
+    val onTimeRate: Float
+        get() = if (completedWithDeadlineCount > 0) {
+            onTimeCompletedCount.toFloat() / completedWithDeadlineCount * 100f
+        } else {
+            0f
+        }
+}
+
 // 拖延分析雷达图数据
 data class ProcrastinationRadarData(
     val onTimeRate: Float,              // ⏰ 准时完成率 0-100
@@ -395,12 +426,19 @@ data class DelayAnalysisData(
     val mostDelayedDays: Int            // 拖延最严重的任务延迟天数
 )
 
+private data class AIReportWeekContext(
+    val weekStart: LocalDate,
+    val weekEnd: LocalDate,
+    val tasks: List<com.nextthing.app.domain.model.Task>,
+    val completedTasks: List<com.nextthing.app.domain.model.Task>
+)
+
 @HiltViewModel
 class StatsViewModel @Inject constructor(
     private val taskUseCases: TaskUseCases,
     private val aiStatsAnalyzer: AIStatsAnalyzer,
-    private val aiBehaviorAnalyzer: com.nextthing.app.domain.service.AIBehaviorAnalyzer,
-    private val aiWeeklyReporter: com.nextthing.app.domain.service.AIWeeklyReporter
+    private val aiWeeklyReporter: com.nextthing.app.domain.service.AIWeeklyReporter,
+    private val aiCompletionClient: AICompletionClient
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StatsUiState())
@@ -410,7 +448,7 @@ class StatsViewModel @Inject constructor(
     private var currentMonthDate = currentDate
 
     // 创建单独的时间维度 Flow，用于监听变化
-    private val _selectedTimeRange = MutableStateFlow(OverviewTimeRange.THIS_WEEK)
+    private val _selectedTimeRange = MutableStateFlow(OverviewTimeRange.TODAY)
 
     // 创建分类页面时间维度 Flow
     private val _selectedCategoryTimeRange = MutableStateFlow(OverviewTimeRange.ALL)
@@ -520,6 +558,7 @@ class StatsViewModel @Inject constructor(
                         val completionRateTrend = calculateCompletionRateTrend(tasks)
                         val cycleTimeTrend = calculateCycleTimeTrend(tasks)
                         val cumulativeFlow = calculateCumulativeFlow(tasks)
+                        val overdueTrend = calculateOverdueTrend(tasks)
 
                         // 根据时间范围过滤趋势数据（使用 combine 参数，避免读取 stale uiState）
                         val filteredWeeklyTrend = filterTrendByOverviewTimeRange(
@@ -555,6 +594,7 @@ class StatsViewModel @Inject constructor(
 
                         // 新增：效率Tab数据计算（按效率时间维度过滤）
                         val efficiencyTasks = filterTasksByEfficiencyTimeRange(tasks, efficiencyTimeRange)
+                        val efficiencySummary = calculateEfficiencySummary(efficiencyTasks)
                         val timeHeatmap = calculateTimeHeatmap(efficiencyTasks)
                         val timeHeatmapStats = calculateTimeHeatmapStats(timeHeatmap)
                         val procrastinationRadar = calculateProcrastinationRadar(efficiencyTasks)
@@ -580,6 +620,7 @@ class StatsViewModel @Inject constructor(
                             weeklyTrend = filteredWeeklyTrend,
                             allWeeklyTrend = weeklyTrend, // 保存完整未过滤的数据
                             overviewTrend = overviewTrend,
+                            overdueTrend = overdueTrend,
                             calendarHeatmap = threeMonthsHeatmap,
                             allCalendarHeatmap = calendarHeatmap, // 保存完整未过滤的热力图数据
                             calendarStats = calendarStats,
@@ -617,6 +658,7 @@ class StatsViewModel @Inject constructor(
                             overviewCompletedTasks = overviewStats.completed,
                             overviewCompletionRate = overviewStats.completionRate,
                             selectedEfficiencyTimeRange = efficiencyTimeRange,
+                            efficiencySummary = efficiencySummary,
                             isLoading = false,
                             lastUpdateTime = LocalDateTime.now()
                         )
@@ -1791,6 +1833,32 @@ class StatsViewModel @Inject constructor(
     }
 
     /**
+     * 计算最近90天每天结束时仍处于逾期状态的任务数量。
+     * 该序列用于趋势页比较当前周期与上一同期的逾期风险。
+     */
+    private fun calculateOverdueTrend(
+        tasks: List<com.nextthing.app.domain.model.Task>
+    ): List<DailyOverdueTrendData> {
+        val today = LocalDate.now()
+
+        return (0..89).map { daysAgo ->
+            val date = today.minusDays(daysAgo.toLong())
+            val endOfDay = date.atTime(23, 59, 59)
+            val overdueCount = tasks.count { task ->
+                val dueAt = task.dueDate
+                val createdInTime = !task.createdAt.isAfter(endOfDay)
+                val dueInTime = dueAt != null && !dueAt.isAfter(endOfDay)
+                val unfinishedAtEndOfDay = task.completedAt?.isAfter(endOfDay) != false
+                val isCountable = task.status != TaskStatus.CANCELLED
+
+                createdInTime && dueInTime && unfinishedAtEndOfDay && isCountable
+            }
+
+            DailyOverdueTrendData(date = date, overdueCount = overdueCount)
+        }.reversed()
+    }
+
+    /**
      * 计算完成速度加速度数据（按周）
      * 展示最近12周的数据
      */
@@ -2213,6 +2281,36 @@ class StatsViewModel @Inject constructor(
 
     // ==================== 效率Tab新增功能 ====================
 
+    private fun calculateEfficiencySummary(
+        tasks: List<com.nextthing.app.domain.model.Task>
+    ): EfficiencySummaryData {
+        val completedTasks = tasks.filter {
+            it.status == TaskStatus.COMPLETED && it.completedAt != null
+        }
+        val completedWithDeadline = completedTasks.filter { it.dueDate != null }
+        val onTimeCompleted = completedWithDeadline.count { task ->
+            val completedAt = task.completedAt ?: return@count false
+            val dueDate = task.dueDate ?: return@count false
+            !completedAt.isAfter(dueDate)
+        }
+        val completionMinutes = completedTasks.mapNotNull { task ->
+            val completedAt = task.completedAt ?: return@mapNotNull null
+            java.time.Duration.between(task.createdAt, completedAt)
+                .toMinutes()
+                .takeIf { it >= 0 }
+                ?.toDouble()
+        }
+
+        return EfficiencySummaryData(
+            completedCount = completedTasks.size,
+            completedWithDeadlineCount = completedWithDeadline.size,
+            onTimeCompletedCount = onTimeCompleted,
+            overdueCompletedCount = completedWithDeadline.size - onTimeCompleted,
+            averageCompletionMinutes = completionMinutes.average().takeIf { !it.isNaN() } ?: 0.0,
+            activeDayCount = completedTasks.mapNotNull { it.completedAt?.toLocalDate() }.distinct().size
+        )
+    }
+
     /**
      * 计算时间热力图数据（7×6矩阵）
      * 横轴：周一到周日，纵轴：6个时间段
@@ -2471,72 +2569,134 @@ class StatsViewModel @Inject constructor(
         )
     }
 
-    // ── AI 洞察：行为分析 ──
+    // ── AI 周报生成 ──
 
-    fun analyzeBehavior() {
-        if (_uiState.value.isAnalyzingBehavior) return
+    fun prepareAIReportContext() {
+        if (_uiState.value.isAIReportContextLoading) return
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isAnalyzingBehavior = true)
+            _uiState.value = _uiState.value.copy(
+                isAIReportContextLoading = true,
+                aiReportErrorMessage = null
+            )
             try {
                 val allTasks = taskUseCases.getAllTasks().first()
-                val completedTasks = allTasks.filter { it.status == TaskStatus.COMPLETED }
-
-                aiBehaviorAnalyzer.analyzeBehavior(completedTasks, allTasks)
-                    .onSuccess { insight ->
-                        _uiState.value = _uiState.value.copy(
-                            isAnalyzingBehavior = false,
-                            behaviorInsight = insight
-                        )
-                    }
-                    .onFailure { error ->
-                        _uiState.value = _uiState.value.copy(
-                            isAnalyzingBehavior = false,
-                            errorMessage = error.message ?: "行为分析失败"
-                        )
-                    }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isAnalyzingBehavior = false)
+                val context = buildAIReportWeekContext(allTasks)
+                val routeStatus = aiCompletionClient.routeStatus()
+                _uiState.value = _uiState.value.copy(
+                    aiRouteStatus = routeStatus,
+                    aiReportContextLoaded = true,
+                    isAIReportContextLoading = false,
+                    aiReportWeekStart = context.weekStart,
+                    aiReportWeekEnd = context.weekEnd,
+                    aiReportWeekTaskCount = context.tasks.size,
+                    aiReportCompletedCount = context.completedTasks.size
+                )
+            } catch (error: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    aiReportContextLoaded = true,
+                    isAIReportContextLoading = false,
+                    aiReportErrorMessage = error.message ?: "本周任务数据加载失败"
+                )
             }
         }
     }
 
-    // ── AI 洞察：周报生成 ──
-
     fun generateWeeklyReport() {
         if (_uiState.value.isGeneratingReport) return
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isGeneratingReport = true)
+            _uiState.value = _uiState.value.copy(
+                isGeneratingReport = true,
+                aiReportErrorMessage = null
+            )
             try {
                 val allTasks = taskUseCases.getAllTasks().first()
-                val today = LocalDate.now()
-                val weekStart = today.minusDays(today.dayOfWeek.value.toLong() - 1).atStartOfDay()
-                val weekEnd = weekStart.plusDays(7)
+                val context = buildAIReportWeekContext(allTasks)
+                val routeStatus = aiCompletionClient.routeStatus()
 
-                val weekTasks = allTasks.filter { task ->
-                    val taskDate = task.dueDate ?: task.createdAt
-                    taskDate >= weekStart && taskDate < weekEnd
+                if (context.tasks.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        isGeneratingReport = false,
+                        aiRouteStatus = routeStatus,
+                        aiReportContextLoaded = true,
+                        aiReportWeekStart = context.weekStart,
+                        aiReportWeekEnd = context.weekEnd,
+                        aiReportWeekTaskCount = 0,
+                        aiReportCompletedCount = 0
+                    )
+                    return@launch
                 }
-                val completedTasks = weekTasks.filter { it.status == TaskStatus.COMPLETED }
 
-                aiWeeklyReporter.generateReport(weekTasks, completedTasks)
+                if (routeStatus.mode == AIRouteMode.Unavailable) {
+                    _uiState.value = _uiState.value.copy(
+                        isGeneratingReport = false,
+                        aiRouteStatus = routeStatus,
+                        aiReportErrorMessage = "AI 服务尚未配置，请先完成 AI 设置"
+                    )
+                    return@launch
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    aiRouteStatus = routeStatus,
+                    aiReportContextLoaded = true,
+                    aiReportWeekStart = context.weekStart,
+                    aiReportWeekEnd = context.weekEnd,
+                    aiReportWeekTaskCount = context.tasks.size,
+                    aiReportCompletedCount = context.completedTasks.size
+                )
+
+                aiWeeklyReporter.generateReport(context.tasks, context.completedTasks)
                     .onSuccess { report ->
                         val exportText = buildExportText(report)
                         _uiState.value = _uiState.value.copy(
                             isGeneratingReport = false,
                             weeklyReport = report,
-                            reportExportText = exportText
+                            reportExportText = exportText,
+                            aiReportErrorMessage = null
                         )
                     }
                     .onFailure { error ->
                         _uiState.value = _uiState.value.copy(
                             isGeneratingReport = false,
-                            errorMessage = error.message ?: "周报生成失败"
+                            aiReportErrorMessage = error.message ?: "周报生成失败"
                         )
                     }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isGeneratingReport = false)
+                _uiState.value = _uiState.value.copy(
+                    isGeneratingReport = false,
+                    aiReportErrorMessage = e.message ?: "周报生成失败"
+                )
             }
         }
+    }
+
+    private fun buildAIReportWeekContext(
+        allTasks: List<com.nextthing.app.domain.model.Task>
+    ): AIReportWeekContext {
+        val today = LocalDate.now()
+        val weekStart = today.minusDays(today.dayOfWeek.value.toLong() - 1)
+        val weekEnd = weekStart.plusDays(6)
+        val startAt = weekStart.atStartOfDay()
+        val endExclusive = weekStart.plusDays(7).atStartOfDay()
+        fun inWeek(dateTime: LocalDateTime?): Boolean =
+            dateTime != null && dateTime >= startAt && dateTime < endExclusive
+
+        val weekTasks = allTasks.filter { task ->
+            if (task.status == TaskStatus.CANCELLED) return@filter false
+            inWeek(task.dueDate) ||
+                inWeek(task.completedAt) ||
+                (task.dueDate == null && inWeek(task.createdAt))
+        }
+        val completedTasks = weekTasks.filter { task ->
+            task.status == TaskStatus.COMPLETED && inWeek(task.completedAt)
+        }
+
+        return AIReportWeekContext(
+            weekStart = weekStart,
+            weekEnd = weekEnd,
+            tasks = weekTasks,
+            completedTasks = completedTasks
+        )
     }
 
     private fun buildExportText(report: com.nextthing.app.domain.service.WeeklyReport): String {
@@ -2548,6 +2708,11 @@ class StatsViewModel @Inject constructor(
         if (report.highlights.isNotEmpty()) {
             sb.appendLine("## 亮点")
             report.highlights.forEach { sb.appendLine("- $it") }
+            sb.appendLine()
+        }
+        if (report.behaviorInsights.isNotEmpty()) {
+            sb.appendLine("## 行为洞察")
+            report.behaviorInsights.forEach { sb.appendLine("- $it") }
             sb.appendLine()
         }
         if (report.improvements.isNotEmpty()) {

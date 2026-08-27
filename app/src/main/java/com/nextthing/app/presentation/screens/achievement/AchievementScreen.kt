@@ -1,24 +1,52 @@
 package com.nextthing.app.presentation.screens.achievement
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -26,12 +54,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.nextthing.app.R
 import com.nextthing.app.domain.model.AchievementCategory
 import com.nextthing.app.domain.model.AchievementProgress
 import com.nextthing.app.domain.model.AchievementTier
 import com.nextthing.app.domain.model.AchievementType
-import com.nextthing.app.presentation.theme.*
-import kotlinx.coroutines.delay
+import com.nextthing.app.presentation.theme.BgCard
+import com.nextthing.app.presentation.theme.BgPrimary
+import com.nextthing.app.presentation.theme.Border
+import com.nextthing.app.presentation.theme.Primary
+import com.nextthing.app.presentation.theme.Success
+import com.nextthing.app.presentation.theme.TextMuted
+import com.nextthing.app.presentation.theme.TextPrimary
+import com.nextthing.app.presentation.theme.TextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,100 +75,71 @@ fun AchievementScreen(
     viewModel: AchievementViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-
-    // 选中的成就（用于弹出详情卡牌）
     var selectedAchievement by remember { mutableStateOf<AchievementProgress?>(null) }
+    var expandedCategoryName by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // 新解锁成就庆祝弹窗
-    val newlyUnlocked = uiState.newlyUnlocked
-    if (newlyUnlocked.isNotEmpty()) {
+    if (uiState.newlyUnlocked.isNotEmpty()) {
         UnlockCelebrationDialog(
-            achievements = newlyUnlocked,
-            onDismiss = { viewModel.clearNewlyUnlocked() }
+            achievements = uiState.newlyUnlocked,
+            onDismiss = viewModel::clearNewlyUnlocked
         )
     }
-
-    // 成就详情卡牌弹窗
-    selectedAchievement?.let { progress ->
-        AchievementDetailSheet(
-            progress = progress,
-            onDismiss = { selectedAchievement = null }
-        )
+    selectedAchievement?.let {
+        AchievementDetailSheet(progress = it, onDismiss = { selectedAchievement = null })
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BgPrimary)
+            .statusBarsPadding()
     ) {
-        // 顶部导航栏
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = BgCard,
-            shadowElevation = 1.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+        AchievementTopBar(onBackPressed)
+
+        when {
+            uiState.isLoading -> AchievementLoadingState()
+            uiState.errorMessage != null -> AchievementErrorState(
+                message = uiState.errorMessage,
+                onRetry = viewModel::retry
+            )
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 5.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                IconButton(
-                    onClick = onBackPressed,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Text(
-                        text = "‹",
-                        fontSize = 32.sp,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Light
-                    )
-                }
-                Text(
-                    text = "我的成就",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.size(48.dp))
-            }
-        }
-
-        if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Primary)
-            }
-            return@Column
-        }
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 32.dp)
-        ) {
-            // 总览卡片
-            item {
-                AchievementSummaryCard(
-                    unlockedCount = uiState.unlockedCount,
-                    totalCount = uiState.totalCount
-                )
-            }
-
-            // 按分类展示成就
-            for (category in AchievementCategory.entries) {
-                val categoryAchievements = uiState.achievements.filter {
-                    it.type.category == category
+                item(key = "summary") {
+                    AchievementSummaryCard(uiState.unlockedCount, uiState.totalCount)
                 }
 
-                item(key = category.name + "_header") {
-                    CategorySectionHeader(category = category)
+                item(key = "near_title") { SectionTitle("接近解锁") }
+                val closest = uiState.achievements
+                    .asSequence()
+                    .filter { !it.isUnlocked && it.currentValue > 0 }
+                    .sortedByDescending { it.progress }
+                    .take(3)
+                    .toList()
+                item(key = "near_content") {
+                    if (closest.isEmpty()) {
+                        EmptyProgressCard()
+                    } else {
+                        AchievementListCard(
+                            achievements = closest,
+                            onAchievementClick = { selectedAchievement = it }
+                        )
+                    }
                 }
 
-                item(key = category.name + "_badges") {
-                    AchievementBadgeRow(
+                item(key = "all_title") { SectionTitle("全部成就") }
+                items(AchievementCategory.entries, key = { it.name }) { category ->
+                    val categoryAchievements = uiState.achievements.filter { it.type.category == category }
+                    val expanded = expandedCategoryName == category.name
+                    CategoryCard(
+                        category = category,
                         achievements = categoryAchievements,
+                        expanded = expanded,
+                        onToggle = {
+                            expandedCategoryName = if (expanded) null else category.name
+                        },
                         onAchievementClick = { selectedAchievement = it }
                     )
                 }
@@ -142,619 +148,316 @@ fun AchievementScreen(
     }
 }
 
-// ── 总览统计卡片 ──
-
 @Composable
-private fun AchievementSummaryCard(
-    unlockedCount: Int,
-    totalCount: Int
-) {
-    val completionPct = if (totalCount > 0) (unlockedCount * 100 / totalCount) else 0
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Box(
+private fun AchievementTopBar(onBackPressed: () -> Unit) {
+    Surface(color = BgCard, border = BorderStroke(1.dp, Border)) {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(Primary, Primary.copy(alpha = 0.75f))
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                )
-                .padding(20.dp)
+                .height(56.dp)
+                .padding(start = 10.dp, end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SummaryStatItem(value = "$unlockedCount", label = "已解锁", color = Color.White)
-
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(40.dp)
-                        .background(Color.White.copy(alpha = 0.4f))
+            IconButton(onClick = onBackPressed, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    painter = painterResource(R.drawable.icon_achievement_back),
+                    contentDescription = "返回",
+                    tint = TextPrimary,
+                    modifier = Modifier.size(24.dp)
                 )
-
-                SummaryStatItem(
-                    value = "${totalCount - unlockedCount}",
-                    label = "未解锁",
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(40.dp)
-                        .background(Color.White.copy(alpha = 0.4f))
-                )
-
-                SummaryStatItem(value = "$completionPct%", label = "完成度", color = Color.White)
             }
+            Spacer(Modifier.width(5.dp))
+            Text("我的成就", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
         }
     }
 }
 
 @Composable
-private fun SummaryStatItem(value: String, label: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            color = color.copy(alpha = 0.85f)
-        )
-    }
-}
-
-// ── 分类标题行 ──
-
-@Composable
-private fun CategorySectionHeader(category: AchievementCategory) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        com.nextthing.app.presentation.components.CategoryIconView(
-            icon = category.icon,
-            size = 20.dp
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = category.displayName,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextPrimary
+private fun AchievementSummaryCard(unlockedCount: Int, totalCount: Int) {
+    val percent = if (totalCount == 0) 0 else unlockedCount * 100 / totalCount
+    BorderedCard {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("成就进度", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text("已解锁 $unlockedCount / $totalCount", fontSize = 14.sp, color = TextSecondary)
+            }
+            Text("$percent%", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Primary)
+        }
+        Spacer(Modifier.height(10.dp))
+        LinearProgressIndicator(
+            progress = { percent / 100f },
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+            color = Primary,
+            trackColor = Border
         )
     }
 }
 
-// ── 单个分类的4个成就横排 ──
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Bold,
+        color = TextPrimary
+    )
+}
 
 @Composable
-private fun AchievementBadgeRow(
+private fun EmptyProgressCard() {
+    BorderedCard {
+        Text("完成任务后，这里会展示最接近解锁的成就", fontSize = 14.sp, color = TextSecondary)
+    }
+}
+
+@Composable
+private fun AchievementListCard(
     achievements: List<AchievementProgress>,
     onAchievementClick: (AchievementProgress) -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = BgCard),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        border = BorderStroke(1.dp, Border)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            achievements.forEach { progress ->
-                AchievementBadgeCard(
-                    progress = progress,
-                    onClick = { onAchievementClick(progress) }
-                )
-            }
+        achievements.forEachIndexed { index, progress ->
+            AchievementRow(progress, onClick = { onAchievementClick(progress) })
+            if (index != achievements.lastIndex) HorizontalDivider(color = Border, modifier = Modifier.padding(start = 58.dp))
         }
     }
 }
-
-// ── 单个成就卡片 ──
 
 @Composable
-private fun AchievementBadgeCard(
-    progress: AchievementProgress,
-    onClick: () -> Unit
+private fun CategoryCard(
+    category: AchievementCategory,
+    achievements: List<AchievementProgress>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onAchievementClick: (AchievementProgress) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .width(76.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
     ) {
-        // 图标圆形底板
-        Box(
-            modifier = Modifier
-                .size(60.dp)
-                .clip(CircleShape)
-                .background(getTierBackgroundColor(progress.type.tier, progress.isUnlocked))
-                .alpha(if (progress.isUnlocked) 1f else 0.5f),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onToggle).padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (progress.isUnlocked) progress.type.icon else "🔒",
-                fontSize = 26.sp
+            CategoryIcon(category = category, unlocked = achievements.any { it.isUnlocked })
+            Spacer(Modifier.width(10.dp))
+            Text(category.displayName, modifier = Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            Text("${achievements.count { it.isUnlocked }} / ${achievements.size}", fontSize = 13.sp, color = TextSecondary)
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                painter = painterResource(R.drawable.icon_detail_chevron),
+                contentDescription = if (expanded) "收起" else "展开",
+                tint = TextMuted,
+                modifier = Modifier.size(16.dp).rotate(if (expanded) 90f else 0f)
             )
         }
-
-        // 成就名称
-        Text(
-            text = progress.type.displayName,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (progress.isUnlocked) TextPrimary else TextMuted,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = 14.sp
-        )
-
-        // 进度文字 / 完成标记
-        if (progress.isUnlocked) {
-            Text(
-                text = "已解锁",
-                fontSize = 10.sp,
-                color = Success,
-                fontWeight = FontWeight.Medium
-            )
-        } else {
-            // 进度数字
-            Text(
-                text = "${progress.currentValue}/${progress.type.threshold}",
-                fontSize = 10.sp,
-                color = TextMuted
-            )
-            // 进度条
-            if (progress.type.threshold > 1) {
-                LinearProgressIndicator(
-                    progress = { progress.progress },
-                    modifier = Modifier
-                        .width(52.dp)
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = getTierAccentColor(progress.type.tier),
-                    trackColor = Color(0xFFEEEEEE)
-                )
+        if (expanded) {
+            HorizontalDivider(color = Border)
+            achievements.forEachIndexed { index, progress ->
+                AchievementRow(progress, onClick = { onAchievementClick(progress) })
+                if (index != achievements.lastIndex) HorizontalDivider(color = Border, modifier = Modifier.padding(start = 58.dp))
             }
         }
     }
 }
 
-// ── 成就详情卡牌弹窗 ──
+@Composable
+private fun AchievementRow(progress: AchievementProgress, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CategoryIcon(progress.type.category, progress.isUnlocked)
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(progress.type.displayName, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Spacer(Modifier.width(6.dp))
+                TierLabel(progress.type.tier)
+            }
+            Text(progress.type.description, fontSize = 12.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (!progress.isUnlocked) {
+                LinearProgressIndicator(
+                    progress = { progress.progress },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color = Primary,
+                    trackColor = Border
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        if (progress.isUnlocked) {
+            Icon(painterResource(R.drawable.icon_achievement_check), "已解锁", tint = Success, modifier = Modifier.size(22.dp))
+        } else {
+            Text("${progress.currentValue}/${progress.type.threshold}", fontSize = 12.sp, color = TextMuted)
+        }
+    }
+}
+
+@Composable
+private fun CategoryIcon(category: AchievementCategory, unlocked: Boolean) {
+    Box(
+        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(if (unlocked) Primary.copy(alpha = 0.12f) else Border.copy(alpha = 0.65f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painter = painterResource(category.iconRes()),
+            contentDescription = category.displayName,
+            tint = if (unlocked) Primary else TextMuted,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun TierLabel(tier: AchievementTier) {
+    Surface(shape = RoundedCornerShape(4.dp), color = tierColor(tier).copy(alpha = 0.12f)) {
+        Text("${tier.displayName}级", modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp), fontSize = 10.sp, color = tierColor(tier))
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AchievementDetailSheet(
-    progress: AchievementProgress,
-    onDismiss: () -> Unit
-) {
-    val type = progress.type
-    val tierColor = getTierAccentColor(type.tier)
-    val tierBgColor = getTierBackgroundColor(type.tier, progress.isUnlocked)
-
+private fun AchievementDetailSheet(progress: AchievementProgress, onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = BgCard,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        dragHandle = {
-            Surface(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = Color.Transparent
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 32.dp, height = 4.dp)
-                        .background(
-                            color = Color(0xFFE0E0E0),
-                            shape = RoundedCornerShape(2.dp)
-                        )
-                )
-            }
-        }
+        shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+        dragHandle = null
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // ── 顶部：大图标 + 渐变背景 ──
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = if (progress.isUnlocked) {
-                                listOf(
-                                    tierColor.copy(alpha = 0.15f),
-                                    tierColor.copy(alpha = 0.05f),
-                                    Color.Transparent
-                                )
-                            } else {
-                                listOf(
-                                    Color(0xFFF5F5F5),
-                                    Color(0xFFFAFAFA),
-                                    Color.Transparent
-                                )
-                            }
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    // 大图标
-                    Box(
-                        modifier = Modifier
-                            .size(88.dp)
-                            .clip(CircleShape)
-                            .background(tierBgColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (progress.isUnlocked) type.icon else "🔒",
-                            fontSize = 44.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // 成就名称
-                    Text(
-                        text = type.displayName,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (progress.isUnlocked) TextPrimary else TextMuted
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CategoryIcon(progress.type.category, progress.isUnlocked)
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(progress.type.displayName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text("${progress.type.category.displayName} · ${progress.type.tier.displayName}级", fontSize = 13.sp, color = TextSecondary)
                 }
+                if (progress.isUnlocked) Icon(painterResource(R.drawable.icon_achievement_check), "已解锁", tint = Success, modifier = Modifier.size(24.dp))
             }
-
-            // ── 等级徽章 ──
-            Row(
-                modifier = Modifier.padding(bottom = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // 等级标识
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (progress.isUnlocked) tierColor.copy(alpha = 0.15f) else Color(0xFFF0F0F0)
-                ) {
-                    Text(
-                        text = getTierBadge(type.tier),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (progress.isUnlocked) tierColor else TextMuted
-                    )
-                }
-
-                Text(
-                    text = "·",
-                    fontSize = 14.sp,
-                    color = TextMuted
-                )
-
-                // 所属系列
-                Text(
-                    text = "${type.category.icon} ${type.category.displayName}",
-                    fontSize = 13.sp,
-                    color = TextSecondary
-                )
-            }
-
-            // ── 信息卡片区域 ──
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 获取条件
-                DetailInfoCard(
-                    icon = "📋",
-                    title = "获取条件",
-                    content = type.description
-                )
-
-                // 当前进度
-                DetailInfoCard(
-                    icon = "📊",
-                    title = "当前进度"
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${progress.currentValue} / ${type.threshold}",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "${(progress.progress * 100).toInt()}%",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (progress.isUnlocked) Success else tierColor
-                            )
-                        }
-
-                        LinearProgressIndicator(
-                            progress = { progress.progress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                            color = if (progress.isUnlocked) Success else tierColor,
-                            trackColor = Color(0xFFEEEEEE)
-                        )
-                    }
-                }
-
-                // 解锁状态
-                DetailInfoCard(
-                    icon = if (progress.isUnlocked) "🎯" else "🔒",
-                    title = "解锁状态"
-                ) {
-                    if (progress.isUnlocked) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Success.copy(alpha = 0.12f)
-                            ) {
-                                Text(
-                                    text = "已解锁",
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Success
-                                )
-                            }
-                            progress.formattedUnlockTime?.let { time ->
-                                Text(
-                                    text = time,
-                                    fontSize = 12.sp,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "未解锁",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = TextMuted
-                            )
-                            progress.remainingText?.let { remaining ->
-                                Text(
-                                    text = remaining,
-                                    fontSize = 13.sp,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 小贴士
-                DetailInfoCard(
-                    icon = "💡",
-                    title = "小贴士",
-                    content = type.tip,
-                    contentColor = TextSecondary
-                )
-            }
+            HorizontalDivider(color = Border)
+            DetailBlock("解锁条件", progress.type.description)
+            DetailBlock("当前进度", "${progress.currentValue} / ${progress.type.threshold}")
+            LinearProgressIndicator(
+                progress = { progress.progress },
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                color = if (progress.isUnlocked) Success else Primary,
+                trackColor = Border
+            )
+            DetailBlock(
+                if (progress.isUnlocked) "解锁时间" else "距离解锁",
+                if (progress.isUnlocked) progress.formattedUnlockTime ?: "已解锁" else progress.remainingText ?: "继续保持"
+            )
+            DetailBlock("建议", progress.type.tip)
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Primary)
+            ) { Text("关闭", color = Color.White, fontWeight = FontWeight.SemiBold) }
         }
     }
 }
 
-/**
- * 详情信息卡片（通用组件）
- */
 @Composable
-private fun DetailInfoCard(
-    icon: String,
-    title: String,
-    content: String? = null,
-    contentColor: Color = TextPrimary,
-    customContent: (@Composable () -> Unit)? = null
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = BgPrimary),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(text = icon, fontSize = 14.sp)
-                Text(
-                    text = title,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextSecondary
-                )
-            }
-
-            if (content != null) {
-                Text(
-                    text = content,
-                    fontSize = 14.sp,
-                    color = contentColor,
-                    lineHeight = 20.sp
-                )
-            }
-
-            customContent?.invoke()
-        }
+private fun DetailBlock(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, fontSize = 12.sp, color = TextMuted)
+        Text(value, fontSize = 14.sp, color = TextPrimary, lineHeight = 20.sp)
     }
 }
 
-/**
- * 获取等级徽章文本
- */
-private fun getTierBadge(tier: AchievementTier): String {
-    return when (tier) {
-        AchievementTier.BRONZE -> "🥉 铜牌"
-        AchievementTier.SILVER -> "🥈 银牌"
-        AchievementTier.GOLD -> "🥇 金牌"
-        AchievementTier.DIAMOND -> "💎 钻石"
-    }
-}
-
-// ── 新解锁庆祝弹窗 ──
-
 @Composable
-private fun UnlockCelebrationDialog(
-    achievements: List<AchievementType>,
-    onDismiss: () -> Unit
-) {
-    var visible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        visible = true
-        delay(3000)
-        visible = false
-        delay(300)
-        onDismiss()
-    }
-
+private fun UnlockCelebrationDialog(achievements: List<AchievementType>, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut()
+        Card(
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = BgCard),
+            border = BorderStroke(1.dp, Border)
         ) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = BgCard),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(text = "🎉", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "成就解锁！",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    achievements.take(3).forEach { type ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                                .background(
-                                    color = getTierBackgroundColor(type.tier, true),
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = type.icon, fontSize = 24.sp)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = type.displayName,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = type.description,
-                                    fontSize = 12.sp,
-                                    color = TextSecondary
-                                )
-                            }
+                Icon(painterResource(R.drawable.icon_mine_achievement), null, tint = Primary, modifier = Modifier.size(40.dp))
+                Text("成就已解锁", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                achievements.take(3).forEach { type ->
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        CategoryIcon(type.category, true)
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(type.displayName, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            Text(type.description, fontSize = 12.sp, color = TextSecondary)
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(25.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Primary,
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Text(text = "太棒了", fontSize = 15.sp)
-                    }
                 }
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) { Text("知道了", color = Color.White, fontWeight = FontWeight.SemiBold) }
             }
         }
     }
 }
 
-// ── 辅助函数：等级颜色 ──
-
-private fun getTierBackgroundColor(tier: AchievementTier, isUnlocked: Boolean): Color {
-    if (!isUnlocked) return Color(0xFFF0F0F0)
-    return when (tier) {
-        AchievementTier.BRONZE  -> Color(0xFFCD7F32).copy(alpha = 0.18f)
-        AchievementTier.SILVER  -> Color(0xFFC0C0C0).copy(alpha = 0.25f)
-        AchievementTier.GOLD    -> Color(0xFFFFD700).copy(alpha = 0.20f)
-        AchievementTier.DIAMOND -> Color(0xFF00BCD4).copy(alpha = 0.18f)
+@Composable
+private fun AchievementLoadingState() {
+    Column(modifier = Modifier.fillMaxSize().padding(top = 5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        repeat(4) {
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(if (it == 0) 104.dp else 64.dp).clip(RoundedCornerShape(8.dp)).background(Border.copy(alpha = 0.5f)))
+        }
     }
 }
 
-private fun getTierAccentColor(tier: AchievementTier): Color {
-    return when (tier) {
-        AchievementTier.BRONZE  -> Color(0xFFCD7F32)
-        AchievementTier.SILVER  -> Color(0xFF9E9E9E)
-        AchievementTier.GOLD    -> Color(0xFFFFC107)
-        AchievementTier.DIAMOND -> Color(0xFF00BCD4)
+@Composable
+private fun AchievementErrorState(message: String?, onRetry: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("成就数据加载失败", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            if (!message.isNullOrBlank()) Text(message, fontSize = 13.sp, color = TextSecondary, textAlign = TextAlign.Center)
+            Button(onClick = onRetry, shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = Primary)) { Text("重新加载") }
+        }
     }
+}
+
+@Composable
+private fun BorderedCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = BgCard),
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp), content = content)
+    }
+}
+
+@DrawableRes
+private fun AchievementCategory.iconRes(): Int = when (this) {
+    AchievementCategory.TASK_MASTER -> R.drawable.icon_achievement_task
+    AchievementCategory.PERSISTENCE -> R.drawable.icon_achievement_streak
+    AchievementCategory.EFFICIENCY -> R.drawable.icon_achievement_efficiency
+    AchievementCategory.VERSATILE -> R.drawable.icon_achievement_versatile
+    AchievementCategory.MILESTONE -> R.drawable.icon_achievement_milestone
+}
+
+private fun tierColor(tier: AchievementTier): Color = when (tier) {
+    AchievementTier.BRONZE -> Color(0xFF9A6A3A)
+    AchievementTier.SILVER -> Color(0xFF728196)
+    AchievementTier.GOLD -> Color(0xFFB57A00)
+    AchievementTier.DIAMOND -> Color(0xFF008FA8)
 }

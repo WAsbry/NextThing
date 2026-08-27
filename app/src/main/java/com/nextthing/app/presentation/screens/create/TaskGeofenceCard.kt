@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
@@ -15,10 +16,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextthing.app.R
 import com.nextthing.app.domain.model.GeofenceLocation
+import com.nextthing.app.presentation.components.geofence.GeofenceEmptyCopy
+import com.nextthing.app.presentation.components.geofence.GeofenceLocationSummary
 import com.nextthing.app.presentation.theme.*
 
 /**
@@ -73,10 +78,11 @@ fun TaskGeofenceCard(
                     .padding(top = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "🛡️",
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(end = 8.dp)
+                Icon(
+                    painter = painterResource(R.drawable.icon_mine_geofence),
+                    contentDescription = null,
+                    tint = Primary,
+                    modifier = Modifier.padding(end = 8.dp).size(18.dp)
                 )
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -181,12 +187,21 @@ private fun GeofenceConfigBottomSheet(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "🛡️ 地理围栏配置",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(R.drawable.icon_mine_geofence),
+                    contentDescription = null,
+                    tint = Primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "地理围栏配置",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
             TextButton(onClick = onDismiss) {
                 Text("完成", color = Primary)
             }
@@ -261,16 +276,27 @@ private fun GeofenceConfigBottomSheet(
                                 color = TextPrimary,
                                 fontWeight = FontWeight.Medium
                             )
-                            Text(
-                                text = "⚙️ 地理围栏设置",
+                            Row(
                                 modifier = Modifier.clickable {
                                     onNavigateToGeofenceSettings()
                                     onDismiss()
                                 },
-                                color = Primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.icon_geofence_settings),
+                                    contentDescription = null,
+                                    tint = Primary,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "地理围栏设置",
+                                    color = Primary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                     }
 
@@ -289,45 +315,12 @@ private fun GeofenceConfigBottomSheet(
                                 colors = RadioButtonDefaults.colors(selectedColor = Primary)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (location.isFrequent) {
-                                        Text(text = "⭐", fontSize = 12.sp)
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                    }
-                                    Text(
-                                        text = location.locationInfo.locationName.ifEmpty { "未命名地点" },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (selectedLocationId == location.id) Primary else TextPrimary,
-                                        fontWeight = if (selectedLocationId == location.id) FontWeight.Medium else FontWeight.Normal,
-                                        fontSize = 14.sp
-                                    )
-                                }
-                                if (location.locationInfo.address.isNotEmpty()) {
-                                    Text(
-                                        text = location.locationInfo.address.take(30) + if (location.locationInfo.address.length > 30) "..." else "",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextMuted,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = "半径: ${location.customRadius ?: defaultRadius}m",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSecondary,
-                                        fontSize = 10.sp
-                                    )
-                                    if (location.usageCount > 0) {
-                                        Text(
-                                            text = "• 使用${location.usageCount}次",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextMuted,
-                                            fontSize = 10.sp
-                                        )
-                                    }
-                                }
-                            }
+                            GeofenceLocationSummary(
+                                location = location,
+                                defaultRadius = defaultRadius,
+                                selected = selectedLocationId == location.id,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
 
@@ -372,7 +365,9 @@ private fun GeofenceConfigBottomSheet(
                             ),
                             border = BorderStroke(1.dp, Primary)
                         ) {
-                            Text("➕ 添加新地点", fontSize = 14.sp)
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("添加新地点", fontSize = 14.sp)
                         }
                     }
 
@@ -405,28 +400,23 @@ private fun NoLocationsHint(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(text = "📍", fontSize = 36.sp)
-
-            Text(
-                text = "还没有可用的地理围栏地点",
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextPrimary,
-                fontWeight = FontWeight.Medium
+            Icon(
+                painter = painterResource(R.drawable.icon_mine_geofence),
+                contentDescription = null,
+                tint = Primary,
+                modifier = Modifier.size(32.dp)
             )
 
-            Text(
-                text = "请先添加地理围栏地点，以便在到达时自动提醒",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
-                fontSize = 12.sp
-            )
+            GeofenceEmptyCopy()
 
             Button(
                 onClick = onNavigateToAddLocation,
                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("前往添加地点", fontSize = 14.sp)
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("添加地点", fontSize = 14.sp)
             }
         }
     }

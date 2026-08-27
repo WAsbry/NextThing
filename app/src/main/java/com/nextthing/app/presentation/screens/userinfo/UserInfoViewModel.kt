@@ -94,7 +94,7 @@ class UserInfoViewModel @Inject constructor(
     private fun loadAchievements() {
         viewModelScope.launch {
             try {
-                val (achievements, _) = achievementUseCases.checkAndUnlock()
+                val achievements = achievementUseCases.getAchievements()
                 _uiState.update {
                     it.copy(
                         unlockedAchievementsCount = achievements.count { progress -> progress.isUnlocked },

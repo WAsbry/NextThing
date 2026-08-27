@@ -262,22 +262,22 @@ class CreateGeofenceLocationUseCase @Inject constructor(
 
             Timber.tag(TAG).d("✅ 创建地理围栏地点成功: ${location.id}")
 
-            // 2. 注册到系统地理围栏
+            // 2. 仅在全局服务和地点均启用时注册围栏
             val config = configRepository.getConfigOrDefault()
-            val radius = (location.customRadius ?: config.defaultRadius).toFloat()
+            if (config.isGlobalEnabled && location.isEnabled) {
+                val radius = (location.customRadius ?: config.defaultRadius).toFloat()
+                val registerResult = geofenceManager.registerGeofence(
+                    locationId = location.locationInfo.id,
+                    latitude = location.locationInfo.latitude,
+                    longitude = location.locationInfo.longitude,
+                    radius = radius
+                )
 
-            val registerResult = geofenceManager.registerGeofence(
-                locationId = location.locationInfo.id,
-                latitude = location.locationInfo.latitude,
-                longitude = location.locationInfo.longitude,
-                radius = radius
-            )
-
-            if (registerResult.isSuccess) {
-                Timber.tag(TAG).d("✅ 系统地理围栏注册成功")
-            } else {
-                Timber.tag(TAG).w("⚠️ 系统地理围栏注册失败: ${registerResult.exceptionOrNull()?.message}")
-                // 注意: 即使系统围栏注册失败，数据库记录已保存，不回滚
+                if (registerResult.isSuccess) {
+                    Timber.tag(TAG).d("✅ 系统地理围栏注册成功")
+                } else {
+                    Timber.tag(TAG).w("⚠️ 系统地理围栏注册失败: ${registerResult.exceptionOrNull()?.message}")
+                }
             }
 
             result
@@ -314,23 +314,29 @@ class UpdateGeofenceLocationUseCase @Inject constructor(
                 }
             }
 
-            // 获取旧的地点信息,检查半径是否改变
+            val config = configRepository.getConfigOrDefault()
+            // 获取旧的地点信息，判断注册状态与半径是否改变。
             val oldLocation = locationRepository.getLocationByIdOnce(location.id)
             val radiusChanged = oldLocation?.let {
-                val oldRadius = it.customRadius ?: configRepository.getConfigOrDefault().defaultRadius
-                val newRadius = location.customRadius ?: configRepository.getConfigOrDefault().defaultRadius
+                val oldRadius = it.customRadius ?: config.defaultRadius
+                val newRadius = location.customRadius ?: config.defaultRadius
                 oldRadius != newRadius
             } ?: false
+            val wasRegistered = config.isGlobalEnabled && oldLocation?.isEnabled == true
+            val shouldRegister = config.isGlobalEnabled && location.isEnabled
 
             // 1. 更新数据库
             locationRepository.update(location)
             Timber.tag(TAG).d("✅ 更新地理围栏地点成功: ${location.id}")
 
-            // 2. 如果半径改变,需要重新注册系统地理围栏
-            if (radiusChanged) {
-                Timber.tag(TAG).d("📍 半径已改变,重新注册系统地理围栏")
-
-                val config = configRepository.getConfigOrDefault()
+            // 2. 地点关闭时注销；首次开启或半径改变时注册/更新。
+            when {
+                wasRegistered && !shouldRegister -> {
+                    geofenceManager.removeGeofence(oldLocation!!.locationInfo.id)
+                    Timber.tag(TAG).d("⏹️ 地点围栏已注销")
+                }
+                shouldRegister && (!wasRegistered || radiusChanged) -> {
+                    Timber.tag(TAG).d("📍 注册或更新系统地理围栏")
                 val radius = (location.customRadius ?: config.defaultRadius).toFloat()
 
                 val registerResult = geofenceManager.registerGeofence(
@@ -344,6 +350,7 @@ class UpdateGeofenceLocationUseCase @Inject constructor(
                     Timber.tag(TAG).d("✅ 系统地理围栏重新注册成功")
                 } else {
                     Timber.tag(TAG).w("⚠️ 系统地理围栏重新注册失败: ${registerResult.exceptionOrNull()?.message}")
+                }
                 }
             }
 
