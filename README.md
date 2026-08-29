@@ -165,12 +165,32 @@ Before publishing a build, verify on a real device:
 
 ### Documentation / 文档
 
-Only these repository-root documents are maintained:
+Core project documentation is kept at the repository root:
 
 - [项目说明.md](项目说明.md): product and user-facing capability guide.
 - `README.md`: setup and running guide.
 - [项目技术说明.md](项目技术说明.md): technical and design reference.
 - [更新日志.md](更新日志.md): meaningful product changes and fixes.
+
+Open-source governance files are maintained separately from the project
+documentation:
+
+- [LICENSE](LICENSE): project license.
+- [NOTICE](NOTICE): third-party attribution notes.
+- [PRIVACY.md](PRIVACY.md): data, permissions, and network-service boundary.
+- [CONTRIBUTING.md](CONTRIBUTING.md): contribution and verification guide.
+- [SECURITY.md](SECURITY.md): private vulnerability-reporting path.
+
+## Release checklist / 发布前检查
+
+Before publishing a GitHub Release, build and test the exact commit on a real
+device, create a signed APK, and publish its SHA-256 checksum together with the
+release notes. Never attach a keystore, API key, model asset, native runtime, or
+unredacted device log to a release.
+
+```powershell
+Get-FileHash .\app\build\outputs\apk\release\NextThing-release.apk -Algorithm SHA256
+```
 
 ## License
 

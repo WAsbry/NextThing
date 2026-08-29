@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible problem in NextThing
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include API keys, tokens, exact locations, personal task text, or unredacted logs."
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version

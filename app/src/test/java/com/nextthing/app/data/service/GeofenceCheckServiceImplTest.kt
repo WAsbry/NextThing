@@ -167,7 +167,9 @@ class GeofenceCheckServiceImplTest {
                 locationName = "办公室",
                 latitude = 31.2304,
                 longitude = 121.4737
-            )
+            ),
+            // 检查服务只处理启用中的地点；默认值为 false，测试需显式描述前置条件。
+            isEnabled = true
         )
         return TaskGeofence(
             id = "geofence-$taskId",

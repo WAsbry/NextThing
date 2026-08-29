@@ -1,0 +1,17 @@
+# Copy this file to local.properties and fill only the values you need.
+# local.properties is intentionally ignored by Git.
+
+# Android SDK path. Required to build locally.
+sdk.dir=/path/to/Android/Sdk
+
+# Required for AMap current-location, map picker, POI search and reverse geocoding.
+AMAP_API_KEY=
+
+# Required for account, sync, weather and enabled remote-AI endpoints.
+# Must end with a slash.
+BACKEND_BASE_URL=https://your-backend.example/
+
+# Required only when you prepare a signed release APK.
+RELEASE_STORE_PASSWORD=
+RELEASE_KEY_ALIAS=
+RELEASE_KEY_PASSWORD=

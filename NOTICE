@@ -1,0 +1,30 @@
+# Third-party notices
+
+NextThing contains and depends on third-party components. Their respective
+licenses remain applicable; this file does not replace them.
+
+## Vendored sherpa-onnx Android bindings
+
+Source files under `app/src/main/java/com/k2fsa/sherpa/onnx/` originate from
+[k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), which is licensed
+under the Apache License 2.0. The upstream license and any applicable upstream
+notice requirements must be retained when these files or their derived binaries
+are redistributed.
+
+## Optional voice models
+
+The repository does not distribute voice-model files. The README points to
+SenseVoice as an optional model source; its model, conversion, and runtime
+artifacts must be obtained and redistributed only under their own applicable
+licenses and terms.
+
+## SDKs and dependency artifacts
+
+AndroidX, Kotlin, Jetpack Compose, Room, Hilt, Retrofit, OkHttp, AMap, QNN,
+LiteRT and other libraries are resolved from their upstream publishers during
+the build. Refer to the dependency metadata and each upstream project for their
+current licenses and notices.
+
+Before a production release, maintainers must run a dependency-license review
+for the exact release artifact and update this file if additional attributions
+are required.
