@@ -25,6 +25,11 @@
 -verbose
 -printmapping proguardMapping.txt
 
+# AMap SDK 会在运行时按设备能力探测这些可选实现；当前依赖版本不包含它们。
+# 发布构建压缩时无需保留或打包这些类。
+-dontwarn com.amap.ams.gnss.GnssSoftLocator
+-dontwarn net.jafama.FastMath
+
 # 指定混淆时采用的算法，后面的参数是一个过滤器
 # 这个过滤器是谷歌推荐的算法，一般不改变
 -optimizations !code/simplification/arithmetic,!field/*,!class/merging/*

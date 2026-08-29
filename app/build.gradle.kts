@@ -30,7 +30,11 @@ check(backendBaseUrl.endsWith('/')) {
     "BACKEND_BASE_URL must end with '/'."
 }
 
-val releaseKeystoreFile = file("release.keystore")
+val releaseKeystorePath = localProperties.getProperty("RELEASE_STORE_FILE")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "release.keystore"
+val releaseKeystoreFile = file(releaseKeystorePath)
 val releaseStorePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD").orEmpty()
 val releaseKeyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS").orEmpty()
 val releaseKeyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD").orEmpty()

@@ -111,6 +111,7 @@ AMAP_API_KEY=your_amap_key
 BACKEND_BASE_URL=https://your-backend-base-url/
 
 # Required only for signed release builds
+RELEASE_STORE_FILE=nextthing-release-2026.jks
 RELEASE_STORE_PASSWORD=your_password
 RELEASE_KEY_PASSWORD=your_password
 RELEASE_KEY_ALIAS=your_alias

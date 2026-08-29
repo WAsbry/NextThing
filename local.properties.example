@@ -12,6 +12,7 @@ AMAP_API_KEY=
 BACKEND_BASE_URL=https://your-backend.example/
 
 # Required only when you prepare a signed release APK.
+RELEASE_STORE_FILE=nextthing-release-2026.jks
 RELEASE_STORE_PASSWORD=
 RELEASE_KEY_ALIAS=
 RELEASE_KEY_PASSWORD=
