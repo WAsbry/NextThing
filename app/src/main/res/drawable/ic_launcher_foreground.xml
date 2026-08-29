@@ -6,10 +6,6 @@
     android:viewportHeight="108">
 
     <!-- 圆角方块底板（稍深紫蓝，形成层次） -->
-    <path
-        android:pathData="M26,22 h56 a8,8 0 0 1 8,8 v48 a8,8 0 0 1 -8,8 h-56 a8,8 0 0 1 -8,-8 v-48 a8,8 0 0 1 8,-8 z"
-        android:fillColor="#5A4BD1" />
-
     <!-- N 字母（白色） -->
     <!-- N: 左竖线 -->
     <path

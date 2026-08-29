@@ -6,6 +6,6 @@
     android:viewportHeight="108">
     <!-- AI 紫蓝渐变背景 -->
     <path
-        android:fillColor="#6C5CE7"
+        android:fillColor="#0A84FF"
         android:pathData="M0,0h108v108h-108z" />
 </vector>
