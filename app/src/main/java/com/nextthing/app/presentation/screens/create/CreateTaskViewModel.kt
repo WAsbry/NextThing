@@ -936,8 +936,8 @@ internal fun AIRouteStatus.toCreateTaskRouteUi(): CreateTaskRouteUi = when (mode
         detailText = "使用本机 API Key 自动整理语音/文字任务"
     )
     AIRouteMode.BackendFallback -> CreateTaskRouteUi(
-        statusText = "服务端 AI 已启用",
-        detailText = "已登录，可直接自动整理语音/文字任务"
+        statusText = "服务端 AI 待验证",
+        detailText = "已登录。本机未配置 API Key，首次使用时将检查服务端 AI 是否可用"
     )
     AIRouteMode.Unavailable -> CreateTaskRouteUi(
         statusText = "AI 解析未启用",

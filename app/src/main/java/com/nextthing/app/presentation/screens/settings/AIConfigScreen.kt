@@ -194,7 +194,7 @@ class AIConfigViewModel @Inject constructor(
                         AIRouteMode.ExternalProvider ->
                             "当前优先使用你本机保存的 API Key，直接调用外接模型。"
                         AIRouteMode.BackendFallback ->
-                            "当前未配置本机 API Key，会回退到登录态下的服务端 AI。"
+                            "已登录。本机未配置 API Key，首次使用时将检查服务端 AI 是否可用。"
                         AIRouteMode.Unavailable ->
                             "当前既没有 API Key，也没有可用登录态；AI 能力暂不可用。"
                     }
@@ -500,7 +500,7 @@ fun AIConfigScreen(
                     CurrentAiStatusCard(
                         label = uiState.routeLabel,
                         description = uiState.routeDescription,
-                        available = uiState.isAiAvailable,
+                        routeMode = uiState.routeMode,
                         usingLocalKey = uiState.isEnabled
                     )
                 }
@@ -579,9 +579,14 @@ private fun AIConfigTopBar(onBackPressed: () -> Unit) {
 private fun CurrentAiStatusCard(
     label: String,
     description: String,
-    available: Boolean,
+    routeMode: AIRouteMode,
     usingLocalKey: Boolean
 ) {
+    val statusColor = when (routeMode) {
+        AIRouteMode.ExternalProvider -> Primary
+        AIRouteMode.BackendFallback -> Primary.copy(alpha = 0.62f)
+        AIRouteMode.Unavailable -> AiMuted
+    }
     ConfigCard {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
@@ -592,7 +597,7 @@ private fun CurrentAiStatusCard(
                 modifier = Modifier
                     .size(10.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(if (available) Primary else AiMuted)
+                    .background(statusColor)
             )
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -904,13 +909,9 @@ private fun PrivacyNote() {
         text = "API Key 仅保存在本机设备，用于直接调用 DeepSeek。",
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(BgCard)
-            .border(1.dp, Border, RoundedCornerShape(8.dp))
-            .padding(horizontal = 13.dp, vertical = 12.dp),
+            .padding(start = 4.dp, end = 4.dp, top = 14.dp, bottom = 2.dp),
         color = TextSecondary,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         lineHeight = 18.sp
     )
 }

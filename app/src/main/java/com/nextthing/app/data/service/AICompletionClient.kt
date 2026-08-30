@@ -39,7 +39,7 @@ data class AIRouteStatus(
     val userLabel: String
         get() = when (mode) {
             AIRouteMode.ExternalProvider -> "${provider.displayName} · $model"
-            AIRouteMode.BackendFallback -> "服务端 AI"
+            AIRouteMode.BackendFallback -> "服务端 AI 待验证"
             AIRouteMode.Unavailable -> "AI 未配置"
         }
 }
