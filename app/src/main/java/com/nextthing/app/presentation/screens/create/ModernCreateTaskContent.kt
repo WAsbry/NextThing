@@ -98,6 +98,14 @@ internal fun ModernCreateTaskContent(
 ) {
     var inputMode by remember { mutableStateOf(CreateInputMode.Voice) }
     var showAdvanced by remember { mutableStateOf(false) }
+    var isDetailedEditing by remember { mutableStateOf(false) }
+
+    val enterDetailedEditing = {
+        // applyAIResult writes the parsed values into the same CreateTaskUiState
+        // consumed by the complete form below, then exits the confirmation state.
+        isDetailedEditing = true
+        onApplyAIResult()
+    }
 
     Column(
         modifier = Modifier
@@ -134,10 +142,7 @@ internal fun ModernCreateTaskContent(
                     SingleTaskConfirmation(
                         result = uiState.aiParseResult,
                         voiceEmotionHint = uiState.voiceEmotionHint,
-                        showAdvanced = showAdvanced,
-                        onToggleAdvanced = { showAdvanced = !showAdvanced },
-                        onEdit = onApplyAIResult,
-                        advancedContent = advancedContent
+                        onEdit = enterDetailedEditing,
                     )
                 }
                 else -> {
@@ -147,8 +152,10 @@ internal fun ModernCreateTaskContent(
                         selectedDate = uiState.selectedDate,
                         preciseTime = uiState.preciseTime,
                         voiceEmotionHint = uiState.voiceEmotionHint,
+                        showTaskDetails = isDetailedEditing,
                         onModeChange = { inputMode = it },
-                        onTitleChange = onTitleChange
+                        onTitleChange = onTitleChange,
+                        detailsContent = advancedContent
                     )
                 }
             }
@@ -178,9 +185,9 @@ internal fun ModernCreateTaskContent(
             }
             uiState.showAIResult && uiState.aiParseResult != null -> {
                 ConfirmationBottomBar(
-                    secondaryText = "修改",
+                    secondaryText = "编辑详情",
                     primaryText = "保存任务",
-                    onSecondary = onApplyAIResult,
+                    onSecondary = enterDetailedEditing,
                     onPrimary = onSaveAIResult
                 )
             }
@@ -297,8 +304,13 @@ private fun AIAutoParseStatusBar(
 
 @Composable
 private fun StatusBadge(mode: AIRouteMode, status: String) {
-    val isAvailable = mode != AIRouteMode.Unavailable
-    val statusColor = if (isAvailable) Success else Danger
+    val isVerifiedAvailable = mode == AIRouteMode.ExternalProvider
+    val isPendingVerification = mode == AIRouteMode.BackendFallback
+    val statusColor = when {
+        isVerifiedAvailable -> Success
+        isPendingVerification -> ModernBlue
+        else -> Danger
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -314,16 +326,27 @@ private fun StatusBadge(mode: AIRouteMode, status: String) {
         Surface(
             modifier = Modifier.size(18.dp),
             shape = CircleShape,
-            color = if (isAvailable) Success else Danger.copy(alpha = 0.12f),
-            border = if (isAvailable) null else BorderStroke(1.dp, Danger)
+            color = when {
+                isVerifiedAvailable -> Success
+                isPendingVerification -> ModernBlue.copy(alpha = 0.12f)
+                else -> Danger.copy(alpha = 0.12f)
+            },
+            border = if (isVerifiedAvailable) null else BorderStroke(1.dp, statusColor)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                if (isAvailable) {
+                if (isVerifiedAvailable) {
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = "AI 已启用",
                         tint = Color.White,
                         modifier = Modifier.size(12.dp)
+                    )
+                } else if (isPendingVerification) {
+                    Text(
+                        text = "·",
+                        color = ModernBlue,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 } else {
                     Text(
@@ -345,8 +368,10 @@ private fun InitialInputState(
     selectedDate: LocalDate?,
     preciseTime: Pair<Int, Int>?,
     voiceEmotionHint: String?,
+    showTaskDetails: Boolean,
     onModeChange: (CreateInputMode) -> Unit,
-    onTitleChange: (String) -> Unit
+    onTitleChange: (String) -> Unit,
+    detailsContent: @Composable () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -434,6 +459,18 @@ private fun InitialInputState(
                 "提醒",
                 preciseTime?.let { "%02d:%02d".format(it.first, it.second) } ?: "无"
             )
+        }
+
+        if (showTaskDetails) {
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = "编辑任务信息",
+                color = ModernInk,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            detailsContent()
         }
     }
 }
@@ -631,10 +668,7 @@ private fun VoiceEmotionHint(text: String) {
 private fun SingleTaskConfirmation(
     result: AITaskParseResult,
     voiceEmotionHint: String?,
-    showAdvanced: Boolean,
-    onToggleAdvanced: () -> Unit,
-    onEdit: () -> Unit,
-    advancedContent: @Composable () -> Unit
+    onEdit: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -678,19 +712,52 @@ private fun SingleTaskConfirmation(
                     showDivider = false
                 )
 
-                MoreSettingsRow(
-                    expanded = showAdvanced,
-                    onClick = {
-                        if (!showAdvanced) onEdit()
-                        onToggleAdvanced()
-                    }
-                )
             }
         }
 
-        if (showAdvanced) {
-            Spacer(modifier = Modifier.height(12.dp))
-            advancedContent()
+        Spacer(modifier = Modifier.height(12.dp))
+        TaskAdjustmentSummary(onClick = onEdit)
+    }
+}
+
+/**
+ * AI 确认态只回答“识别结果是否正确”。其余字段进入独立编辑态，避免同一数据
+ * 同时以摘要和八个网格控件出现，造成相互矛盾的视觉与操作入口。
+ */
+@Composable
+private fun TaskAdjustmentSummary(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = BgCard,
+        border = BorderStroke(1.dp, ModernLine)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "调整更多信息",
+                    color = ModernInk,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "提醒未设置 · 单次任务 · 地点未启用",
+                    color = ModernMuted,
+                    fontSize = 12.sp
+                )
+            }
+            Text(
+                text = "编辑",
+                color = ModernBlue,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
