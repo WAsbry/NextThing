@@ -196,16 +196,16 @@
 # 项目数据模型
 # ====================================================================================================
 # 保留所有domain model类（业务实体类）
--keep class com.example.nextthingb1.domain.model.** { *; }
+-keep class com.nextthing.app.domain.model.** { *; }
 
 # 保留所有data entity类（数据库实体类）
--keep class com.example.nextthingb1.data.local.entity.** { *; }
+-keep class com.nextthing.app.data.local.entity.** { *; }
 
 # 保留所有DTO类（网络传输对象）
--keep class com.example.nextthingb1.data.remote.dto.** { *; }
+-keep class com.nextthing.app.data.remote.dto.** { *; }
 
 # 保留ViewModel的所有UIState类
--keep class com.example.nextthingb1.presentation.**.ui.** { *; }
+-keep class com.nextthing.app.presentation.**.ui.** { *; }
 -keep class **.*UiState { *; }
 -keep class **.*State { *; }
 
@@ -312,6 +312,12 @@
 # DataStore
 -keep class androidx.datastore.** { *; }
 -dontwarn androidx.datastore.**
+
+# Sherpa-ONNX uses JNI to look up Kotlin/Java configuration fields by their
+# original names (for example, OnlineParaformerModelConfig.decoder).  R8
+# obfuscation breaks that native lookup in release builds, so keep this bridge
+# package intact while still allowing the rest of the app to be optimized.
+-keep class com.k2fsa.sherpa.onnx.** { *; }
 
 # ====================================================================================================
 # 额外的代码保护措施

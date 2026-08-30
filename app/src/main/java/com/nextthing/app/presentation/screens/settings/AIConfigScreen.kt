@@ -32,8 +32,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +45,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -81,6 +86,12 @@ import com.nextthing.app.data.service.AIRouteMode
 import com.nextthing.app.presentation.components.AppToastHost
 import com.nextthing.app.presentation.components.AppToastType
 import com.nextthing.app.presentation.components.rememberAppToastHostState
+import com.nextthing.app.presentation.theme.BgCard
+import com.nextthing.app.presentation.theme.BgPrimary
+import com.nextthing.app.presentation.theme.Border
+import com.nextthing.app.presentation.theme.Primary
+import com.nextthing.app.presentation.theme.TextPrimary
+import com.nextthing.app.presentation.theme.TextSecondary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -129,7 +140,8 @@ data class AIConfigUiState(
     val validationMessage: String? = null,
     val actionMessage: String? = null,
     val actionEventId: Long = 0L,
-    val routeLabel: String = "AI 未配置",
+    val routeMode: AIRouteMode = AIRouteMode.Unavailable,
+    val routeLabel: String = "AI 暂不可用",
     val routeDescription: String = "填写 DeepSeek API Key 后，任务解析、简报、周报等 AI 能力会直接使用外接模型。"
 ) {
     val isEnabled: Boolean
@@ -137,6 +149,9 @@ data class AIConfigUiState(
 
     val hasUnsavedChanges: Boolean
         get() = draftApiKey.trim() != savedApiKey.trim()
+
+    val isAiAvailable: Boolean
+        get() = routeMode != AIRouteMode.Unavailable
 }
 
 @HiltViewModel
@@ -173,6 +188,7 @@ class AIConfigViewModel @Inject constructor(
             val status = aiCompletionClient.routeStatus()
             _uiState.update {
                 it.copy(
+                    routeMode = status.mode,
                     routeLabel = status.userLabel,
                     routeDescription = when (status.mode) {
                         AIRouteMode.ExternalProvider ->
@@ -456,40 +472,6 @@ fun AIConfigScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val toastHostState = rememberAppToastHostState()
-    val context = LocalContext.current
-    val view = LocalView.current
-    val density = LocalDensity.current
-    val statusBarTopPx = WindowInsets.statusBars.getTop(density).toFloat()
-    val auraTransition = rememberInfiniteTransition(label = "ai_aura")
-    val auraPulse by auraTransition.animateFloat(
-        initialValue = 0.66f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "aura_pulse"
-    )
-
-    DisposableEffect(view) {
-        val window = context.findActivity()?.window
-        val previousStatusBarColor = window?.statusBarColor
-        val previousLightStatusBar = window?.let {
-            WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars
-        }
-        window?.statusBarColor = AiStatusBar.toArgb()
-        window?.let {
-            WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = true
-        }
-        onDispose {
-            window?.let {
-                previousStatusBarColor?.let { color -> it.statusBarColor = color }
-                previousLightStatusBar?.let { light ->
-                    WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = light
-                }
-            }
-        }
-    }
 
     LaunchedEffect(uiState.actionEventId) {
         uiState.actionMessage?.let { message ->
@@ -499,38 +481,35 @@ fun AIConfigScreen(
     }
 
     Scaffold(
-        containerColor = AiBgMid,
-        contentWindowInsets = WindowInsets(0.dp)
+        containerColor = BgPrimary,
+        topBar = { AIConfigTopBar(onBackPressed = onBackPressed) }
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .aiPageBackground()
+                .background(BgPrimary)
         ) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .aiAuraFrame(uiState.isEnabled, auraPulse, statusBarTopPx)
-            )
-
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
                     .navigationBarsPadding(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 24.dp)
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
             ) {
                 item {
-                    AIConfigTopBar(onBackPressed = onBackPressed)
-                    AIHeroCard(enabled = uiState.isEnabled)
+                    CurrentAiStatusCard(
+                        label = uiState.routeLabel,
+                        description = uiState.routeDescription,
+                        available = uiState.isAiAvailable,
+                        usingLocalKey = uiState.isEnabled
+                    )
                 }
 
                 item {
-                    SectionTitle(title = "DeepSeek API Key", trailing = if (uiState.isEnabled) "已启用" else "未配置")
+                    SectionTitle(title = "本机 API Key（可选）", trailing = if (uiState.isEnabled) "已启用" else "可选")
                     ConfigCard {
                         ConfigField(
-                            label = "粘贴你的 API Key",
+                            label = "DeepSeek API Key",
                             value = uiState.draftApiKey,
                             placeholder = "sk-...",
                             isSecret = true,
@@ -542,22 +521,8 @@ fun AIConfigScreen(
                 }
 
                 item {
-                    SectionTitle(title = "高级设置", trailing = "默认配置")
-                    AdvancedDefaultsCard()
-                }
-
-                item {
-                    SectionTitle(title = "AI 路由", trailing = uiState.routeLabel)
-                    AIRouteStatusCard(
-                        label = uiState.routeLabel,
-                        description = uiState.routeDescription,
-                        enabled = uiState.isEnabled
-                    )
-                }
-
-                item {
-                    SectionTitle(title = "能力范围", trailing = "影响这些功能")
-                    ScopeGridCard()
+                    SectionTitle(title = "AI 可用于", trailing = "")
+                    AiCapabilitySummary()
                 }
 
                 item {
@@ -567,7 +532,9 @@ fun AIConfigScreen(
                     } else {
                         SaveButton(
                             onSave = viewModel::saveConfig,
-                            enabled = uiState.validationState != AIValidationState.Checking
+                            enabled = uiState.draftApiKey.trim().isNotBlank() &&
+                                uiState.hasUnsavedChanges &&
+                                uiState.validationState != AIValidationState.Checking
                         )
                     }
                 }
@@ -589,37 +556,59 @@ fun AIConfigScreen(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun AIConfigTopBar(onBackPressed: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(38.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Surface(
-            modifier = Modifier.size(34.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = Color.White.copy(alpha = 0.72f),
-            border = BorderStroke(1.dp, AiPurple.copy(alpha = 0.10f)),
-            shadowElevation = 2.dp
-        ) {
-            IconButton(onClick = onBackPressed, modifier = Modifier.fillMaxSize()) {
+    TopAppBar(
+        title = {
+            Text("AI 智能助手", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        },
+        navigationIcon = {
+            IconButton(onClick = onBackPressed) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
-                    tint = Color(0xFF372F5A),
-                    modifier = Modifier.size(20.dp)
+                    tint = TextPrimary
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = BgPrimary)
+    )
+}
+
+@Composable
+private fun CurrentAiStatusCard(
+    label: String,
+    description: String,
+    available: Boolean,
+    usingLocalKey: Boolean
+) {
+    ConfigCard {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(if (available) Primary else AiMuted)
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = if (usingLocalKey) "本机 Key 已启用" else label,
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (usingLocalKey) "优先使用本机保存的 DeepSeek API Key" else description,
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
                 )
             }
         }
-        Text(
-            text = "AI 智能助手",
-            color = AiDeep,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Black
-        )
-        Spacer(modifier = Modifier.size(34.dp))
     }
 }
 
@@ -702,7 +691,7 @@ private fun SectionTitle(title: String, trailing: String) {
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(title, color = AiInk, fontSize = 15.sp, fontWeight = FontWeight.Black)
+        Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Text(trailing, color = AiMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -712,9 +701,9 @@ private fun ConfigCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color.White.copy(alpha = 0.82f))
-            .border(1.dp, AiPurple.copy(alpha = 0.10f), RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(BgCard)
+            .border(1.dp, Border, RoundedCornerShape(8.dp))
     ) {
         content()
     }
@@ -730,6 +719,7 @@ private fun ConfigField(
     editable: Boolean = true,
     onValueChange: (String) -> Unit
 ) {
+    var isVisible by remember { mutableStateOf(false) }
     var fieldValue by remember(value) {
         mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
     }
@@ -765,11 +755,22 @@ private fun ConfigField(
                 .padding(top = 7.dp),
             placeholder = { Text(placeholder, color = AiMuted, fontSize = 13.sp) },
             singleLine = true,
-            visualTransformation = if (isSecret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-            shape = RoundedCornerShape(14.dp),
+            visualTransformation = if (isSecret && !isVisible) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            trailingIcon = if (isSecret) {
+                {
+                    IconButton(onClick = { isVisible = !isVisible }) {
+                        Icon(
+                            imageVector = if (isVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (isVisible) "隐藏 API Key" else "显示 API Key",
+                            tint = Primary
+                        )
+                    }
+                }
+            } else null,
+            shape = RoundedCornerShape(8.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = AiPurple,
-                unfocusedBorderColor = AiLine,
+                focusedBorderColor = Primary,
+                unfocusedBorderColor = Border,
                 focusedContainerColor = Color(0xFFF6F7FC).copy(alpha = 0.92f),
                 unfocusedContainerColor = Color(0xFFF6F7FC).copy(alpha = 0.92f),
                 disabledContainerColor = Color(0xFFF6F7FC).copy(alpha = 0.92f),
@@ -778,7 +779,7 @@ private fun ConfigField(
                 disabledTextColor = AiDeep,
                 disabledBorderColor = AiLine,
                 disabledPlaceholderColor = AiMuted,
-                cursorColor = AiPurple
+                cursorColor = Primary
             )
         )
     }
@@ -790,13 +791,26 @@ private fun KeyHelpText(isLocked: Boolean) {
         text = if (isLocked) {
             "AI 增强已启用。为避免误改，API Key 已锁定；如需更换，请先在底部禁用 AI 增强。"
         } else {
-            "只需要粘贴 DeepSeek API Key。模型名称已内置为 deepseek-v4-flash，普通使用不需要填写。"
+            "配置后优先使用本机 Key；默认模型为 DeepSeek · deepseek-v4-flash。"
         },
         modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 13.dp),
         color = AiSub,
         fontSize = 11.sp,
         lineHeight = 17.sp
     )
+}
+
+@Composable
+private fun AiCapabilitySummary() {
+    ConfigCard {
+        Text(
+            text = "任务解析 · 统计洞察 · 本周周报 · 早晚报摘要",
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+            color = TextSecondary,
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+    }
 }
 
 @Composable
@@ -887,15 +901,15 @@ private fun ScopeItem(title: String, subtitle: String, modifier: Modifier = Modi
 @Composable
 private fun PrivacyNote() {
     Text(
-        text = "API Key 仅保存在本地设备，用于后续 AI 能力调用。后续如接入服务端代理，再统一处理限流、脱敏和错误兜底。",
+        text = "API Key 仅保存在本机设备，用于直接调用 DeepSeek。",
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 12.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.58f))
-            .border(1.dp, AiPurple.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(BgCard)
+            .border(1.dp, Border, RoundedCornerShape(8.dp))
             .padding(horizontal = 13.dp, vertical = 12.dp),
-        color = Color(0xFF5F5577),
+        color = TextSecondary,
         fontSize = 11.sp,
         lineHeight = 18.sp
     )
@@ -910,16 +924,16 @@ private fun SaveButton(onSave: () -> Unit, enabled: Boolean) {
             .fillMaxWidth()
             .padding(top = 14.dp)
             .height(48.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = AiPurple,
+            containerColor = Primary,
             contentColor = Color.White,
-            disabledContainerColor = AiPurple.copy(alpha = 0.42f),
+            disabledContainerColor = Primary.copy(alpha = 0.38f),
             disabledContentColor = Color.White.copy(alpha = 0.78f)
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
     ) {
-        Text("保存并启用 AI", fontSize = 15.sp, fontWeight = FontWeight.Black)
+        Text("验证并保存", fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -935,7 +949,7 @@ private fun DisableAIButton(onDisable: () -> Unit) {
         colors = ButtonDefaults.buttonColors(containerColor = AiDangerBg, contentColor = AiDanger),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
     ) {
-        Text("禁用 AI 增强", fontSize = 14.sp, fontWeight = FontWeight.Black)
+        Text("移除本机 Key", fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
 

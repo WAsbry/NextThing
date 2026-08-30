@@ -131,12 +131,14 @@ fun NextThingApp(
 
     // 权限检查和请求
     var showPermissionDialog by remember { mutableStateOf(false) }
-    var permissionStatus by remember { mutableStateOf(permissionManager.checkAllPermissions()) }
+    var hasNotificationPermission by remember {
+        mutableStateOf(permissionManager.hasNotificationPermission())
+    }
 
     // 在应用启动时检查权限
     LaunchedEffect(Unit) {
-        permissionStatus = permissionManager.checkAllPermissions()
-        if (!permissionStatus.allGranted) {
+        hasNotificationPermission = permissionManager.hasNotificationPermission()
+        if (!hasNotificationPermission) {
             Timber.tag("NotificationTask").w("检测到缺少必要权限，显示权限请求对话框")
             showPermissionDialog = true
         }
@@ -146,8 +148,8 @@ fun NextThingApp(
     LaunchedEffect(permissionCallbackTrigger) {
         if (permissionCallbackTrigger > 0) {
             Timber.tag("NotificationTask").d("检测到权限回调触发，重新检查权限状态")
-            permissionStatus = permissionManager.checkAllPermissions()
-            if (permissionStatus.allGranted) {
+            hasNotificationPermission = permissionManager.hasNotificationPermission()
+            if (hasNotificationPermission) {
                 showPermissionDialog = false
                 Timber.tag("NotificationTask").d("✅ 所有权限已授予，自动关闭权限对话框")
             }
@@ -155,9 +157,8 @@ fun NextThingApp(
     }
 
     // 显示权限请求对话框
-    if (showPermissionDialog && permissionStatus.missingPermissions.isNotEmpty()) {
+    if (showPermissionDialog && !hasNotificationPermission) {
         PermissionRequestDialog(
-            missingPermissions = permissionStatus.missingPermissions,
             onRequestNotification = {
                 Timber.tag("NotificationTask").d("用户点击授予通知权限")
                 permissionManager.requestNotificationPermission(notificationPermissionLauncher)
@@ -172,7 +173,6 @@ fun NextThingApp(
                 Timber.tag("NotificationTask").d("用户关闭权限对话框")
                 showPermissionDialog = false
             },
-            showDismissButton = true
         )
     }
 

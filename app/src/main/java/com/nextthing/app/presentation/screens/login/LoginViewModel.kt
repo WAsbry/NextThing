@@ -68,7 +68,7 @@ class LoginViewModel @Inject constructor(
         val state = _uiState.value
 
         if (state.isRegisterMode) {
-            register(state.username, state.email, state.password)
+            register(state.username, state.email, state.password, state.confirmPassword)
         } else {
             login(state.username, state.password)
         }
@@ -95,7 +95,7 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    private fun register(username: String, email: String, password: String) {
+    private fun register(username: String, email: String, password: String, confirmPassword: String?) {
         val trimmedUsername = username.trim()
         val trimmedEmail = email.trim()
         val trimmedPassword = password.trim()
@@ -110,6 +110,10 @@ class LoginViewModel @Inject constructor(
         }
         if (trimmedPassword.length < 8) {
             _uiState.value = _uiState.value.copy(errorMessage = "密码至少8位")
+            return
+        }
+        if (trimmedPassword != confirmPassword?.trim()) {
+            _uiState.value = _uiState.value.copy(errorMessage = "两次输入的密码不一致")
             return
         }
 
