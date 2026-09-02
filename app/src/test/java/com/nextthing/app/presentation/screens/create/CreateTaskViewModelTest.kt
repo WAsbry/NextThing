@@ -25,11 +25,14 @@ class CreateTaskViewModelTest {
     }
 
     @Test
-    fun aiRoute_backendFallback_showsServerAIEnabled() {
+    fun aiRoute_backendFallback_isPendingVerification_notFalselyEnabled() {
         val ui = AIRouteStatus(AIRouteMode.BackendFallback).toCreateTaskRouteUi()
 
-        assertEquals("服务端 AI 已启用", ui.statusText)
-        assertEquals("已登录，可直接自动整理语音/文字任务", ui.detailText)
+        assertEquals("服务端 AI 待验证", ui.statusText)
+        assertEquals(
+            "已登录。本机未配置 API Key，首次使用时将检查服务端 AI 是否可用",
+            ui.detailText
+        )
     }
 
     @Test

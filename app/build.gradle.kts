@@ -46,6 +46,8 @@ val hasReleaseSigning = releaseKeystoreFile.isFile &&
 android {
     namespace = "com.nextthing.app"
     compileSdk = 34
+    // 真机仪器测试使用独立 smoke 包（com.nextthing.app.smoke），不覆盖用户安装的 release 包。
+    testBuildType = "smoke"
 
     signingConfigs {
         if (hasReleaseSigning) {
@@ -265,8 +267,6 @@ dependencies {
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation("com.google.dagger:hilt-android-testing:2.48.1")
     kspAndroidTest("com.google.dagger:hilt-compiler:2.48.1")
 

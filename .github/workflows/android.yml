@@ -28,3 +28,19 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --console=plain
       - name: Run lint
         run: ./gradlew :app:lintDebug --console=plain
+      - name: Verify release shrinking and packaging
+        run: ./gradlew :app:assembleRelease --console=plain
+      - name: Upload unit-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: warn

@@ -259,7 +259,13 @@
 -keep class com.amap.api.** { *; }
 -keep class com.amap.api.location.** { *; }
 -keep class com.loc.** { *; }
+# 高德 3D 地图的 native 库会通过 JNI 直接查找 com.autonavi 下的
+# GlyphLoader 等桥接类和静态方法。仅保留 com.amap.api 会让 R8 在
+# release 中移除这些“Java 未直接引用”的成员，导致首次打开 MapView
+# 时发生 NoSuchMethodError 并终止进程。
+-keep class com.autonavi.** { *; }
 -dontwarn com.amap.api.**
+-dontwarn com.autonavi.**
 
 # ====================================================================================================
 # Timber日志库
